@@ -33,3 +33,6 @@ conscious students. The application offers personalized workout splits, meal-pre
 * Branch naming: `feature/<short-description>`, `fix/<short-description>`
 * Changes to **main** must come through a PR and must be approved by at least one other team member.
 * [TBD linting tool maybe?]
+
+# AI Usage
+[Put AI usage attributions here]
