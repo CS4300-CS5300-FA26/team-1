@@ -35,4 +35,8 @@ conscious students. The application offers personalized workout splits, meal-pre
 * [TBD linting tool maybe?]
 
 # AI Usage
-[Put AI usage attributions here]
+
+| LLM | Contributor | Usage | Transcript |
+| --- | --- | --- | --- |
+| Pardot | Caleb Harris | Validated issues created in GitHub against Sprint 0-2 Requirements | n/a |
+
