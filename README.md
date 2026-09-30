@@ -17,11 +17,15 @@ conscious students. The application offers personalized workout splits, meal-pre
 * [TBD - what database, dependency manager, etc.]
 
 ## Getting Started
-[TBD but I imagine this will be a good start]
+> [!Note]
+> If you don't have uv installed, run `curl -LsSf https://astral.sh/uv/install.sh | sh`
+
 * Clone repo: `git clone git@github.com:CS4300-CS5300-FA26/team-1.git`
 * `cd team-1`
 * `cp .env.example .env` [We dont have the spicy secrets file yet, but this will likely be the first step before writing]
-* [Install dependencies - I like the idea of using uv. Would get us explicit dependency with lockfile & dev-only dependencies but TBD]
+* `uv sync`
+* `uv run python manage.py migrate`
+* `uv run python manage.py runserver`
 
 ## Common Commands
 * `python manage.py runserver` [Starts the Django development server]
