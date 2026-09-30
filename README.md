@@ -13,8 +13,12 @@ conscious students. The application offers personalized workout splits, meal-pre
 * Nathan Galay
 
 ## Tech Stack
-* **Web Framework:** Django
-* [TBD - what database, dependency manager, etc.]
+* **Web Framework:** Django 6.1
+* **Python Package Management:** UV
+* **Python Version:** 3.12
+* **DB:** TBD
+* **Production Host:** TBD
+* **Base Docker Image:** TBD
 
 ## Getting Started
 > [!Note]
@@ -22,10 +26,12 @@ conscious students. The application offers personalized workout splits, meal-pre
 
 * Clone repo: `git clone git@github.com:CS4300-CS5300-FA26/team-1.git`
 * `cd team-1`
-* `cp .env.example .env` [We dont have the spicy secrets file yet, but this will likely be the first step before writing]
+* `cp .env.example .env`
 * `uv sync`
 * `uv run python manage.py migrate`
 * `uv run python manage.py runserver`
+> [!tip]
+> In DevEdu, port 8000 isn't available, so do this instead: `uv run python manage.py runserver 0.0.0.0:3000`
 
 ## Common Commands
 * `uv run python manage.py runserver` [Starts the Django development server]
