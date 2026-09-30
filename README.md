@@ -28,10 +28,10 @@ conscious students. The application offers personalized workout splits, meal-pre
 * `uv run python manage.py runserver`
 
 ## Common Commands
-* `python manage.py runserver` [Starts the Django development server]
-* `python manage.py makemigrations` [Creates new database migrations]
-* `python manage.py migrate` [Applies database migrations]
-* `python manage.py test` [Runs Django tests]
+* `uv run python manage.py runserver` [Starts the Django development server]
+* `uv run python manage.py makemigrations` [Creates new database migrations]
+* `uv run python manage.py migrate` [Applies database migrations]
+* `uv run python manage.py test` [Runs Django tests]
 
 ## Contributing
 * Branch naming: `feature/<short-description>`, `fix/<short-description>`
