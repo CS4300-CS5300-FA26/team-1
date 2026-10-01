@@ -51,3 +51,4 @@ conscious students. The application offers personalized workout splits, meal-pre
 | --- | --- | --- | --- |
 | Pardot | Caleb Harris | Validated issues created in GitHub against Sprint 0-2 Requirements | n/a |
 | Claude | Caleb Harris | Generated Lo-Fi wireframe given spec | Used `agents` tab in Figma |
+| Pardot | Caleb Harris | PR Review | [Link](https://github.com/CS4300-CS5300-FA26/team-1/pull/16) |
