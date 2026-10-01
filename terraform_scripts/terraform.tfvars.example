@@ -1,0 +1,3 @@
+# Copy to terraform.tfvars (which is gitignored) and fill in.
+project_id    = "your-project-id"
+app_hostnames = ["fitpro.example.com"]

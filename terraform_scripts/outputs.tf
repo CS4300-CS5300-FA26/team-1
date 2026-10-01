@@ -1,0 +1,46 @@
+output "image_repository" {
+  description = "Base path for docker push/pull."
+  value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.app.repository_id}"
+}
+
+output "cluster_name" {
+  value = google_container_cluster.autopilot.name
+}
+
+output "lb_ip_name" {
+  description = "Use as the Gateway's NamedAddress."
+  value       = google_compute_global_address.lb.name
+}
+
+output "lb_ip_address" {
+  description = "Point each hostname's A record (DNS only) here."
+  value       = google_compute_global_address.lb.address
+}
+
+output "certificate_map_name" {
+  description = "Use in the Gateway's networking.gke.io/certmap annotation."
+  value       = google_certificate_manager_certificate_map.app.name
+}
+
+output "dns_authorization_records" {
+  description = "CNAME records to add in Cloudflare (DNS only) so certificates can be issued."
+  value       = { for h, a in google_certificate_manager_dns_authorization.app : h => a.dns_resource_record[0] }
+}
+
+output "cloudsql_connection_name" {
+  description = "Instance connection name for the Auth Proxy (sidecar and local)."
+  value       = google_sql_database_instance.main.connection_name
+}
+
+output "db_name" {
+  value = google_sql_database.app.name
+}
+
+output "db_user" {
+  value = google_sql_user.app.name
+}
+
+output "app_service_account_email" {
+  description = "Annotate the k8s service account with this (iam.gke.io/gcp-service-account)."
+  value       = google_service_account.app.email
+}
