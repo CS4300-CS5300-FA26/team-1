@@ -28,7 +28,7 @@ conscious students. The application offers personalized workout splits, meal-pre
 * `cd team-1`
 * `cp .env.example .env`
 * `uv sync`
-* `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"` - Put value in .env
+* `uv run python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"` - Put value in .env
 * `uv run python manage.py migrate`
 * `uv run python manage.py runserver`
 > [!tip]
