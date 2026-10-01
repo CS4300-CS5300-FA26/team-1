@@ -14,6 +14,7 @@ jobs:
       SECRET_KEY: ci-only-not-a-real-secret
       DEBUG: "False"
       ALLOWED_HOSTS: localhost,127.0.0.1
+      DB_ENGINE: django.db.backends.sqlite3
 
     steps:
       - uses: actions/checkout@v4

@@ -86,8 +86,8 @@ WSGI_APPLICATION = 'fitpro.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': env('DB_ENGINE') if env('DB_ENGINE') else 'django.db.backends.sqlite3',
-        'NAME': env('DB_NAME') if env('DB_NAME') else str(BASE_DIR / 'db.sqlite3'),
+        'ENGINE': env('DB_ENGINE', default='django.db.backends.sqlite3'),
+        'NAME': env('DB_NAME', default=str(BASE_DIR / 'db.sqlite3')),
         'USER': env('DB_USER', default=''),
         'PASSWORD': env('DB_PASSWORD', default=''),
         'HOST': env('DB_HOST', default=''),
