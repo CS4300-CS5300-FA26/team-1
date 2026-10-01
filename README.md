@@ -13,21 +13,32 @@ conscious students. The application offers personalized workout splits, meal-pre
 * Nathan Galay
 
 ## Tech Stack
-* **Web Framework:** Django
-* [TBD - what database, dependency manager, etc.]
+* **Web Framework:** Django 6.1
+* **Python Package Management:** UV
+* **Python Version:** 3.12
+* **DB:** TBD
+* **Production Host:** TBD
+* **Base Docker Image:** TBD
 
 ## Getting Started
-[TBD but I imagine this will be a good start]
+> [!Note]
+> If you don't have uv installed, run `curl -LsSf https://astral.sh/uv/install.sh | sh`
+
 * Clone repo: `git clone git@github.com:CS4300-CS5300-FA26/team-1.git`
 * `cd team-1`
-* `cp .env.example .env` [We dont have the spicy secrets file yet, but this will likely be the first step before writing]
-* [Install dependencies - I like the idea of using uv. Would get us explicit dependency with lockfile & dev-only dependencies but TBD]
+* `cp .env.example .env`
+* `uv sync`
+* `uv run python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"` - Put value in .env
+* `uv run python manage.py migrate`
+* `uv run python manage.py runserver`
+> [!tip]
+> In DevEdu, port 8000 isn't available, so do this instead: `uv run python manage.py runserver 0.0.0.0:3000`
 
 ## Common Commands
-* `python manage.py runserver` [Starts the Django development server]
-* `python manage.py makemigrations` [Creates new database migrations]
-* `python manage.py migrate` [Applies database migrations]
-* `python manage.py test` [Runs Django tests]
+* `uv run python manage.py runserver` [Starts the Django development server]
+* `uv run python manage.py makemigrations` [Creates new database migrations]
+* `uv run python manage.py migrate` [Applies database migrations]
+* `uv run python manage.py test` [Runs Django tests]
 
 ## Contributing
 * Branch naming: `feature/<short-description>`, `fix/<short-description>`
@@ -40,3 +51,4 @@ conscious students. The application offers personalized workout splits, meal-pre
 | --- | --- | --- | --- |
 | Pardot | Caleb Harris | Validated issues created in GitHub against Sprint 0-2 Requirements | n/a |
 | Claude | Caleb Harris | Generated Lo-Fi wireframe given spec | Used `agents` tab in Figma |
+| Pardot | Caleb Harris | PR Review | [Link](https://github.com/CS4300-CS5300-FA26/team-1/pull/16) |
