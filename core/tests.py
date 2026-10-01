@@ -1,4 +1,6 @@
 from django.test import TestCase
 
-def test_the_tests():
-    assert True
+
+class BasicTests(TestCase):
+    def test_example(self):
+        self.assertTrue(True)
