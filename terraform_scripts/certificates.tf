@@ -4,6 +4,15 @@ resource "google_compute_global_address" "lb" {
   depends_on = [google_project_service.enabled]
 }
 
+# TLS 1.2+ with modern ciphers only. Attach to the Gateway with a GCPGatewayPolicy
+# (spec.default.sslPolicy). Without it the load balancer also accepts TLS 1.0/1.1.
+resource "google_compute_ssl_policy" "app" {
+  name            = "fitpro-ssl-policy"
+  profile         = "MODERN"
+  min_tls_version = "TLS_1_2"
+  depends_on      = [google_project_service.enabled]
+}
+
 locals {
   hostnames = toset(var.app_hostnames)
 }

@@ -4,6 +4,12 @@ resource "google_artifact_registry_repository" "app" {
   format        = "DOCKER"
   description   = "FitPro container images"
 
+  # Images are tagged by git SHA, so a tag should never be repointed. Blocks a
+  # compromised or buggy CI run from overwriting an image that is already deployed.
+  docker_config {
+    immutable_tags = true
+  }
+
   cleanup_policy_dry_run = false
 
   cleanup_policies {

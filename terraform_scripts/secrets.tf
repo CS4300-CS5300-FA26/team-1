@@ -46,3 +46,14 @@ resource "google_secret_manager_secret_iam_member" "app_django_secret_key" {
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.app.email}"
 }
+
+# Record who reads secret values (Data Access logs are off by default). Volume is
+# tiny: one read per pod start.
+resource "google_project_iam_audit_config" "secretmanager" {
+  project = var.project_id
+  service = "secretmanager.googleapis.com"
+
+  audit_log_config {
+    log_type = "DATA_READ"
+  }
+}

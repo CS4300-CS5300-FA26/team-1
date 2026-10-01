@@ -15,6 +15,18 @@ resource "google_container_cluster" "autopilot" {
     channel = "REGULAR"
   }
 
+  # Reach the control plane only through the DNS endpoint, where every request is
+  # checked against IAM (container.clusters.connect) before it reaches the API server.
+  # The IP endpoint is off, so there is no public IP for scanners to hit.
+  control_plane_endpoints_config {
+    dns_endpoint_config {
+      allow_external_traffic = true
+    }
+    ip_endpoints_config {
+      enabled = false
+    }
+  }
+
   gateway_api_config {
     channel = "CHANNEL_STANDARD"
   }

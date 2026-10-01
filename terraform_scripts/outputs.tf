@@ -7,6 +7,11 @@ output "cluster_name" {
   value = google_container_cluster.autopilot.name
 }
 
+output "cluster_dns_endpoint" {
+  description = "Control plane DNS endpoint (the IP endpoint is disabled). Use get-credentials --dns-endpoint."
+  value       = google_container_cluster.autopilot.control_plane_endpoints_config[0].dns_endpoint_config[0].endpoint
+}
+
 output "lb_ip_name" {
   description = "Use as the Gateway's NamedAddress."
   value       = google_compute_global_address.lb.name
@@ -20,6 +25,11 @@ output "lb_ip_address" {
 output "certificate_map_name" {
   description = "Use in the Gateway's networking.gke.io/certmap annotation."
   value       = google_certificate_manager_certificate_map.app.name
+}
+
+output "ssl_policy_name" {
+  description = "Use as spec.default.sslPolicy in the Gateway's GCPGatewayPolicy."
+  value       = google_compute_ssl_policy.app.name
 }
 
 output "dns_authorization_records" {

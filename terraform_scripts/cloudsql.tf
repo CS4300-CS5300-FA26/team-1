@@ -53,8 +53,8 @@ resource "google_sql_database" "app" {
 }
 
 resource "google_sql_user" "app" {
-  name     = "fitpro_app"
-  instance = google_sql_database_instance.main.name
-  password = random_password.db.result
+  name            = "fitpro_app"
+  instance        = google_sql_database_instance.main.name
+  password        = random_password.db.result
   deletion_policy = "ABANDON"
 }
