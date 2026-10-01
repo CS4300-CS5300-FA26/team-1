@@ -12,7 +12,6 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 
 from pathlib import Path
 import environ
-import os
 
 # Implementing django-environ to prevent secrets from getting committed in the settings file
 #  ref: https://django-environ.readthedocs.io/en/latest/quickstart.html
@@ -23,23 +22,36 @@ env = environ.Env(
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-#Read the environment variables from .env file
-environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+# Read a local .env file if present (local dev only; it is gitignored and dockerignored).
+ENV_FILE = BASE_DIR / '.env'
+if ENV_FILE.exists():
+    environ.Env.read_env(ENV_FILE)
+
+# In Kubernetes, secrets are mounted as files by the GKE Secret Manager add-on.
+# Locally, they come from environment variables / .env instead.
+# Filenames must match the `path` entries in the SecretProviderClass.
+SECRETS_DIR = Path('/var/secrets')
 
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
+def read_secret(filename, env_var, **kwargs):
+    """Return the mounted secret file if it exists, else the environment variable."""
+    path = SECRETS_DIR / filename
+    if path.exists():
+        return path.read_text().strip()
+    return env(env_var, **kwargs)
+
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = env('SECRET_KEY')
+SECRET_KEY = read_secret('django-secret-key', 'SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env('DEBUG')
 
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['testserver'])
 
-# Application definition
+CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
 
+# Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -53,6 +65,9 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # WhiteNoise serves the static files baked into the image; must come right after
+    # SecurityMiddleware. ref: https://whitenoise.readthedocs.io/en/stable/django.html
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -83,24 +98,25 @@ WSGI_APPLICATION = 'fitpro.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
-
+# Every value has a default so settings import cleanly at build time (collectstatic)
+# without a database. Production sets DB_ENGINE=django.db.backends.postgresql.
 DATABASES = {
     'default': {
         'ENGINE': env('DB_ENGINE', default='django.db.backends.sqlite3'),
         'NAME': env('DB_NAME', default=str(BASE_DIR / 'db.sqlite3')),
         'USER': env('DB_USER', default=''),
-        'PASSWORD': env('DB_PASSWORD', default=''),
+        'PASSWORD': read_secret('db-password', 'DB_PASSWORD', default=''),
         'HOST': env('DB_HOST', default=''),
         'PORT': env('DB_PORT', default=''),
+        # Reuse connections briefly and verify them before use.
+        'CONN_MAX_AGE': env.int('DB_CONN_MAX_AGE', default=60),
+        'CONN_HEALTH_CHECKS': True,
     }
 }
-
-CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
 
 
 # Password validation
 # https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators
-
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -119,7 +135,6 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.1/topics/i18n/
-
 LANGUAGE_CODE = 'en-us'
 
 TIME_ZONE = 'UTC'
@@ -131,8 +146,46 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
-
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
+
+
+# HTTPS behind the GKE load balancer
+# TLS ends at the load balancer, which forwards plain HTTP with X-Forwarded-Proto.
+# Defaults on whenever DEBUG is off; set BEHIND_HTTPS_PROXY=False to run the
+# production image locally over plain HTTP.
+# Do NOT set SECURE_SSL_REDIRECT: the Gateway already redirects HTTP to HTTPS, and
+# load balancer health checks (plain HTTP to the pod) would get 301s and fail.
+BEHIND_HTTPS_PROXY = env.bool('BEHIND_HTTPS_PROXY', default=not DEBUG)
+
+if BEHIND_HTTPS_PROXY:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
+
+# Logging: send everything to stdout so Cloud Logging captures it (including
+# tracebacks, which Django's default config does not print when DEBUG is off).
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {'class': 'logging.StreamHandler'},
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': env('LOG_LEVEL', default='INFO'),
+    },
+}
 
 
 # Email

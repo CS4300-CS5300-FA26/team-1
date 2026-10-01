@@ -93,3 +93,4 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 | Claude | Caleb Harris | Generated Lo-Fi wireframe given spec | Used `agents` tab in Figma |
 | Pardot | Caleb Harris | PR Review | [Link](https://github.com/CS4300-CS5300-FA26/team-1/pull/16) |
 | Claude | Caleb Harris | Security review of the Terraform GKE infrastructure setup, with fixes and README deployment docs | n/a |
+| Claude | Caleb Harris | Generated draft Dockerfile and dockerignore file | n/a |
