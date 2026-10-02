@@ -35,3 +35,10 @@ class HealthCheckTests(TestCase):
         with self.assertLogs('django.security.DisallowedHost', level='ERROR'):
             response = self.client.get('/admin/', HTTP_HOST=POD_IP_HOST)
         self.assertEqual(response.status_code, 400)
+
+
+class HomePageTests(TestCase):
+    def test_home_page_renders(self):
+        response = self.client.get('/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '<h1>FitPro</h1>')

@@ -17,4 +17,11 @@ This document will detail the steps I took to configure the GCP deployment.
 * `terraform plan -out tfplan`
 * `terraform apply tfplan` [note, had to run twice due to race condition for sql]
 * Do the DNS acme verification and check the TLS cert issued appropriately: `gcloud certificate-manager certificates describe fitpro-cert-fitpro-rockymountaintechlab-com --location=global`
-* 
+
+Manual Deployment to Test: 
+```bash
+$SHA = git rev-parse HEAD
+$IMG = "$(terraform -chdir=terraform_scripts output -raw image_repository)/django-app:$SHA"
+docker build --platform linux/amd64 --build-arg GIT_SHA=$SHA -t $IMG .
+kubectl apply -k k8s/platform
+```
