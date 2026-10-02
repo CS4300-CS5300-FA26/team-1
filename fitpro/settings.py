@@ -64,6 +64,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'core.middleware.HealthCheckMiddleware',
     'django.middleware.security.SecurityMiddleware',
     # WhiteNoise serves the static files baked into the image; must come right after
     # SecurityMiddleware. ref: https://whitenoise.readthedocs.io/en/stable/django.html
@@ -102,14 +103,14 @@ WSGI_APPLICATION = 'fitpro.wsgi.application'
 # without a database. Production sets DB_ENGINE=django.db.backends.postgresql.
 DATABASES = {
     'default': {
-        'ENGINE': env('DB_ENGINE', default='django.db.backends.sqlite3'),
-        'NAME': env('DB_NAME', default=str(BASE_DIR / 'db.sqlite3')),
+        'ENGINE': env('DB_ENGINE', default='django.db.backends.sqlite3') or 'django.db.backends.sqlite3',
+        'NAME': env('DB_NAME', default=str(BASE_DIR / 'db.sqlite3')) or str(BASE_DIR / 'db.sqlite3'),
         'USER': env('DB_USER', default=''),
         'PASSWORD': read_secret('db-password', 'DB_PASSWORD', default=''),
         'HOST': env('DB_HOST', default=''),
         'PORT': env('DB_PORT', default=''),
         # Reuse connections briefly and verify them before use.
-        'CONN_MAX_AGE': env.int('DB_CONN_MAX_AGE', default=60),
+        'CONN_MAX_AGE': int(env('DB_CONN_MAX_AGE', default=60) or 60),
         'CONN_HEALTH_CHECKS': True,
     }
 }

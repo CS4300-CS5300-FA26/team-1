@@ -49,8 +49,8 @@ conscious students. The application offers personalized workout splits, meal-pre
 ## Deployment
 Production runs on Google Cloud. Architecture and workflow diagrams are in `docs/diagrams/`, the decisions behind them
 are in `docs/adrs/`, and the one-time GCP setup steps are in
-[deployment_gcp_config.md](docs/configurations/deployment_gcp_config.md). Remaining work is tracked in
-[deployment-task-list.md](docs/deployment-task-list.md).
+[deployment_gcp_config.md](docs/configurations/deployment_gcp_config.md). 
+Settings read secrets from `/var/secrets/<name>` in Kubernetes and fall back to environment variables / `.env` locally; set `BEHIND_HTTPS_PROXY=False` to run the production image over plain HTTP.
 
 ### Implemented (Terraform, `terraform_scripts/`)
 | Area | Resources |
@@ -94,3 +94,4 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 | Pardot | Caleb Harris | PR Review | [Link](https://github.com/CS4300-CS5300-FA26/team-1/pull/16) |
 | Claude | Caleb Harris | Security review of the Terraform GKE infrastructure setup, with fixes and README deployment docs | n/a |
 | Claude | Caleb Harris | Generated draft Dockerfile and dockerignore file | n/a |
+| Claude | Caleb Harris | Generated k8s manifests | n/a |

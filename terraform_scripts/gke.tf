@@ -27,6 +27,12 @@ resource "google_container_cluster" "autopilot" {
     }
   }
 
+  # Managed Secret Manager CSI add-on: mounts secrets into pods as files
+  # (SecretProviderClass provider "gke"), authenticated with Workload Identity.
+  secret_manager_config {
+    enabled = true
+  }
+
   gateway_api_config {
     channel = "CHANNEL_STANDARD"
   }

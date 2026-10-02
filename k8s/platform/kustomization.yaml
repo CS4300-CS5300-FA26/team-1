@@ -1,0 +1,8 @@
+# Cluster-level guardrails for the app namespace. Applied by hand by the project
+# owner (kubectl apply -k k8s/platform); CI has no permission to change these.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - resourcequota.yaml
+  - limitrange.yaml

@@ -16,3 +16,5 @@ This document will detail the steps I took to configure the GCP deployment.
 * `terraform validate`
 * `terraform plan -out tfplan`
 * `terraform apply tfplan` [note, had to run twice due to race condition for sql]
+* Do the DNS acme verification and check the TLS cert issued appropriately: `gcloud certificate-manager certificates describe fitpro-cert-fitpro-rockymountaintechlab-com --location=global`
+* 

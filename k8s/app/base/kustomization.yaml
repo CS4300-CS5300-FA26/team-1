@@ -1,0 +1,16 @@
+# Applied by CI on every deploy through overlays/prod. The migration Job lives in
+# ../jobs and is applied separately, before this, on each deploy.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: fitpro
+resources:
+  - serviceaccount.yaml
+  - secretproviderclass.yaml
+  - deployment.yaml
+  - service.yaml
+  - pdb.yaml
+  - gateway.yaml
+  - httproutes.yaml
+  - healthcheckpolicy.yaml

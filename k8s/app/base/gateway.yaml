@@ -1,0 +1,30 @@
+# Global external Application Load Balancer. The networking.gke.io/certmap annotation
+# and the NamedAddress (reserved static IP) are added in the overlay.
+# No tls block on the HTTPS listener: Certificate Manager supplies the certificate.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: fitpro
+spec:
+  gatewayClassName: gke-l7-global-external-managed
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+    - name: http
+      protocol: HTTP
+      port: 80
+---
+# Attaches the Terraform-managed SSL policy (TLS 1.2+, MODERN). Without it the
+# load balancer also accepts TLS 1.0 and 1.1.
+apiVersion: networking.gke.io/v1
+kind: GCPGatewayPolicy
+metadata:
+  name: fitpro
+spec:
+  default:
+    sslPolicy: fitpro-ssl-policy
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: fitpro
