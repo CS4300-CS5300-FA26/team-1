@@ -31,7 +31,8 @@
 #   gcloud container clusters get-credentials fitpro --region us-central1 --dns-endpoint
 # (google-github-actions/get-gke-credentials uses the same context name by default).
 #
-# Steps: preflight -> render (temp dir) -> migrate Job -> apply overlay + rollout ->
+# Steps: preflight -> render (temp dir) -> apply ConfigMaps + Job prerequisites
+# (ServiceAccount, SecretProviderClass) -> migrate Job -> apply overlay + rollout ->
 # smoke test -> summary. A failed rollout or smoke test rolls the Deployment back to
 # the revision that was live before this run. Migrations are never rolled back, and
 # other applied resources (ConfigMap, routes, ...) stay at the new version.
@@ -184,18 +185,41 @@ awk -v dir="$WORK/split" '
   END { flush() }
 ' "$WORK/rendered.yaml"
 
+# configmaps.yaml and prereqs.yaml (objects the Job needs before its pod can start)
+# are applied before the Job, and are also included in app.yaml.
 : > "$WORK/configmaps.yaml"
+: > "$WORK/prereqs.yaml"
 : > "$WORK/job.yaml"
 : > "$WORK/app.yaml"
+prereq_ids=()
 for doc in "$WORK"/split/*.yaml; do
   kind="$(sed -n 's/^kind:[[:space:]]*//p' "$doc" | head -n1)"
   case "$kind" in
     Job) target="$WORK/job.yaml" ;;
     ConfigMap) target="$WORK/configmaps.yaml"; { echo '---'; cat "$doc"; } >> "$WORK/app.yaml" ;;
+    ServiceAccount | SecretProviderClass)
+      target="$WORK/prereqs.yaml"
+      prereq_ids+=("$kind/$(sed -n 's/^  name:[[:space:]]*//p' "$doc" | head -n1)")
+      { echo '---'; cat "$doc"; } >> "$WORK/app.yaml"
+      ;;
     *) target="$WORK/app.yaml" ;;
   esac
   { echo '---'; cat "$doc"; } >> "$target"
 done
+
+# Fail if the Job needs a ServiceAccount or SecretProviderClass that prereqs.yaml
+# doesn't provide; its pod would otherwise fail with FailedCreate at runtime.
+has_prereq() {
+  local id
+  for id in "${prereq_ids[@]}"; do [[ "$id" == "$1" ]] && return 0; done
+  return 1
+}
+while read -r sa; do
+  has_prereq "ServiceAccount/$sa" || die "$EXIT_PREFLIGHT" "rendered Job uses serviceAccountName '$sa', which is not in the rendered prerequisites"
+done < <(sed -n 's/^[[:space:]]*serviceAccountName:[[:space:]]*//p' "$WORK/job.yaml")
+while read -r spc; do
+  has_prereq "SecretProviderClass/$spc" || die "$EXIT_PREFLIGHT" "rendered Job uses secretProviderClass '$spc', which is not in the rendered prerequisites"
+done < <(sed -n 's/^[[:space:]]*secretProviderClass:[[:space:]]*//p' "$WORK/job.yaml")
 
 # Sanity checks: the Job and Deployment must share image, ConfigMap, and proxy config.
 [[ -s "$WORK/job.yaml" && -s "$WORK/configmaps.yaml" ]] || die "$EXIT_PREFLIGHT" "render is missing the Job or ConfigMap"
@@ -218,13 +242,16 @@ for doc in "$WORK"/split/*.yaml; do
 done
 
 if $DRY_RUN; then
+  # Same order as a real deploy: ConfigMaps, Job prerequisites, Job, then the overlay.
   log "Server-side dry run"
-  kubectl apply --dry-run=server -f "$WORK/app.yaml"
+  kubectl apply --dry-run=server -f "$WORK/configmaps.yaml"
+  [[ -s "$WORK/prereqs.yaml" ]] && kubectl apply --dry-run=server -f "$WORK/prereqs.yaml"
   if kubectl -n "$NAMESPACE" get job "$JOB_NAME" >/dev/null 2>&1; then
     echo "job.batch/$JOB_NAME already exists; a real deploy would delete and recreate it"
   else
     kubectl apply --dry-run=server -f "$WORK/job.yaml"
   fi
+  kubectl apply --dry-run=server -f "$WORK/app.yaml"
   echo
   echo "Dry run passed. Smoke test host would be: ${SMOKE_HOST:-<none found>}"
   exit 0
@@ -250,6 +277,7 @@ job_diagnostics() {
 
 log "Migrate"
 kubectl apply -f "$WORK/configmaps.yaml"
+[[ -s "$WORK/prereqs.yaml" ]] && kubectl apply -f "$WORK/prereqs.yaml"
 if kubectl -n "$NAMESPACE" get job "$JOB_NAME" >/dev/null 2>&1; then
   echo "Job $JOB_NAME already exists (re-deploying the same SHA); deleting it first"
   kubectl -n "$NAMESPACE" delete job "$JOB_NAME" --cascade=foreground --wait=true
