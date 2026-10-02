@@ -95,3 +95,4 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 | Claude | Caleb Harris | Security review of the Terraform GKE infrastructure setup, with fixes and README deployment docs | n/a |
 | Claude | Caleb Harris | Generated draft Dockerfile and dockerignore file | n/a |
 | Claude | Caleb Harris | Generated k8s manifests | n/a |
+| Claude | Caleb Harris | Generated deployment script | n/a |
