@@ -1,0 +1,124 @@
+# Database migration, run once per deploy BEFORE the Deployment is updated.
+#
+# Jobs are immutable: a Job's pod template can't be changed after creation, and
+# re-applying a finished Job with the same name does nothing. CI therefore creates a
+# new Job per deploy named django-migrate-<git sha> (it appends the SHA to
+# metadata.name) and waits for it to complete.
+# Finished Jobs are deleted automatically after ttlSecondsAfterFinished.
+#
+# Not part of the base kustomization. CI renders it through overlays/prod so it gets
+# the same image tag, hashed ConfigMap name, namespace, and proxy connection name as
+# the Deployment: in the CI workspace only, add ../../jobs/migrate-job.yaml to the
+# overlay's resources and build with `kubectl kustomize --load-restrictor
+# LoadRestrictionsNone` (kustomize refuses files outside the overlay directory
+# otherwise), then apply just the ConfigMap and this Job from the output.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: django-migrate
+  labels:
+    app.kubernetes.io/name: django-migrate
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: django-migrate
+    spec:
+      restartPolicy: Never
+      serviceAccountName: django-app
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # Native sidecar: starts before django, and does not keep the Job running
+        # after migrate exits (Job completion only looks at regular containers).
+        # CSQL_PROXY_INSTANCE_CONNECTION_NAME is set in the overlay.
+        - name: cloud-sql-proxy
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.26.0
+          restartPolicy: Always
+          args:
+            - --private-ip
+            - --port=5432
+            - --structured-logs
+            - --health-check
+            - --http-address=0.0.0.0
+            - --http-port=9090
+          ports:
+            - name: proxy-health
+              containerPort: 9090
+          startupProbe:
+            httpGet:
+              path: /startup
+              port: proxy-health
+            periodSeconds: 1
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /readiness
+              port: proxy-health
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /liveness
+              port: proxy-health
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+              ephemeral-storage: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+              ephemeral-storage: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        - name: django
+          image: django-app
+          command: ["python", "manage.py", "migrate", "--noinput"]
+          envFrom:
+            - configMapRef:
+                name: django-app-config
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+              ephemeral-storage: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+              ephemeral-storage: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: secrets
+              mountPath: /var/secrets
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: secrets
+          csi:
+            driver: secrets-store-gke.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: fitpro-secrets
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi

@@ -1,0 +1,30 @@
+# Version control and CI
+.git
+.github
+
+# Infra (not part of the app image)
+terraform_scripts
+terraform
+k8s
+
+# Python artifacts and local environments
+.venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+
+# Local data and secrets
+.env
+.env.*
+*.sqlite3
+staticfiles
+media
+
+# Editor / OS
+.idea
+.vscode
+.DS_Store

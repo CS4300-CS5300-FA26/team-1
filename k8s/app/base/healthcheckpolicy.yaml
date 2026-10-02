@@ -1,0 +1,23 @@
+# GKE Gateway does not infer health checks from readiness probes. Without this the
+# load balancer probes "/" and marks every backend unhealthy.
+# The port is the containerPort, because probes go straight to pod IPs (NEGs).
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: django-app
+spec:
+  default:
+    checkIntervalSec: 15
+    timeoutSec: 5
+    healthyThreshold: 1
+    unhealthyThreshold: 2
+    config:
+      type: HTTP
+      httpHealthCheck:
+        portSpecification: USE_FIXED_PORT
+        port: 8000
+        requestPath: /healthz/
+  targetRef:
+    group: ""
+    kind: Service
+    name: django-app

@@ -1,0 +1,24 @@
+# Sized for 2 app replicas + 1 surge pod + 1 migration Job pod (4 pods).
+# Each pod requests 300m CPU / 576Mi (django 250m/512Mi + proxy 50m/64Mi), which
+# already meets Autopilot's per-pod minimum and 1:1-1:6.5 CPU:memory ratio, so
+# Autopilot should not raise it: 4 pods = 1.2 CPU / 2.25Gi.
+# Worst case, if Autopilot sizes the native sidecar like a classic init container
+# (equal to the app containers' total), a pod is 500m / 1Gi and 4 pods = 2 CPU / 4Gi,
+# which still fits.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: app-quota
+  namespace: app
+spec:
+  hard:
+    requests.cpu: "2"
+    requests.memory: 4Gi
+    pods: "8"
+    services.loadbalancers: "0"
+    services.nodeports: "0"
+    persistentvolumeclaims: "0"
+    requests.nvidia.com/gpu: "0"
+    count/ingresses.networking.k8s.io: "0"
+    count/gateways.gateway.networking.k8s.io: "1"
+    count/httproutes.gateway.networking.k8s.io: "4"
