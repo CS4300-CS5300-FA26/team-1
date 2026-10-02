@@ -20,8 +20,10 @@ This document will detail the steps I took to configure the GCP deployment.
 
 Manual Deployment to Test: 
 ```bash
+git status
 $SHA = git rev-parse HEAD
 $IMG = "$(terraform -chdir=terraform_scripts output -raw image_repository)/django-app:$SHA"
-docker build --platform linux/amd64 --build-arg GIT_SHA=$SHA -t $IMG .
-kubectl apply -k k8s/platform
+$DATE = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+docker build --platform linux/amd64 --build-arg GIT_SHA=$SHA --build-arg BUILD_DATE=$DATE -t $IMG .
+docker push $IMG
 ```
