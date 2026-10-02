@@ -173,6 +173,13 @@ if BEHIND_HTTPS_PROXY:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
 
+# `manage.py check --deploy` warnings that are handled outside Django:
+# - security.W008 (SECURE_SSL_REDIRECT): the GKE Gateway redirects HTTP to HTTPS
+#   (fitpro-redirect HTTPRoute); a Django redirect would break plain-HTTP health checks.
+# - security.W004 (SECURE_HSTS_SECONDS): HSTS is deferred until the permanent domain
+#   is in place, since browsers cache it and it is hard to undo.
+SILENCED_SYSTEM_CHECKS = ['security.W004', 'security.W008']
+
 
 # Logging: send everything to stdout so Cloud Logging captures it (including
 # tracebacks, which Django's default config does not print when DEBUG is off).

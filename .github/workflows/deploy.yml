@@ -1,0 +1,143 @@
+name: Deploy
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Render and server-side dry run only (the image is still built and pushed)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: CI checks
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Deploy to GKE
+    needs: checks
+    runs-on: ubuntu-latest
+    # Restricted to main in the repo settings; the WIF provider also only accepts
+    # tokens from main + this environment.
+    environment: production
+    permissions:
+      contents: read
+      id-token: write # GitHub OIDC token for Workload Identity Federation
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    env:
+      IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
+      IMAGE: ${{ vars.IMAGE_REPOSITORY }}/django-app:${{ github.sha }}
+      DRY_RUN: ${{ inputs.dry_run == true }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check repository variables
+        env:
+          WIF_PROVIDER: ${{ vars.WIF_PROVIDER }}
+          CI_SERVICE_ACCOUNT: ${{ vars.CI_SERVICE_ACCOUNT }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+        run: |
+          missing=0
+          for v in WIF_PROVIDER CI_SERVICE_ACCOUNT GCP_PROJECT_ID GCP_REGION GKE_CLUSTER IMAGE_REPOSITORY; do
+            [[ -n "${!v}" ]] || { echo "::error::Repository variable $v is not set"; missing=1; }
+          done
+          ((missing == 0))
+          # deploy.sh deploys the image named in the overlay; it must be the one built here.
+          overlay_image="$(sed -n 's/^[[:space:]]*newName:[[:space:]]*//p' k8s/app/overlays/prod/kustomization.yaml)"
+          if [[ "$overlay_image" != "$IMAGE_REPOSITORY/django-app" ]]; then
+            echo "::error::vars.IMAGE_REPOSITORY/django-app ($IMAGE_REPOSITORY/django-app) does not match the overlay image ($overlay_image)"
+            exit 1
+          fi
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.CI_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${IMAGE_REPOSITORY%%/*}" --quiet
+
+      # Tags are immutable in Artifact Registry, so a re-run of the same commit
+      # reuses the existing image instead of failing on push.
+      - name: Build and push image
+        run: |
+          if gcloud artifacts docker images describe "$IMAGE" >/dev/null 2>&1; then
+            echo "$IMAGE already exists (immutable tag); skipping build and push"
+            exit 0
+          fi
+          docker build \
+            --build-arg GIT_SHA="${{ github.sha }}" \
+            --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Get GKE credentials (DNS-based endpoint)
+        uses: google-github-actions/get-gke-credentials@3da1e46a907576cefaa90c484278bb5b259dd395 # v3.0.0
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ vars.GCP_REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          use_dns_based_endpoint: true
+
+      # No continue-on-error: any non-zero exit (including 4/5, rolled back) fails the job.
+      - name: Deploy
+        id: deploy
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          CLUSTER: ${{ vars.GKE_CLUSTER }}
+        run: |
+          args=()
+          [[ "$DRY_RUN" == "true" ]] && args+=(--dry-run)
+          set +e
+          bash scripts/deploy.sh "${args[@]}"
+          code=$?
+          set -e
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit "$code"
+
+      - name: Job summary
+        if: always()
+        env:
+          EXIT_CODE: ${{ steps.deploy.outputs.exit_code }}
+        run: |
+          case "$EXIT_CODE" in
+            0) result="Success" ;;
+            1) result="Usage error or unexpected failure" ;;
+            2) result="Preflight failed (wrong cluster, missing namespace/image/tool, or bad render); nothing changed" ;;
+            3) result="Migration Job failed or timed out; the Deployment was not updated" ;;
+            4) result="Rollout failed; the Deployment was rolled back" ;;
+            5) result="Smoke test failed; the Deployment was rolled back" ;;
+            "") result="Deploy step did not run (an earlier step failed)" ;;
+            *) result="Unexpected exit code" ;;
+          esac
+          {
+            echo "## FitPro deploy"
+            echo
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Image | \`$IMAGE\` |"
+            echo "| Dry run | $DRY_RUN |"
+            echo "| deploy.sh exit code | ${EXIT_CODE:-n/a} |"
+            echo "| Result | $result |"
+            if [[ "$EXIT_CODE" == 3 || "$EXIT_CODE" == 4 || "$EXIT_CODE" == 5 ]]; then
+              echo
+              echo "Migrations are never rolled back. Revert the bad commit on main so the next deploy doesn't reintroduce it."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

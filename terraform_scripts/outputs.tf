@@ -54,3 +54,13 @@ output "app_service_account_email" {
   description = "Annotate the k8s service account with this (iam.gke.io/gcp-service-account)."
   value       = google_service_account.app.email
 }
+
+output "wif_provider" {
+  description = "Full resource name of the GitHub OIDC provider (GitHub variable WIF_PROVIDER)."
+  value       = google_iam_workload_identity_pool_provider.github.name
+}
+
+output "ci_service_account_email" {
+  description = "CI service account (GitHub variable CI_SERVICE_ACCOUNT, and the RBAC subject in k8s/platform/ci-rbac.yaml)."
+  value       = google_service_account.ci.email
+}

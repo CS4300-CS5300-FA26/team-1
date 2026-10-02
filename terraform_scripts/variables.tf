@@ -47,3 +47,23 @@ variable "k8s_service_account" {
   type        = string
   default     = "django-app"
 }
+
+variable "github_repository" {
+  description = "GitHub repository allowed to deploy, as \"org/repo\"."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.github_repository))
+    error_message = "github_repository must look like \"org/repo\"."
+  }
+}
+
+variable "github_repository_id" {
+  description = "Numeric GitHub repository ID (immutable, unlike the name). Used in the WIF attribute condition."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[0-9]+$", var.github_repository_id))
+    error_message = "github_repository_id must be the numeric repository ID."
+  }
+}
