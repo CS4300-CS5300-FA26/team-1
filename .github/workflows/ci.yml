@@ -2,30 +2,140 @@ name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["**"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_dispatch:
+  # Reused by deploy.yml so the deploy pipeline runs exactly these checks.
+  workflow_call:
+
+# When reused, github.workflow is the caller's name ("Deploy"), so the deploy
+# pipeline's checks never cancel, or get cancelled by, a standalone CI run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# CI-only values: no GCP credentials or real secrets anywhere in this workflow.
+env:
+  SECRET_KEY: ci-only-not-a-real-secret
+  DEBUG: "False"
+  ALLOWED_HOSTS: localhost,127.0.0.1
+  DB_ENGINE: django.db.backends.postgresql
+  DB_HOST: 127.0.0.1
+  DB_PORT: "5432"
+  DB_NAME: fitpro
+  DB_USER: fitpro
+  DB_PASSWORD: ci-only-postgres-password
 
 jobs:
   test:
+    name: Tests and Django checks
     runs-on: ubuntu-latest
-    env:
-      SECRET_KEY: ci-only-not-a-real-secret
-      DEBUG: "False"
-      ALLOWED_HOSTS: localhost,127.0.0.1
-      DB_ENGINE: django.db.backends.sqlite3
+    services:
+      postgres:
+        image: postgres:16 # matches Cloud SQL POSTGRES_16
+        env:
+          POSTGRES_DB: fitpro
+          POSTGRES_USER: fitpro
+          POSTGRES_PASSWORD: ci-only-postgres-password
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U fitpro -d fitpro"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
 
       - name: Install dependencies
         run: uv sync --locked
 
-      - name: Run tests
+      - name: Run tests (Postgres)
         run: uv run python manage.py test
+
+      - name: Check for missing migrations
+        run: uv run python manage.py makemigrations --check --dry-run
+
+      - name: Deployment checks (check --deploy)
+        env:
+          ALLOWED_HOSTS: fitpro.example.com
+          CSRF_TRUSTED_ORIGINS: https://fitpro.example.com
+        run: |
+          # A strong throwaway key so security.W009 is evaluated as in production.
+          SECRET_KEY="$(uv run python -c 'import secrets; print(secrets.token_urlsafe(50))')"
+          export SECRET_KEY
+          # Every check tag except "mail" fails the job on warnings. "mail" is excluded
+          # until a production email backend exists: MAILERS still uses the console
+          # backend (mail.E001). Remove the exclusion once email is configured.
+          mapfile -t tags < <(uv run python manage.py check --deploy --list-tags | grep -vx mail)
+          args=()
+          for tag in "${tags[@]}"; do args+=(--tag "$tag"); done
+          uv run python manage.py check --deploy --fail-level WARNING "${args[@]}"
+
+  container:
+    name: Container build and smoke test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: fitpro
+          POSTGRES_USER: fitpro
+          POSTGRES_PASSWORD: ci-only-postgres-password
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U fitpro -d fitpro"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Plain HTTP in this test; production sits behind the HTTPS load balancer.
+      BEHIND_HTTPS_PROXY: "False"
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build image (no push)
+        run: docker build --build-arg GIT_SHA="${{ github.sha }}" -t fitpro:ci .
+
+      # --network host reaches the Postgres service on 127.0.0.1. --read-only and
+      # --tmpfs /tmp mirror the Kubernetes readOnlyRootFilesystem + /tmp emptyDir.
+      - name: Run migrations in the image
+        run: |
+          docker run --rm --network host --read-only --tmpfs /tmp \
+            -e SECRET_KEY -e DEBUG -e ALLOWED_HOSTS -e BEHIND_HTTPS_PROXY \
+            -e DB_ENGINE -e DB_HOST -e DB_PORT -e DB_NAME -e DB_USER -e DB_PASSWORD \
+            fitpro:ci python manage.py migrate --noinput
+
+      - name: Start gunicorn (image CMD)
+        run: |
+          docker run -d --name fitpro --network host --read-only --tmpfs /tmp \
+            -e SECRET_KEY -e DEBUG -e ALLOWED_HOSTS -e BEHIND_HTTPS_PROXY \
+            -e DB_ENGINE -e DB_HOST -e DB_PORT -e DB_NAME -e DB_USER -e DB_PASSWORD \
+            fitpro:ci
+
+      - name: Smoke test /livez/, /healthz/, /
+        run: |
+          status() { curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:8000$1" || true; }
+          for _ in $(seq 1 30); do
+            [[ "$(status /livez/)" == 200 ]] && break
+            sleep 2
+          done
+          livez="$(status /livez/)"; healthz="$(status /healthz/)"; root="$(status /)"
+          echo "/livez/ -> $livez, /healthz/ -> $healthz, / -> $root"
+          [[ "$livez" == 200 ]] || { echo "::error::/livez/ returned $livez"; exit 1; }
+          [[ "$healthz" == 200 ]] || { echo "::error::/healthz/ returned $healthz"; exit 1; }
+          [[ "$root" == 200 || "$root" == 3?? ]] || { echo "::error::/ returned $root"; exit 1; }
+
+      - name: Container logs
+        if: always()
+        run: docker logs fitpro || true

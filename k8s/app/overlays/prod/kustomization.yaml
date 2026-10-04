@@ -1,0 +1,75 @@
+# Production overlay. Values come from `terraform output` in terraform_scripts/.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: app
+resources:
+  - ../../base
+
+images:
+  - name: django-app
+    newName: us-central1-docker.pkg.dev/fitpro-uccs-cs4300/fitpro/django-app
+    # CI sets this with `kustomize edit set image django-app=<repo>/django-app:<git sha>`.
+    newTag: replace-with-git-sha
+
+# Hashed name: any change here creates a new ConfigMap and rolls the Deployment.
+configMapGenerator:
+  - name: django-app-config
+    literals:
+      - DEBUG=False
+      - ALLOWED_HOSTS=fitpro.rockymountaintechlab.com
+      - CSRF_TRUSTED_ORIGINS=https://fitpro.rockymountaintechlab.com
+      - DB_ENGINE=django.db.backends.postgresql
+      - DB_HOST=127.0.0.1
+      - DB_PORT=5432
+      - DB_NAME=fitpro
+      - DB_USER=fitpro_app
+      - LOG_LEVEL=INFO
+
+patches:
+  # Workload Identity: pods using this KSA act as the fitpro-app GSA.
+  - patch: |-
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: django-app
+        annotations:
+          iam.gke.io/gcp-service-account: fitpro-app@fitpro-uccs-cs4300.iam.gserviceaccount.com
+
+  # Cloud SQL instance for the proxy sidecar. Targets the migration Job too, for
+  # when CI renders it through this overlay.
+  - target:
+      kind: Deployment|Job
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: any
+      spec:
+        template:
+          spec:
+            initContainers:
+              - name: cloud-sql-proxy
+                env:
+                  - name: CSQL_PROXY_INSTANCE_CONNECTION_NAME
+                    value: fitpro-uccs-cs4300:us-central1:fitpro-pg
+
+  - patch: |-
+      apiVersion: gateway.networking.k8s.io/v1
+      kind: Gateway
+      metadata:
+        name: fitpro
+        annotations:
+          networking.gke.io/certmap: fitpro-certmap
+      spec:
+        addresses:
+          - type: NamedAddress
+            value: fitpro-lb-ip
+
+  # Both routes (app on :443, redirect on :80) serve only the real hostname.
+  - target:
+      kind: HTTPRoute
+    patch: |-
+      - op: replace
+        path: /spec/hostnames
+        value:
+          - fitpro.rockymountaintechlab.com

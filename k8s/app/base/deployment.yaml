@@ -1,0 +1,140 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django-app
+  labels:
+    app.kubernetes.io/name: django-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: django-app
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: django-app
+    spec:
+      serviceAccountName: django-app
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # Native sidecar (restartPolicy: Always): it must pass its startupProbe before
+        # django starts, and it is stopped after django exits.
+        # CSQL_PROXY_INSTANCE_CONNECTION_NAME is set in the overlay.
+        - name: cloud-sql-proxy
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.26.0
+          restartPolicy: Always
+          args:
+            - --private-ip
+            - --port=5432
+            - --structured-logs
+            - --health-check
+            - --http-address=0.0.0.0
+            - --http-port=9090
+          ports:
+            - name: proxy-health
+              containerPort: 9090
+          startupProbe:
+            httpGet:
+              path: /startup
+              port: proxy-health
+            periodSeconds: 1
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /readiness
+              port: proxy-health
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /liveness
+              port: proxy-health
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+              ephemeral-storage: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+              ephemeral-storage: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        # The image CMD runs gunicorn fitpro.wsgi:application on :8000.
+        - name: django
+          image: django-app
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: django-app-config
+          # Probes hit the pod IP; core.middleware.HealthCheckMiddleware answers them
+          # before ALLOWED_HOSTS validation.
+          startupProbe:
+            httpGet:
+              path: /livez/
+              port: http
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz/
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /livez/
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+              ephemeral-storage: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+              ephemeral-storage: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: secrets
+              mountPath: /var/secrets
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: secrets
+          csi:
+            driver: secrets-store-gke.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: fitpro-secrets
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi

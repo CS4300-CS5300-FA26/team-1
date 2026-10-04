@@ -1,0 +1,19 @@
+# Defaults for any container that omits resources (the app manifests set their own),
+# and a per-container ceiling so one container can't take the whole quota.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: app-limits
+  namespace: app
+spec:
+  limits:
+    - type: Container
+      defaultRequest:
+        cpu: 250m
+        memory: 512Mi
+      default:
+        cpu: 500m
+        memory: 512Mi
+      max:
+        cpu: "1"
+        memory: 2Gi

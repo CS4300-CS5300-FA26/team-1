@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars (which is gitignored) and fill in.
+project_id    = "your-project-id"
+app_hostnames = ["fitpro.example.com"]
+# GitHub repository allowed to deploy, and its numeric ID:
+#   curl -s https://api.github.com/repos/<org>/<repo> | grep '"id"' | head -1
+#   (or: gh api repos/<org>/<repo> --jq .id)
+github_repository    = "your-org/your-repo"
+github_repository_id = "123456789"
