@@ -1,5 +1,6 @@
 from django.test import TestCase
 from .models import UserProfile
+from django.contrib.auth.models import User
 
 # TODO: Make an actual test - the spec says we need to actually test something, but this was nice to see the passing pipeline for now
 class BasicTests(TestCase):
@@ -9,8 +10,9 @@ class BasicTests(TestCase):
 # Unit test to show that the model is storing the data it should
 class UserProfileModelTest(TestCase):
     def test_create_user_profile(self):
-        profile = UserProfile.objects.create(username="testuser", age = 22, weight = 222.22)
-        self.assertEqual(profile.username , "testuser")
+        user = User.objects.create_user(username="testuser", password="password123")
+        profile = UserProfile.objects.create(user =user, age = 22, weight = 222.22)
+        self.assertEqual(profile.user.username , "testuser")
         self.assertEqual(profile.age , 22)
         self.assertEqual(profile.weight , 222.22)
 from unittest import mock
