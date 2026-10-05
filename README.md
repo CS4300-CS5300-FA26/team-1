@@ -97,3 +97,4 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 | Claude | Caleb Harris | Generated k8s manifests | n/a |
 | Claude | Caleb Harris | Generated deployment script | n/a |
 | Claude | Caleb Harris | Claude Code implemented the CD portion of the GitHub Actions pipeline (Workload Identity Federation auth, image build/push, deploy via scripts/deploy.sh) | n/a |
+Claude | Nathan Galay | Generated register/login pages (accounts app) | n/a
