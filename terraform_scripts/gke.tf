@@ -44,6 +44,20 @@ resource "google_container_cluster" "autopilot" {
     }
   }
 
+  # Leave only the free metrics - this ended up being really expensive to have default metrics
+  monitoring_config {
+    enable_components = ["SYSTEM_COMPONENTS"]
+
+    managed_prometheus {
+      enabled = true
+    }
+
+    advanced_datapath_observability_config {
+      enable_metrics = false
+      enable_relay   = false
+    }
+  }
+
   # Set to false (and apply) before destroying at end of semester.
   deletion_protection = true
 
