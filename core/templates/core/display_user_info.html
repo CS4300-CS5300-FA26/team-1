@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Profiles</title>
+</head>
+<body>
+    <h1>User Profiles</h1>
+
+    <!-- Loop through the 'users' -->
+    {% for profile in users %}
+        <div class="user-card">
+            <p><small>Username: {{ profile.user.username }}</small></p>
+            <p><small>Age: {{ profile.age }}</small></p>
+            <p><small>Weight: {{ profile.weight }}</small></p>
+            <p><small>Date Created: {{ profile.created_at }}</small></p>
+        </div>
+        <hr>
+    {% empty %}
+        <!-- This displays if the database table is completely empty -->
+        <p>No users found yet.</p>
+    {% endfor %}
+</body>
+</html>
