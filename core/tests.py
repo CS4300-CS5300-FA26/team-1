@@ -1,6 +1,8 @@
-from django.test import TestCase
 from .models import UserProfile
 from django.contrib.auth.models import User
+from unittest import mock
+from django.db import OperationalError, connections
+from django.test import TestCase, override_settings
 
 # Unit test to show that the model is storing the data it should
 class UserProfileModelTest(TestCase):
@@ -10,10 +12,7 @@ class UserProfileModelTest(TestCase):
         self.assertEqual(profile.user.username , "testuser")
         self.assertEqual(profile.age , 22)
         self.assertEqual(profile.weight , 222.22)
-from unittest import mock
 
-from django.db import OperationalError, connections
-from django.test import TestCase, override_settings
 
 # Probes from kubelet and the load balancer use the pod IP as the Host header.
 POD_IP_HOST = '10.20.0.7:8000'
