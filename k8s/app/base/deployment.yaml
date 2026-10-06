@@ -20,6 +20,13 @@ spec:
         app.kubernetes.io/name: django-app
     spec:
       serviceAccountName: django-app
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: django-app
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
