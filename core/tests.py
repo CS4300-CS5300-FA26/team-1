@@ -1,3 +1,15 @@
+from django.test import TestCase
+from .models import UserProfile
+from django.contrib.auth.models import User
+
+# Unit test to show that the model is storing the data it should
+class UserProfileModelTest(TestCase):
+    def test_create_user_profile(self):
+        user = User.objects.create_user(username="testuser", password="password123")
+        profile = UserProfile.objects.create(user =user, age = 22, weight = 222.22)
+        self.assertEqual(profile.user.username , "testuser")
+        self.assertEqual(profile.age , 22)
+        self.assertEqual(profile.weight , 222.22)
 from unittest import mock
 
 from django.db import OperationalError, connections
