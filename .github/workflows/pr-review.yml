@@ -3,7 +3,7 @@ name: Codex PR Review
 on:
   pull_request:
     branches: [main]
-    types: [opened, ready_for_review]
+    types: [ready_for_review]
 
 jobs:
   codex:
