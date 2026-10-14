@@ -3,10 +3,17 @@ name: Codex PR Review
 on:
   pull_request:
     branches: [main]
-    types: [ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+
+concurrency:
+  group: codex-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 
 jobs:
   codex:
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     permissions:
       contents: read
