@@ -1,6 +1,9 @@
-from django.test import TestCase
 from .models import UserProfile
 from django.contrib.auth.models import User
+from unittest import mock
+from django.db import OperationalError, connections
+from django.test import TestCase, override_settings
+from django.urls import reverse
 
 # Unit test to show that the model is storing the data it should
 class UserProfileModelTest(TestCase):
@@ -10,10 +13,7 @@ class UserProfileModelTest(TestCase):
         self.assertEqual(profile.user.username , "testuser")
         self.assertEqual(profile.age , 22)
         self.assertEqual(profile.weight , 222.22)
-from unittest import mock
 
-from django.db import OperationalError, connections
-from django.test import TestCase, override_settings
 
 # Probes from kubelet and the load balancer use the pod IP as the Host header.
 POD_IP_HOST = '10.20.0.7:8000'
@@ -54,3 +54,30 @@ class HomePageTests(TestCase):
         response = self.client.get('/')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '<h1>FitPro</h1>')
+
+
+# User story D-1: pages that need a login (plans and history are private to each user)
+class OnboardingAndProfileAccessTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user('ownerbob', 'bob@example.com', 'Tr4ining-Plan-2026!')
+        self.other = User.objects.create_user('strangeralice', 'alice@example.com', 'Tr4ining-Plan-2026!')
+        UserProfile.objects.create(user=self.user, age=30, weight='180.50')
+        UserProfile.objects.create(user=self.other, age=41, weight='222.22')
+
+    def test_onboarding_requires_login(self):
+        response = self.client.get(reverse('onboarding'))
+        self.assertRedirects(response, f"{reverse('login')}?next={reverse('onboarding')}")
+
+    def test_onboarding_available_when_logged_in(self):
+        self.client.force_login(self.user)
+        self.assertEqual(self.client.get(reverse('onboarding')).status_code, 200)
+
+    def test_profile_page_requires_login(self):
+        response = self.client.get(reverse('user_profile'))
+        self.assertRedirects(response, f"{reverse('login')}?next={reverse('user_profile')}")
+
+    def test_profile_page_only_shows_own_profile(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('user_profile'))
+        self.assertContains(response, 'ownerbob')
+        self.assertNotContains(response, 'strangeralice')

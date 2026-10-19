@@ -19,7 +19,7 @@ class RegisterTests(TestCase):
             'password1': PASSWORD,
             'password2': PASSWORD,
         })
-        self.assertRedirects(response, reverse('home'))
+        self.assertRedirects(response, reverse('onboarding'))
         user = User.objects.get(username='ana')
         self.assertEqual(user.email, 'ana@example.com')
         self.assertTrue(user.check_password(PASSWORD))
