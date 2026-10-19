@@ -1,0 +1,26 @@
+# Normalize line endings: store text files as LF in the repo and check them
+# out as LF on every OS. Git auto-detects binary files and leaves them alone.
+* text=auto eol=lf
+
+# Scripts that must keep LF to run in containers / CI
+*.sh text eol=lf
+
+# Windows-only scripts need CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files: never convert or diff as text
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.sqlite3 binary

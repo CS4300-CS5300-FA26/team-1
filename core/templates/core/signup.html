@@ -1,0 +1,12 @@
+{% extends "core/base.html" %}
+{% block title %}Sign up - FitPro{% endblock %}
+{% block content %}
+<!-- This is the page for Scenarios 1 and 2. {{ form }} draws the fields, the password rules, and any errors, including “already registered”.-->
+  <h1>Sign up</h1>
+  <form method="post" class="card" novalidate>
+    {% csrf_token %}
+    {{ form }}
+    <button type="submit">Create account</button>
+  </form>
+  <p>Already have an account? <a href="{% url 'login' %}">Log in</a></p>
+{% endblock %}
