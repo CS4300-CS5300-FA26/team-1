@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from core.models import UserProfile
 
 User = get_user_model()
 PASSWORD = 'correct-horse-battery-42'
@@ -64,7 +65,10 @@ class RegisterTests(TestCase):
 
 class LoginTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user('fay', 'fay@example.com', PASSWORD)
+        self.user = User.objects.create_user('fay', 'sam@example.com', PASSWORD)
+        # These tests are about logging in as a returning user, so onboarding is done.
+        # The redirect for users who haven't finished it is tested in core/test_onboarding.py.
+        UserProfile.objects.create(user=self.user, onboarding_completed=True)
 
     def test_login_page_renders(self):
         response = self.client.get(reverse('login'))
@@ -73,7 +77,7 @@ class LoginTests(TestCase):
 
     def test_login_success(self):
         response = self.client.post(reverse('login'), {'username': 'fay', 'password': PASSWORD})
-        self.assertRedirects(response, reverse('home'))
+        self.assertRedirects(response, reverse('dashboard'))
         self.assertEqual(int(self.client.session['_auth_user_id']), self.user.pk)
 
     def test_login_wrong_password(self):
@@ -92,7 +96,7 @@ class LoginTests(TestCase):
             reverse('login'),
             {'username': 'fay', 'password': PASSWORD, 'next': 'https://evil.example.com/'},
         )
-        self.assertRedirects(response, reverse('home'))
+        self.assertRedirects(response, reverse('dashboard'))
 
     def test_logout_requires_post_and_clears_session(self):
         self.client.force_login(self.user)
@@ -100,3 +104,6 @@ class LoginTests(TestCase):
         response = self.client.post(reverse('logout'))
         self.assertRedirects(response, reverse('home'), fetch_redirect_response=False)
         self.assertNotIn('_auth_user_id', self.client.session)
+
+
+        

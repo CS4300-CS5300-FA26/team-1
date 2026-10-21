@@ -1,6 +1,7 @@
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 
+from .forms import OnboardingForm
 from .models import UserProfile
 
 
@@ -10,9 +11,28 @@ def home(request):
 
 @login_required
 def onboarding(request):
-    # Placeholder: the onboarding questionnaire is its own user story. Registration lands
-    # here, so that story only has to replace this view and its template.
-    return render(request, 'core/onboarding.html')
+    """Onboarding questionnaire. Saves the answers, marks onboarding done, goes to the dashboard."""
+    profile, _ = UserProfile.objects.get_or_create(user=request.user)
+    if profile.onboarding_completed:
+        return redirect('dashboard')
+
+    # A bound form that fails validation re-renders with the user's other answers filled in.
+    form = OnboardingForm(request.POST or None, instance=profile)
+    if request.method == 'POST' and form.is_valid():
+        profile = form.save(commit=False)
+        profile.onboarding_completed = True
+        profile.save()
+        return redirect('dashboard')
+    return render(request, 'core/onboarding.html', {'form': form})
+
+
+@login_required
+def dashboard(request):
+    """Dashboard with the profile summary. Sends users who haven't onboarded back to the questionnaire."""
+    profile, _ = UserProfile.objects.get_or_create(user=request.user)
+    if not profile.onboarding_completed:
+        return redirect('onboarding')
+    return render(request, 'core/dashboard.html', {'profile': profile})
 
 
 @login_required
