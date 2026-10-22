@@ -5,6 +5,7 @@ The accounts app's original tests live in accounts/tests.py; these add to them.
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
+from core.models import UserProfile
 
 User = get_user_model()
 PASSWORD = 'Tr4ining-Plan-2026!'
@@ -100,19 +101,22 @@ class RegistrationD1Tests(TestCase):
 class LoginD1Tests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user('sam', 'sam@example.com', PASSWORD)
+        # These tests are about logging in as a returning user, so onboarding is done.
+        # The redirect for users who haven't finished it is tested in core/test_onboarding.py.
+        UserProfile.objects.create(user=self.user, onboarding_completed=True)
 
     def log_in(self, identifier='sam@example.com', password=PASSWORD):
         return self.client.post(reverse('login'), {'username': identifier, 'password': password})
 
     def test_login_with_email(self):
-        self.assertRedirects(self.log_in(), reverse('home'))
+        self.assertRedirects(self.log_in(), reverse('dashboard'))
         self.assertEqual(int(self.client.session['_auth_user_id']), self.user.pk)
 
     def test_login_email_is_case_insensitive(self):
-        self.assertRedirects(self.log_in(' SAM@Example.com '), reverse('home'))
+        self.assertRedirects(self.log_in(' SAM@Example.com '), reverse('dashboard'))
 
     def test_login_with_username_still_works(self):
-        self.assertRedirects(self.log_in('sam'), reverse('home'))
+        self.assertRedirects(self.log_in('sam'), reverse('dashboard'))
 
     # Scenario: Wrong password
     def test_wrong_password_shows_generic_error_and_stays_logged_out(self):

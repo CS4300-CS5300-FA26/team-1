@@ -146,7 +146,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # Authentication (user story D-1: user-auth)
 # Passwords are hashed with Django's default PBKDF2-SHA256 hasher (never stored in plain text).
 LOGIN_URL = 'login'
-LOGIN_REDIRECT_URL = 'home'
+LOGIN_REDIRECT_URL = 'dashboard'
 LOGOUT_REDIRECT_URL = 'home'
 
 # Sessions: HttpOnly and SameSite=Lax are Django's defaults, set explicitly so they are not

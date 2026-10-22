@@ -1,10 +1,35 @@
-{% extends "accounts/base_auth.html" %}
-{% block title %}Onboarding | FitPro{% endblock %}
-{% block content %}
-  <h1>Welcome to FitPro</h1>
-  <p>Your account is ready. The onboarding questionnaire is coming soon.</p>
-  <form method="post" action="{% url 'logout' %}">
-    {% csrf_token %}
-    <button type="submit">Log out</button>
-  </form>
-{% endblock %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Get started | FitPro</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #f5f7fa; color: #1f2933; margin: 0; padding: 2rem 1rem; }
+    .card { max-width: 480px; margin: 0 auto; padding: 2rem; background: #fff; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+    h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
+    .field { margin-bottom: 1rem; }
+    .field > label { display: block; font-weight: 600; margin-bottom: .25rem; }
+    input[type=text], input[type=number], select { width: 100%; padding: .5rem; box-sizing: border-box; font: inherit; border: 1px solid #cbd2d9; border-radius: 4px; }
+    .errorlist { color: #b00020; list-style: none; margin: .25rem 0 0; padding: 0; font-size: .9rem; }
+    button { width: 100%; padding: .6rem; font: inherit; font-weight: 600; color: #fff; background: #1f6feb; border: 0; border-radius: 4px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Let's set up your profile</h1>
+    <p>Answer a few questions so FitPro can tailor your plan.</p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for field in form %}
+        <div class="field">
+          {{ field.label_tag }}
+          {{ field }}
+          {% if field.errors %}<ul class="errorlist">{% for error in field.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+      {% endfor %}
+      <button type="submit">Finish</button>
+    </form>
+  </main>
+</body>
+</html>
