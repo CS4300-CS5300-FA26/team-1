@@ -40,6 +40,51 @@ conscious students. The application offers personalized workout splits, meal-pre
 * `uv run python manage.py makemigrations` [Creates new database migrations]
 * `uv run python manage.py migrate` [Applies database migrations]
 * `uv run python manage.py test` [Runs Django tests]
+* `uv run python manage.py behave` [Runs the Gherkin acceptance scenarios in `features/`]
+
+## Authentication
+User story **D-1 (user-auth)**: *as a new user, I want to create an account and log in, so that my plan and history are private to me.*
+Auth lives in the `accounts` app and uses Django's built-in `User` model, sessions, and password hashing
+(decision recorded in [ADR-005](docs/adrs/adr-005.md)).
+
+| Route | Name | Access | Purpose |
+| --- | --- | --- | --- |
+| `/accounts/register/` | `register` | Anonymous (logged-in users are redirected home) | Create an account; on success the user is logged in and sent to `/onboarding/` |
+| `/accounts/login/` | `login` | Anonymous | Log in with email (or username) and password |
+| `/accounts/logout/` | `logout` | `POST` only | Log out (the Log out buttons submit a form) |
+| `/onboarding/` | `onboarding` | Login required | Placeholder for the onboarding questionnaire (separate story) |
+| `/users/` | `user_profile` | Login required | The signed-in user's own profile only |
+
+### Acceptance scenarios
+The Gherkin scenarios live in [`features/user_auth.feature`](features/user_auth.feature) (successful registration, email
+already registered, wrong password). Step definitions are in `features/steps/user_auth_steps.py`. Django tests are in
+`accounts/tests.py`, `accounts/test_d1_user_auth.py`, and `core/tests.py`.
+
+```shell
+uv run python manage.py test    # Django tests
+uv run python manage.py behave  # Gherkin scenarios
+```
+
+### Security measures
+| Area | What we do |
+| --- | --- |
+| Password storage | Hashed with Django's default PBKDF2-SHA256 hasher; never stored or logged in plain text. Password fields are marked sensitive so they are scrubbed from error reports |
+| Password rules | Minimum 10 characters, not a commonly used password, not entirely numeric, not too similar to the username or email (`AUTH_PASSWORD_VALIDATORS`) |
+| Login errors | One generic message, "Invalid email or password", for an unknown user, a wrong password, and an inactive account, so the login form cannot be used to discover accounts |
+| Emails and usernames | Emails are trimmed, lowercased, and checked for duplicates case-insensitively; usernames cannot contain `@`, so a username can never be mistaken for an email |
+| Sessions | The session key is rotated on login and registration (prevents session fixation); cookies are `HttpOnly`, `SameSite=Lax`, and `Secure` behind the HTTPS proxy; sessions expire after 7 days |
+| CSRF | Every form posts a CSRF token; Django rejects POSTs without one |
+| Logout | `POST` only, so a third-party page cannot log a user out with a link or image |
+| Redirects | The `next` parameter is only followed if it points at this site (no open redirects) |
+| Access control | `/onboarding/` and `/users/` require login; `/users/` previously listed every user's profile and now shows only the signed-in user's own |
+
+### Known gaps (planned follow-ups)
+* **No rate limiting or lockout on login or registration yet.** The "email already exists" message required by the user story
+  also reveals that an email has an account. Add [`django-axes`](https://django-axes.readthedocs.io/) (or similar) with `uv add`.
+* **Email uniqueness is checked in the form, not enforced by the database**, so two simultaneous sign-ups with the same email could both succeed.
+* **Email format is validated, but ownership is not.** Email verification and password reset need a production email backend (`MAILERS` still uses the console backend).
+* **Admin site** (`/admin/`) is reachable on the public hostname; consider restricting it before launch.
+* **Password hashing** uses Django's default; Argon2 is a possible upgrade (needs the `argon2-cffi` dependency).
 
 ## Contributing
 * Branch naming: `feature/<short-description>`, `fix/<short-description>`
@@ -97,5 +142,7 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 | Claude | Caleb Harris | Generated k8s manifests | n/a |
 | Claude | Caleb Harris | Generated deployment script | n/a |
 | Claude | Caleb Harris | Claude Code implemented the CD portion of the GitHub Actions pipeline (Workload Identity Federation auth, image build/push, deploy via scripts/deploy.sh) | n/a |
+| Claude | Nathan Galay | Generated register/login pages (accounts app) | n/a |
 | Codex | Caleb Harris | Automatic PR review: `pr-review.yml` runs `openai/codex-action` when a PR is opened and posts the feedback as a PR comment | n/a |
 | Claude | Caleb Harris | Reviewed `pr-review.yml` against the other CI workflows and pinned its actions to commit SHAs | n/a |
+| Claude | Nathan Galay | Implemented user story D-1 (user-auth) on the accounts app: generic login error, email login, password and session hardening, Gherkin feature and step definitions, extra Django tests, ADR-005, and this README section | n/a |

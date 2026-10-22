@@ -10,7 +10,9 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import importlib.util
 from pathlib import Path
+
 import environ
 
 # Implementing django-environ to prevent secrets from getting committed in the settings file
@@ -61,7 +63,13 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'core',
+    'accounts',
 ]
+
+# behave-django runs the Gherkin scenarios in features/ (`manage.py behave`). It is a dev
+# dependency and the production image installs with --no-dev, so only enable it if present.
+if importlib.util.find_spec('behave_django'):
+    INSTALLED_APPS.append('behave_django')
 
 MIDDLEWARE = [
     'core.middleware.HealthCheckMiddleware',
@@ -124,6 +132,7 @@ AUTH_PASSWORD_VALIDATORS = [
     },
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {'min_length': 10},
     },
     {
         'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
@@ -132,6 +141,19 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
+
+
+# Authentication (user story D-1: user-auth)
+# Passwords are hashed with Django's default PBKDF2-SHA256 hasher (never stored in plain text).
+LOGIN_URL = 'login'
+LOGIN_REDIRECT_URL = 'home'
+LOGOUT_REDIRECT_URL = 'home'
+
+# Sessions: HttpOnly and SameSite=Lax are Django's defaults, set explicitly so they are not
+# changed by accident. SESSION_COOKIE_SECURE is enabled below when behind the HTTPS proxy.
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 7  # one week, then log in again
 
 
 # Internationalization

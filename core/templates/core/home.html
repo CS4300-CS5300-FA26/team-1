@@ -17,12 +17,23 @@
     main { text-align: center; padding: 1rem; }
     h1 { font-size: 3rem; margin: 0 0 0.5rem; }
     p { margin: 0; color: #52606d; }
+    .auth { margin-top: 1.5rem; }
+    .auth form { display: inline; }
+    .auth button { padding: 0.5rem 1rem; font: inherit; font-weight: 600; color: #fff; background: #1f6feb; border: 0; border-radius: 4px; cursor: pointer; }
   </style>
 </head>
 <body>
   <main>
     <h1>FitPro</h1>
     <p>Workouts, meal prep, and playlists for beginners and budget-conscious students. Coming soon.</p>
+    <div class="auth">
+      {% if user.is_authenticated %}
+        Signed in as {{ user.username }} &middot;
+        <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">Log out</button></form>
+      {% else %}
+        <a href="{% url 'login' %}">Log in</a> &middot; <a href="{% url 'register' %}">Sign up</a>
+      {% endif %}
+    </div>
   </main>
 </body>
 </html>
