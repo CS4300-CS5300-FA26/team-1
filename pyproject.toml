@@ -19,3 +19,22 @@ dev = [
     "behave-django>=2.0.0",
     "coverage>=7.16.2",
 ]
+
+[tool.coverage.run]
+source = ["core", "fitpro"]
+omit = ["*/asgi.py", "*/wsgi.py", "*/migrations/*", "*/tests.py"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "fitpro.settings"
+python_files = ["tests.py", "test_*.py", "*_tests.py"]
