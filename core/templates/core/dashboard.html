@@ -1,19 +1,13 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Dashboard | FitPro</title>
+{% extends "core/base.html" %}
+{% block title %}Dashboard | FitPro{% endblock %}
+{% block extra_head %}
   <style>
-    body { font-family: system-ui, sans-serif; background: #f5f7fa; color: #1f2933; margin: 0; padding: 2rem 1rem; }
-    .card { max-width: 480px; margin: 0 auto 1rem; padding: 2rem; background: #fff; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
-    h1 { font-size: 1.6rem; margin: 0 0 1rem; }
+    h1 { margin-bottom: 1rem; }
     dt { font-weight: 600; color: #52606d; font-size: .85rem; margin-top: .75rem; }
     dd { margin: 0; }
-    button { padding: .5rem 1rem; font: inherit; border: 1px solid #cbd2d9; border-radius: 4px; background: #fff; cursor: pointer; }
   </style>
-</head>
-<body>
+{% endblock %}
+{% block body %}
   <main class="card">
     <h1>Dashboard</h1>
     <h2>Welcome, {{ user.username }}</h2>
@@ -29,7 +23,6 @@
   </main>
   <form method="post" action="{% url 'logout' %}" style="text-align:center">
     {% csrf_token %}
-    <button type="submit">Log out</button>
+    <button type="submit" class="secondary">Log out</button>
   </form>
-</body>
-</html>
+{% endblock %}
