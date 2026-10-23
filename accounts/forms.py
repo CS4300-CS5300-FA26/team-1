@@ -52,6 +52,15 @@ class LoginForm(AuthenticationForm):
         'inactive': INVALID_LOGIN_MESSAGE,
     }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # AuthenticationForm sets maxlength to User.username's 150 characters, so the browser
+        # won't accept a longer value, but people can also log in with an email, which may
+        # be up to User.email's 254.
+        email_max_length = User._meta.get_field('email').max_length
+        self.fields['username'].max_length = email_max_length
+        self.fields['username'].widget.attrs['maxlength'] = email_max_length
+
     def clean_username(self):
         value = self.cleaned_data['username'].strip()
         if '@' in value:
