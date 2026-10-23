@@ -1,4 +1,6 @@
-Feature: Onboarding questionnaire
+Feature: D-2 Onboarding questionnaire
+  As a fitness beginner, I want to enter my goals, baseline metrics, weekly food budget,
+  and available equipment during onboarding, so that my plan fits my body, budget, and gear.
 
   Scenario: Complete onboarding
     Given I am logged in and have not completed onboarding

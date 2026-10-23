@@ -1,5 +1,5 @@
 # CS 4300/5300 Fall 2026 — Team 1 group project - FitPro
-[TODO: add test coverage/ status badges here after ci/cd setup]
+[![CI](https://github.com/CS4300-CS5300-FA26/team-1/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/CS4300-CS5300-FA26/team-1/actions/workflows/ci.yml)
 
 ## Project Overview
 This is the semester project for CS 4300/5300 Fall 2026. FitPro is a fitness application aimed at beginners and budget
@@ -42,6 +42,18 @@ conscious students. The application offers personalized workout splits, meal-pre
 * `uv run python manage.py test` [Runs Django tests]
 * `uv run python manage.py behave` [Runs the Gherkin acceptance scenarios in `features/`]
 
+### Test coverage
+CI runs the Django tests and the Gherkin scenarios once, under `coverage`, on every push. On pull requests into `main`
+it also adds a coverage table to the job summary, uploads a `coverage-report` artifact (`coverage.xml` and the HTML
+report), and fails if total coverage is below **80%**. Coverage settings are in `pyproject.toml`. To run the same check locally:
+
+```shell
+uv run coverage run manage.py test
+uv run coverage run --append manage.py behave
+uv run coverage report   # fails under 80%
+uv run coverage html     # writes htmlcov/index.html
+```
+
 ## Authentication
 User story **D-1 (user-auth)**: *as a new user, I want to create an account and log in, so that my plan and history are private to me.*
 Auth lives in the `accounts` app and uses Django's built-in `User` model, sessions, and password hashing
@@ -52,13 +64,16 @@ Auth lives in the `accounts` app and uses Django's built-in `User` model, sessio
 | `/accounts/register/` | `register` | Anonymous (logged-in users are redirected home) | Create an account; on success the user is logged in and sent to `/onboarding/` |
 | `/accounts/login/` | `login` | Anonymous | Log in with email (or username) and password |
 | `/accounts/logout/` | `logout` | `POST` only | Log out (the Log out buttons submit a form) |
-| `/onboarding/` | `onboarding` | Login required | Placeholder for the onboarding questionnaire (separate story) |
+| `/onboarding/` | `onboarding` | Login required | Onboarding questionnaire (story D-2). Users who already finished it are sent to `/dashboard/` |
+| `/dashboard/` | `dashboard` | Login required | Profile summary. Users who haven't finished onboarding are sent to `/onboarding/` |
 | `/users/` | `user_profile` | Login required | The signed-in user's own profile only |
 
 ### Acceptance scenarios
 The Gherkin scenarios live in [`features/user_auth.feature`](features/user_auth.feature) (successful registration, email
-already registered, wrong password). Step definitions are in `features/steps/user_auth_steps.py`. Django tests are in
-`accounts/tests.py`, `accounts/test_d1_user_auth.py`, and `core/tests.py`.
+already registered, wrong password) and [`features/onboarding.feature`](features/onboarding.feature) (complete
+onboarding, missing required answer, returning user skips onboarding). Step definitions are in `features/steps/`.
+Django tests are in `accounts/tests.py` (registration, login, logout), `core/test_onboarding.py` (onboarding, dashboard,
+and the login redirect), and `core/tests.py` (models, health checks, and access control).
 
 ```shell
 uv run python manage.py test    # Django tests
@@ -76,7 +91,7 @@ uv run python manage.py behave  # Gherkin scenarios
 | CSRF | Every form posts a CSRF token; Django rejects POSTs without one |
 | Logout | `POST` only, so a third-party page cannot log a user out with a link or image |
 | Redirects | The `next` parameter is only followed if it points at this site (no open redirects) |
-| Access control | `/onboarding/` and `/users/` require login; `/users/` previously listed every user's profile and now shows only the signed-in user's own |
+| Access control | `/onboarding/`, `/dashboard/`, and `/users/` require login; `/users/` previously listed every user's profile and now shows only the signed-in user's own |
 
 ### Known gaps (planned follow-ups)
 * **No rate limiting or lockout on login or registration yet.** The "email already exists" message required by the user story
@@ -146,3 +161,4 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 | Codex | Caleb Harris | Automatic PR review: `pr-review.yml` runs `openai/codex-action` when a PR is opened and posts the feedback as a PR comment | n/a |
 | Claude | Caleb Harris | Reviewed `pr-review.yml` against the other CI workflows and pinned its actions to commit SHAs | n/a |
 | Claude | Nathan Galay | Implemented user story D-1 (user-auth) on the accounts app: generic login error, email login, password and session hardening, Gherkin feature and step definitions, extra Django tests, ADR-005, and this README section | n/a |
+| Claude | Caleb Harris | Claude Code applied the PR #20/#27 review follow-ups (merged duplicate test modules, onboarding input bounds, shared base template, ADR-005) and moved the coverage report into `ci.yml` with the 80% gate and artifact on PRs only | n/a |
