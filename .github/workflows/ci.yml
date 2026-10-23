@@ -59,8 +59,37 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked
 
+      # Tests and Gherkin scenarios run once, under coverage, on every trigger. Coverage
+      # settings (source, omit, fail_under) are in pyproject.toml.
       - name: Run tests (Postgres)
-        run: uv run python manage.py test
+        run: uv run coverage run manage.py test
+
+      - name: Run Gherkin scenarios (behave)
+        run: uv run coverage run --append manage.py behave
+
+      # The coverage report, its artifact, and the 80% gate only run for PRs into main
+      # (the pull_request trigger above). Pushes and the deploy pipeline skip them.
+      # --fail-under=0 so writing the report never fails; the gate is its own step.
+      - name: Coverage report
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        run: |
+          uv run coverage xml --fail-under=0
+          uv run coverage html --fail-under=0
+          uv run coverage report --format=markdown --fail-under=0 >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage artifact
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-report
+          path: |
+            coverage.xml
+            htmlcov/
+          if-no-files-found: warn
+
+      - name: Enforce 80% coverage
+        if: github.event_name == 'pull_request'
+        run: uv run coverage report
 
       - name: Check for missing migrations
         run: uv run python manage.py makemigrations --check --dry-run
