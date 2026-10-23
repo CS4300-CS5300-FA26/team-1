@@ -19,3 +19,18 @@ dev = [
     "behave-django>=2.0.0",
     "coverage>=7.16.2",
 ]
+
+[tool.coverage.run]
+source = ["core", "fitpro", "accounts"]
+omit = ["*/asgi.py", "*/wsgi.py", "*/migrations/*", "*/tests.py", "*/test_*.py"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]

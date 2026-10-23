@@ -1,12 +1,12 @@
 from django.contrib.auth import login
-from django.shortcuts import redirect, render
-from django.views.decorators.debug import sensitive_post_parameters
-from .forms import RegisterForm
-from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
+from django.shortcuts import redirect, render
 from django.urls import reverse
-from .forms import LoginForm
+from django.views.decorators.debug import sensitive_post_parameters
+
 from core.models import UserProfile
+
+from .forms import LoginForm, RegisterForm
 
 
 class CustomLoginView(LoginView):
@@ -20,7 +20,8 @@ class CustomLoginView(LoginView):
         profile, _ = UserProfile.objects.get_or_create(user=self.request.user)
         if not profile.onboarding_completed:
             return reverse('onboarding')
-        return super().get_success_url()  # ?next= if present, else LOGIN_REDIRECT_URL ('home')
+        return super().get_success_url()  # ?next= if present, else LOGIN_REDIRECT_URL ('dashboard')
+
 
 @sensitive_post_parameters('password1', 'password2')  # keep passwords out of error reports
 def register(request):
@@ -31,7 +32,8 @@ def register(request):
     form = RegisterForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
         user = form.save()
-        UserProfile.objects.get_or_create(user=user)   # the missing line
+        # Every user needs a profile so the onboarding and dashboard views can read it.
+        UserProfile.objects.get_or_create(user=user)
         # login() rotates the session key, which prevents session fixation.
         login(request, user)
         return redirect('onboarding')

@@ -6,6 +6,22 @@ from .models import EQUIPMENT_CHOICES, UserProfile
 class OnboardingForm(forms.ModelForm):
     """Onboarding questionnaire. Every question is required."""
 
+    # Height and weight are bounded here, not on the model, so the limits can change
+    # without a migration. Generous ranges that still catch typos like 0 or 7000.
+    height_inches = forms.IntegerField(
+        label='Height (inches)',
+        min_value=36,
+        max_value=96,
+        error_messages={'required': 'Your height is required.'},
+    )
+    weight = forms.DecimalField(
+        label='Weight (lb)',
+        min_value=50,
+        max_value=700,
+        max_digits=5,
+        decimal_places=2,
+        error_messages={'required': 'Your weight is required.'},
+    )
     weekly_food_budget = forms.DecimalField(
         label='Weekly food budget ($)',
         min_value=0,
@@ -26,14 +42,10 @@ class OnboardingForm(forms.ModelForm):
                   'weekly_food_budget', 'equipment']
         labels = {
             'goal': 'Your goal',
-            'height_inches': 'Height (inches)',
-            'weight': 'Weight (lb)',
             'experience_level': 'Experience level',
         }
         error_messages = {
             'goal': {'required': 'Your goal is required.'},
-            'height_inches': {'required': 'Your height is required.'},
-            'weight': {'required': 'Your weight is required.'},
             'experience_level': {'required': 'Your experience level is required.'},
         }
 
@@ -43,3 +55,11 @@ class OnboardingForm(forms.ModelForm):
         # the form treat them as optional, so require every question here.
         for field in self.fields.values():
             field.required = True
+
+    def clean_equipment(self):
+        equipment = self.cleaned_data['equipment']
+        if 'none' in equipment and len(equipment) > 1:
+            raise forms.ValidationError(
+                '"No equipment" can\'t be combined with other equipment.'
+            )
+        return equipment
