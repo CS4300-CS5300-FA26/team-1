@@ -70,6 +70,13 @@ jobs:
       # The coverage report, its artifact, and the 80% gate only run for PRs into main
       # (the pull_request trigger above). Pushes and the deploy pipeline skip them.
       # --fail-under=0 so writing the report never fails; the gate is its own step.
+      # Printed to the job log on every trigger (the data is collected anyway).
+      - name: Print coverage
+        if: ${{ !cancelled() }}
+        run: |
+          uv run coverage report --fail-under=0
+          echo "Total coverage: $(uv run coverage report --format=total --fail-under=0)%"
+
       - name: Coverage report
         if: ${{ !cancelled() && github.event_name == 'pull_request' }}
         run: |
