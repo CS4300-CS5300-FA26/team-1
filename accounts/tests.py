@@ -4,19 +4,23 @@ The Gherkin scenarios for this story are in features/user_auth.feature. The redi
 the onboarding questionnaire after login is tested in core/test_onboarding.py.
 """
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
-from unittest import mock
+from unittest import mock, skipUnless
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError, transaction
-from django.test import Client, TestCase, override_settings
+from django.db import IntegrityError, connection, transaction
+from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from core.models import UserProfile
 
 from .forms import LoginForm, RegisterForm
-from .models import ThrottleEvent
+from .models import ThrottleCounter
+from .throttle import acquire
 
 User = get_user_model()
 PASSWORD = 'Tr4ining-Plan-2026!'
@@ -280,7 +284,7 @@ class LoginThrottleTests(TestCase):
 
     def test_lockout_expires_after_the_window(self):
         self.fail_times(5)
-        ThrottleEvent.objects.update(created_at=timezone.now() - timedelta(minutes=16))
+        ThrottleCounter.objects.update(window_started=timezone.now() - timedelta(minutes=16))
         self.assertEqual(self.log_in(password=PASSWORD).status_code, 302)
 
     def test_lockout_does_not_apply_to_other_ips(self):
@@ -300,9 +304,36 @@ class LoginThrottleTests(TestCase):
 
     def test_throttle_table_stores_hashes_not_identifiers(self):
         self.log_in()
-        for event in ThrottleEvent.objects.all():
-            self.assertEqual(len(event.key), 64)
-            self.assertNotIn('sam', event.key)
+        self.assertTrue(ThrottleCounter.objects.exists())
+        for counter in ThrottleCounter.objects.all():
+            self.assertEqual(len(counter.key), 64)
+            self.assertNotIn('sam', counter.key)
+
+    def test_retry_after_is_the_time_left_in_the_window(self):
+        self.fail_times(5)
+        ThrottleCounter.objects.update(window_started=timezone.now() - timedelta(minutes=10))
+        retry_after = int(self.log_in(password=PASSWORD)['Retry-After'])
+        self.assertTrue(5 * 60 - 5 <= retry_after <= 5 * 60 + 1, retry_after)
+
+    def test_blocked_attempts_do_not_extend_the_lockout(self):
+        self.fail_times(5)
+        started = ThrottleCounter.objects.get(scope='login-id').window_started
+        self.log_in()
+        self.assertEqual(ThrottleCounter.objects.get(scope='login-id').window_started, started)
+        self.assertEqual(ThrottleCounter.objects.get(scope='login-id').count, 5)
+
+    def test_successful_logins_do_not_use_up_the_ip_limit(self):
+        for _ in range(25):
+            self.assertEqual(self.log_in(password=PASSWORD).status_code, 302)
+            self.client.post(reverse('logout'))
+
+    def test_expired_counters_are_pruned(self):
+        self.log_in('old@example.com')
+        ThrottleCounter.objects.update(window_started=timezone.now() - timedelta(hours=2))
+        self.log_in('new@example.com')
+        self.assertFalse(
+            ThrottleCounter.objects.filter(window_started__lt=timezone.now() - timedelta(hours=1)).exists()
+        )
 
     def test_forged_forwarded_for_entries_cannot_dodge_the_limit(self):
         # Only the second-to-last X-Forwarded-For entry (added by the load balancer) is trusted.
@@ -338,3 +369,22 @@ class RegisterThrottleTests(TestCase):
     def test_viewing_the_form_is_not_counted(self):
         for _ in range(15):
             self.assertEqual(self.client.get(reverse('register')).status_code, 200)
+
+
+@skipUnless(connection.vendor == 'postgresql', 'row locking needs PostgreSQL; SQLite serializes writes itself')
+class ThrottleConcurrencyTests(TransactionTestCase):
+    def test_parallel_attempts_share_one_limit(self):
+        limit = settings.AUTH_THROTTLE['login'][0]
+        barrier = threading.Barrier(20)
+
+        def attempt():
+            try:
+                barrier.wait()
+                return acquire(('login-id', 'k', 'login'))
+            finally:
+                connection.close()
+
+        with ThreadPoolExecutor(max_workers=20) as pool:
+            results = list(pool.map(lambda _: attempt(), range(20)))
+        self.assertEqual(results.count(0), limit)
+        self.assertEqual(ThrottleCounter.objects.get(scope='login-id', key='k').count, limit)

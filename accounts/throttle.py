@@ -2,17 +2,19 @@
 
 import hashlib
 import logging
+import math
 from datetime import timedelta
 
 from django.conf import settings
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from .models import ThrottleEvent
+from .models import ThrottleCounter
 
 logger = logging.getLogger('accounts.security')
 
-LOGIN_ID = 'login-id'  # failed logins for one identifier from one IP
-LOGIN_IP = 'login-ip'  # failed logins from one IP, whatever the identifier
+LOGIN_ID = 'login-id'  # login attempts for one identifier from one IP
+LOGIN_IP = 'login-ip'  # login attempts from one IP, whatever the identifier
 REGISTER_IP = 'register-ip'  # registration attempts from one IP
 
 THROTTLED_MESSAGE = 'Too many attempts. Please wait a while and try again.'
@@ -33,12 +35,74 @@ def client_ip(request):
     return remote
 
 
-def _safe_for_log(value):
-    return str(value).replace('\r', '').replace('\n', '')
-
-
 def _digest(*parts):
     return hashlib.sha256('|'.join(parts).encode()).hexdigest()
+
+
+def _window(limit_name):
+    attempts, seconds = settings.AUTH_THROTTLE[limit_name]
+    return attempts, timedelta(seconds=seconds)
+
+
+def _lock_counter(scope, key):
+    """Return the (scope, key) row, locked until the surrounding transaction ends."""
+    try:
+        with transaction.atomic():
+            ThrottleCounter.objects.get_or_create(scope=scope, key=key)
+    except IntegrityError:  # another request created it first; it exists now
+        pass
+    return ThrottleCounter.objects.select_for_update().get(scope=scope, key=key)
+
+
+def acquire(*checks):
+    """Count one attempt against every (scope, key, limit_name) check, all or nothing.
+
+    Returns 0 if the attempt is allowed. Otherwise nothing is counted and the return value is
+    the number of seconds until the earliest window that blocks it ends (for Retry-After).
+
+    The rows are locked (SELECT ... FOR UPDATE) in a fixed order while they are read and
+    incremented, so parallel requests are serialized per key and can't all see "under the
+    limit" at once. Counting happens before the password is checked for the same reason; a
+    successful login gives its attempt back with `refund()`.
+    """
+    now = timezone.now()
+    with transaction.atomic():
+        rows = []
+        for scope, key, limit_name in sorted(checks):
+            attempts, window = _window(limit_name)
+            row = _lock_counter(scope, key)
+            if now - row.window_started >= window:
+                row.count, row.window_started = 0, now
+            rows.append((row, attempts, window))
+
+        waits = [
+            (row.window_started + window - now).total_seconds()
+            for row, attempts, window in rows
+            if row.count >= attempts
+        ]
+        for row, _, _ in rows:
+            if not waits:
+                row.count += 1
+            row.save(update_fields=['count', 'window_started'])
+    if waits:
+        return max(1, math.ceil(max(waits)))
+    _prune()
+    return 0
+
+
+def refund(scope, key, reset=False):
+    """Give back an attempt, or zero the counter when `reset` is true."""
+    with transaction.atomic():
+        row = ThrottleCounter.objects.select_for_update().filter(scope=scope, key=key).first()
+        if row:
+            row.count = 0 if reset else max(0, row.count - 1)
+            row.save(update_fields=['count'])
+
+
+def _prune():
+    """Delete counters whose window is over. Indexed on window_started, so it is cheap to run inline."""
+    longest = max(seconds for _, seconds in settings.AUTH_THROTTLE.values())
+    ThrottleCounter.objects.filter(window_started__lt=timezone.now() - timedelta(seconds=longest)).delete()
 
 
 def login_keys(identifier, ip):
@@ -46,55 +110,25 @@ def login_keys(identifier, ip):
     return {LOGIN_ID: _digest(identifier.strip().lower(), ip), LOGIN_IP: _digest(ip)}
 
 
-def _limit(name):
-    attempts, seconds = settings.AUTH_THROTTLE[name]
-    return attempts, timedelta(seconds=seconds)
-
-
-def _recent(scope, key, window):
-    return ThrottleEvent.objects.filter(scope=scope, key=key, created_at__gte=timezone.now() - window)
-
-
-def is_blocked(scope, key, limit_name):
-    attempts, window = _limit(limit_name)
-    return _recent(scope, key, window).count() >= attempts
-
-
-def record(scope, key):
-    ThrottleEvent.objects.create(scope=scope, key=key)
-    # Prune opportunistically so the table does not grow without bound.
-    longest = max(seconds for _, seconds in settings.AUTH_THROTTLE.values())
-    ThrottleEvent.objects.filter(created_at__lt=timezone.now() - timedelta(seconds=longest)).delete()
-
-
-def login_blocked(identifier, ip):
+def acquire_login(identifier, ip):
+    """Count a login attempt before the password is checked. Returns 0 or the seconds to wait."""
     keys = login_keys(identifier, ip)
-    blocked = is_blocked(LOGIN_ID, keys[LOGIN_ID], 'login') or is_blocked(LOGIN_IP, keys[LOGIN_IP], 'login_ip')
-    if blocked:
-        logger.warning('Login throttled for ip=%s', _safe_for_log(ip))
-    return blocked
+    wait = acquire((LOGIN_ID, keys[LOGIN_ID], 'login'), (LOGIN_IP, keys[LOGIN_IP], 'login_ip'))
+    if wait:
+        logger.warning('Login throttled for ip=%s', ip)
+    return wait
 
 
-def record_login_failure(identifier, ip):
-    for scope, key in login_keys(identifier, ip).items():
-        record(scope, key)
+def release_login(identifier, ip):
+    """A successful login clears that identifier's counter and gives the IP its attempt back."""
+    keys = login_keys(identifier, ip)
+    refund(LOGIN_ID, keys[LOGIN_ID], reset=True)
+    refund(LOGIN_IP, keys[LOGIN_IP])
 
 
-def clear_login_failures(identifier, ip):
-    """A successful login resets the per-identifier counter (the per-IP one keeps counting)."""
-    ThrottleEvent.objects.filter(scope=LOGIN_ID, key=login_keys(identifier, ip)[LOGIN_ID]).delete()
-
-
-def register_blocked(ip):
-    blocked = is_blocked(REGISTER_IP, _digest(ip), 'register')
-    if blocked:
-        logger.warning('Registration throttled for ip=%s', _safe_for_log(ip))
-    return blocked
-
-
-def record_register_attempt(ip):
-    record(REGISTER_IP, _digest(ip))
-
-
-def retry_after(limit_name):
-    return int(_limit(limit_name)[1].total_seconds())
+def acquire_register(ip):
+    """Count a registration attempt. Returns 0 or the seconds to wait."""
+    wait = acquire((REGISTER_IP, _digest(ip), 'register'))
+    if wait:
+        logger.warning('Registration throttled for ip=%s', ip)
+    return wait
