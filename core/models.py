@@ -1,6 +1,6 @@
 # Create your models here.
-from django.db import models
 from django.contrib.auth.models import User
+from django.db import models
 
 GOAL_CHOICES = [
     ('lose_weight', 'Lose weight'),
@@ -24,6 +24,7 @@ EQUIPMENT_CHOICES = [
     ('cardio', 'Cardio equipment'),
 ]
 
+
 class UserProfile(models.Model):
     # username etup with a max length of 100 until we set actual limits
     user = models.OneToOneField(User, on_delete=models.CASCADE)
@@ -41,10 +42,10 @@ class UserProfile(models.Model):
     weekly_food_budget = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)  # dollars
     equipment = models.JSONField(default=list, blank=True)  # list of EQUIPMENT_CHOICES keys
 
+    def __str__(self):
+        return f'{self.user.username} (Age: {self.age}, Weight: {self.weight})'
+
     def equipment_labels(self):
         """Human-readable equipment names for the profile summary."""
         labels = dict(EQUIPMENT_CHOICES)
         return [labels.get(key, key) for key in self.equipment]
-
-    def __str__(self):
-        return f"{self.user.username} (Age: {self.age}, Weight: {self.weight})"

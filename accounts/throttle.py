@@ -1,4 +1,5 @@
 """Database-backed rate limiting for login and registration (see ADR-006)."""
+
 import hashlib
 import logging
 from datetime import timedelta
@@ -10,9 +11,9 @@ from .models import ThrottleEvent
 
 logger = logging.getLogger('accounts.security')
 
-LOGIN_ID = 'login-id'          # failed logins for one identifier from one IP
-LOGIN_IP = 'login-ip'          # failed logins from one IP, whatever the identifier
-REGISTER_IP = 'register-ip'    # registration attempts from one IP
+LOGIN_ID = 'login-id'  # failed logins for one identifier from one IP
+LOGIN_IP = 'login-ip'  # failed logins from one IP, whatever the identifier
+REGISTER_IP = 'register-ip'  # registration attempts from one IP
 
 THROTTLED_MESSAGE = 'Too many attempts. Please wait a while and try again.'
 

@@ -1,18 +1,21 @@
-from .models import UserProfile
-from django.contrib.auth.models import User
 from unittest import mock
+
+from django.contrib.auth.models import User
 from django.db import OperationalError, connections
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
+from .models import UserProfile
+
+
 # Unit test to show that the model is storing the data it should
 class UserProfileModelTest(TestCase):
     def test_create_user_profile(self):
-        user = User.objects.create_user(username="testuser", password="password123")
-        profile = UserProfile.objects.create(user =user, age = 22, weight = 222.22)
-        self.assertEqual(profile.user.username , "testuser")
-        self.assertEqual(profile.age , 22)
-        self.assertEqual(profile.weight , 222.22)
+        user = User.objects.create_user(username='testuser', password='password123')
+        profile = UserProfile.objects.create(user=user, age=22, weight=222.22)
+        self.assertEqual(profile.user.username, 'testuser')
+        self.assertEqual(profile.age, 22)
+        self.assertEqual(profile.weight, 222.22)
 
 
 # Probes from kubelet and the load balancer use the pod IP as the Host header.
@@ -38,9 +41,11 @@ class HealthCheckTests(TestCase):
         self.assertEqual(response.content, b'ok')
 
     def test_healthz_503_when_database_fails(self):
-        with mock.patch.object(connections['default'], 'cursor', side_effect=OperationalError('down')):
-            with self.assertLogs('core.middleware', level='WARNING'):
-                response = self.client.get('/healthz/', HTTP_HOST=POD_IP_HOST)
+        with (
+            mock.patch.object(connections['default'], 'cursor', side_effect=OperationalError('down')),
+            self.assertLogs('core.middleware', level='WARNING'),
+        ):
+            response = self.client.get('/healthz/', HTTP_HOST=POD_IP_HOST)
         self.assertEqual(response.status_code, 503)
 
     def test_other_paths_still_validate_host(self):
@@ -66,7 +71,7 @@ class OnboardingAndProfileAccessTests(TestCase):
 
     def test_onboarding_requires_login(self):
         response = self.client.get(reverse('onboarding'))
-        self.assertRedirects(response, f"{reverse('login')}?next={reverse('onboarding')}")
+        self.assertRedirects(response, f'{reverse("login")}?next={reverse("onboarding")}')
 
     def test_onboarding_available_when_logged_in(self):
         self.client.force_login(self.user)
@@ -74,7 +79,7 @@ class OnboardingAndProfileAccessTests(TestCase):
 
     def test_profile_page_requires_login(self):
         response = self.client.get(reverse('user_profile'))
-        self.assertRedirects(response, f"{reverse('login')}?next={reverse('user_profile')}")
+        self.assertRedirects(response, f'{reverse("login")}?next={reverse("user_profile")}')
 
     def test_profile_page_only_shows_own_profile(self):
         self.client.force_login(self.user)

@@ -54,6 +54,19 @@ uv run coverage report   # fails under 80%
 uv run coverage html     # writes htmlcov/index.html
 ```
 
+### Code quality and security scans
+CI fails on any of these (settings in `pyproject.toml`). Run them locally before pushing:
+
+```shell
+uv run ruff check .          # lint (use --fix for safe auto-fixes)
+uv run ruff format .         # format (CI runs it with --check)
+uv run mypy .                # types, with django-stubs
+uv run bandit -c pyproject.toml -r .   # SAST for Python
+```
+
+CodeQL (`.github/workflows/codeql.yml`) also scans pull requests, `main`, and weekly, with results in the repository's Security tab.
+Dependabot (`.github/dependabot.yml`) opens weekly PRs for uv dependencies, GitHub Actions, and the Docker base image.
+
 ## Authentication
 User story **D-1 (user-auth)**: *as a new user, I want to create an account and log in, so that my plan and history are private to me.*
 Auth lives in the `accounts` app and uses Django's built-in `User` model, sessions, and password hashing

@@ -17,9 +17,7 @@ import environ
 
 # Implementing django-environ to prevent secrets from getting committed in the settings file
 #  ref: https://django-environ.readthedocs.io/en/latest/quickstart.html
-env = environ.Env(
-    DEBUG=(bool, False)
-)
+env = environ.Env(DEBUG=(bool, False))
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -166,9 +164,9 @@ X_FRAME_OPTIONS = 'DENY'
 # Rate limits (ADR-006): (allowed attempts, window in seconds). Once the count inside the
 # window is reached, further attempts get HTTP 429 until old ones age out.
 AUTH_THROTTLE = {
-    'login': (5, 15 * 60),       # failed logins per identifier + IP
-    'login_ip': (20, 15 * 60),   # failed logins per IP, any identifier
-    'register': (10, 60 * 60),   # registration attempts per IP
+    'login': (5, 15 * 60),  # failed logins per identifier + IP
+    'login_ip': (20, 15 * 60),  # failed logins per IP, any identifier
+    'register': (10, 60 * 60),  # registration attempts per IP
 }
 
 

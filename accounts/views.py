@@ -1,4 +1,7 @@
+from typing import cast
+
 from django.contrib.auth import login
+from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView
 from django.db import IntegrityError, transaction
 from django.shortcuts import redirect, render
@@ -38,7 +41,9 @@ class CustomLoginView(LoginView):
         return super().form_valid(form)
 
     def get_success_url(self):
-        profile, _ = UserProfile.objects.get_or_create(user=self.request.user)
+        # LoginView only gets here after login(), so the user is real, not AnonymousUser.
+        user = cast(User, self.request.user)
+        profile, _ = UserProfile.objects.get_or_create(user=user)
         if not profile.onboarding_completed:
             return reverse('onboarding')
         return super().get_success_url()  # ?next= if present, else LOGIN_REDIRECT_URL ('dashboard')

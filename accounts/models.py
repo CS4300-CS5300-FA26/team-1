@@ -16,3 +16,6 @@ class ThrottleEvent(models.Model):
 
     class Meta:
         indexes = [models.Index(fields=['scope', 'key', 'created_at'])]
+
+    def __str__(self):
+        return f'{self.scope} {self.created_at:%Y-%m-%d %H:%M:%S}'

@@ -3,6 +3,7 @@
 The Gherkin scenarios for this story are in features/user_auth.feature. The redirect to
 the onboarding questionnaire after login is tested in core/test_onboarding.py.
 """
+
 from datetime import timedelta
 from unittest import mock
 
@@ -23,12 +24,15 @@ PASSWORD = 'Tr4ining-Plan-2026!'
 
 class RegisterTests(TestCase):
     def register(self, username='sam', email='sam@example.com', password=PASSWORD, confirm=None):
-        return self.client.post(reverse('register'), {
-            'username': username,
-            'email': email,
-            'password1': password,
-            'password2': password if confirm is None else confirm,
-        })
+        return self.client.post(
+            reverse('register'),
+            {
+                'username': username,
+                'email': email,
+                'password1': password,
+                'password2': password if confirm is None else confirm,
+            },
+        )
 
     def test_register_page_renders(self):
         response = self.client.get(reverse('register'))
@@ -93,7 +97,14 @@ class RegisterTests(TestCase):
 
     # Email format (format only: we do not verify that the address is real)
     def test_invalid_email_rejected(self):
-        bad_emails = ['not-an-email', 'missing-at.example.com', '@example.com', 'sam@', 'sam@@example.com', 'sam example@x.com']
+        bad_emails = [
+            'not-an-email',
+            'missing-at.example.com',
+            '@example.com',
+            'sam@',
+            'sam@@example.com',
+            'sam example@x.com',
+        ]
         for email in bad_emails:
             with self.subTest(email=email):
                 response = self.register(email=email)
@@ -137,9 +148,15 @@ class RegisterTests(TestCase):
 
     def test_register_post_requires_csrf_token(self):
         strict_client = Client(enforce_csrf_checks=True)
-        response = strict_client.post(reverse('register'), {
-            'username': 'sam', 'email': 'sam@example.com', 'password1': PASSWORD, 'password2': PASSWORD,
-        })
+        response = strict_client.post(
+            reverse('register'),
+            {
+                'username': 'sam',
+                'email': 'sam@example.com',
+                'password1': PASSWORD,
+                'password2': PASSWORD,
+            },
+        )
         self.assertEqual(response.status_code, 403)
         self.assertFalse(User.objects.exists())
 
@@ -170,7 +187,7 @@ class LoginTests(TestCase):
 
     def test_login_with_email_longer_than_a_username(self):
         # User.username allows 150 characters, User.email allows 254.
-        long_email = f"{'a' * 200}@example.com"
+        long_email = f'{"a" * 200}@example.com'
         user = User.objects.create_user('longmail', long_email, PASSWORD)
         UserProfile.objects.create(user=user, onboarding_completed=True)
         self.assertRedirects(self.log_in(long_email), reverse('dashboard'))
@@ -179,7 +196,7 @@ class LoginTests(TestCase):
     def test_login_field_allows_an_email_length_value(self):
         # The browser enforces maxlength, so a 150 here would block long emails client-side.
         field = LoginForm().fields['username']
-        self.assertEqual(field.max_length, 254)
+        self.assertEqual(getattr(field, 'max_length', None), 254)
         self.assertEqual(field.widget.attrs['maxlength'], 254)
 
     def test_login_honours_safe_next(self):
@@ -293,14 +310,22 @@ class LoginThrottleTests(TestCase):
             for i in range(5):
                 self.log_in(HTTP_X_FORWARDED_FOR=f'6.6.6.{i}, 9.9.9.9, 130.211.0.1')
             self.assertEqual(
-                self.log_in(password=PASSWORD, HTTP_X_FORWARDED_FOR='1.2.3.4, 9.9.9.9, 130.211.0.1').status_code, 429)
+                self.log_in(password=PASSWORD, HTTP_X_FORWARDED_FOR='1.2.3.4, 9.9.9.9, 130.211.0.1').status_code, 429
+            )
 
 
 class RegisterThrottleTests(TestCase):
     def register(self, n, **extra):
-        return self.client.post(reverse('register'), {
-            'username': f'user{n}', 'email': f'user{n}@example.com', 'password1': 'x', 'password2': 'x',
-        }, **extra)
+        return self.client.post(
+            reverse('register'),
+            {
+                'username': f'user{n}',
+                'email': f'user{n}@example.com',
+                'password1': 'x',
+                'password2': 'x',
+            },
+            **extra,
+        )
 
     def test_registration_attempts_are_limited_per_ip(self):
         for n in range(10):
