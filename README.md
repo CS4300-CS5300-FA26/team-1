@@ -94,11 +94,11 @@ uv run python manage.py behave  # Gherkin scenarios
 | Access control | `/onboarding/`, `/dashboard/`, and `/users/` require login; `/users/` previously listed every user's profile and now shows only the signed-in user's own |
 
 ### Known gaps (planned follow-ups)
-* **Rate limiting is in place for login and registration** ([ADR-006](docs/adrs/adr-006.md)), but `/admin/login/` is not throttled, and the
+* **Rate limiting is in place for login and registration** ([ADR-006](docs/adrs/adr-006.md)), but the
   "email already exists" message required by the user story still reveals that an email has an account.
 * **Email uniqueness is checked in the form, not enforced by the database**, so two simultaneous sign-ups with the same email could both succeed.
 * **Email format is validated, but ownership is not.** Email verification and password reset need a production email backend (`MAILERS` still uses the console backend).
-* **Admin site** (`/admin/`) is reachable on the public hostname; consider restricting it before launch.
+* **No admin site.** It was removed ([ADR-007](docs/adrs/adr-007.md)); manage data with `manage.py shell` or a one-off Job. Re-adding it needs network-level restriction first.
 * **Password hashing** uses Django's default; Argon2 is a possible upgrade (needs the `argon2-cffi` dependency).
 
 ## Contributing

@@ -162,8 +162,8 @@ class LoginTests(TestCase):
         self.assertEqual(field.widget.attrs['maxlength'], 254)
 
     def test_login_honours_safe_next(self):
-        response = self.log_in(next='/admin/')
-        self.assertRedirects(response, '/admin/', fetch_redirect_response=False)
+        response = self.log_in(next='/users/')
+        self.assertRedirects(response, '/users/', fetch_redirect_response=False)
 
     def test_login_ignores_external_next(self):
         self.assertRedirects(self.log_in(next='https://evil.example.com/'), reverse('dashboard'))

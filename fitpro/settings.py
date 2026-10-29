@@ -55,7 +55,7 @@ CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
 
 # Application definition
 INSTALLED_APPS = [
-    'django.contrib.admin',
+    # 'django.contrib.admin',  # admin disabled, see ADR-007
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',

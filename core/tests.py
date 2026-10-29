@@ -45,7 +45,7 @@ class HealthCheckTests(TestCase):
 
     def test_other_paths_still_validate_host(self):
         with self.assertLogs('django.security.DisallowedHost', level='ERROR'):
-            response = self.client.get('/admin/', HTTP_HOST=POD_IP_HOST)
+            response = self.client.get('/dashboard/', HTTP_HOST=POD_IP_HOST)
         self.assertEqual(response.status_code, 400)
 
 
