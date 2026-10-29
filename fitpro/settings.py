@@ -154,6 +154,22 @@ LOGOUT_REDIRECT_URL = 'home'
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 7  # one week, then log in again
+CSRF_COOKIE_SAMESITE = 'Lax'
+
+# Browser-facing security headers set by SecurityMiddleware / XFrameOptionsMiddleware. These
+# are Django's defaults, pinned so a future edit can't loosen them unnoticed.
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'same-origin'
+SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'
+X_FRAME_OPTIONS = 'DENY'
+
+# Rate limits (ADR-006): (allowed attempts, window in seconds). Once the count inside the
+# window is reached, further attempts get HTTP 429 until old ones age out.
+AUTH_THROTTLE = {
+    'login': (5, 15 * 60),       # failed logins per identifier + IP
+    'login_ip': (20, 15 * 60),   # failed logins per IP, any identifier
+    'register': (10, 60 * 60),   # registration attempts per IP
+}
 
 
 # Internationalization

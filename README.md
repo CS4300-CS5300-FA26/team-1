@@ -57,7 +57,7 @@ uv run coverage html     # writes htmlcov/index.html
 ## Authentication
 User story **D-1 (user-auth)**: *as a new user, I want to create an account and log in, so that my plan and history are private to me.*
 Auth lives in the `accounts` app and uses Django's built-in `User` model, sessions, and password hashing
-(decision recorded in [ADR-005](docs/adrs/adr-005.md)).
+(decisions recorded in [ADR-005](docs/adrs/adr-005.md) and [ADR-006](docs/adrs/adr-006.md)).
 
 | Route | Name | Access | Purpose |
 | --- | --- | --- | --- |
@@ -94,8 +94,8 @@ uv run python manage.py behave  # Gherkin scenarios
 | Access control | `/onboarding/`, `/dashboard/`, and `/users/` require login; `/users/` previously listed every user's profile and now shows only the signed-in user's own |
 
 ### Known gaps (planned follow-ups)
-* **No rate limiting or lockout on login or registration yet.** The "email already exists" message required by the user story
-  also reveals that an email has an account. Add [`django-axes`](https://django-axes.readthedocs.io/) (or similar) with `uv add`.
+* **Rate limiting is in place for login and registration** ([ADR-006](docs/adrs/adr-006.md)), but `/admin/login/` is not throttled, and the
+  "email already exists" message required by the user story still reveals that an email has an account.
 * **Email uniqueness is checked in the form, not enforced by the database**, so two simultaneous sign-ups with the same email could both succeed.
 * **Email format is validated, but ownership is not.** Email verification and password reset need a production email backend (`MAILERS` still uses the console backend).
 * **Admin site** (`/admin/`) is reachable on the public hostname; consider restricting it before launch.

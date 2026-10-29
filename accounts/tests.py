@@ -3,13 +3,17 @@
 The Gherkin scenarios for this story are in features/user_auth.feature. The redirect to
 the onboarding questionnaire after login is tested in core/test_onboarding.py.
 """
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from core.models import UserProfile
 
 from .forms import LoginForm
+from .models import ThrottleEvent
 
 User = get_user_model()
 PASSWORD = 'Tr4ining-Plan-2026!'
@@ -210,3 +214,81 @@ class LogoutTests(TestCase):
         response = self.client.post(reverse('logout'))
         self.assertRedirects(response, reverse('home'), fetch_redirect_response=False)
         self.assertNotIn('_auth_user_id', self.client.session)
+
+
+class LoginThrottleTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user('sam', 'sam@example.com', PASSWORD)
+        UserProfile.objects.create(user=self.user, onboarding_completed=True)
+
+    def log_in(self, identifier='sam@example.com', password='wrong-password-123', **extra):
+        return self.client.post(reverse('login'), {'username': identifier, 'password': password}, **extra)
+
+    def fail_times(self, count, **kwargs):
+        for _ in range(count):
+            self.assertEqual(self.log_in(**kwargs).status_code, 200)
+
+    def test_locks_out_after_too_many_failures_even_with_the_right_password(self):
+        self.fail_times(5)
+        response = self.log_in(password=PASSWORD)
+        self.assertEqual(response.status_code, 429)
+        self.assertContains(response, 'Too many attempts', status_code=429)
+        self.assertIn('Retry-After', response)
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_lockout_is_case_and_whitespace_insensitive(self):
+        self.fail_times(5)
+        self.assertEqual(self.log_in(' SAM@example.com ', PASSWORD).status_code, 429)
+
+    def test_lockout_expires_after_the_window(self):
+        self.fail_times(5)
+        ThrottleEvent.objects.update(created_at=timezone.now() - timedelta(minutes=16))
+        self.assertEqual(self.log_in(password=PASSWORD).status_code, 302)
+
+    def test_lockout_does_not_apply_to_other_ips(self):
+        self.fail_times(5, REMOTE_ADDR='10.0.0.1')
+        self.assertEqual(self.log_in(password=PASSWORD, REMOTE_ADDR='10.0.0.2').status_code, 302)
+
+    def test_successful_login_resets_the_counter(self):
+        self.fail_times(4)
+        self.assertEqual(self.log_in(password=PASSWORD).status_code, 302)
+        self.client.post(reverse('logout'))
+        self.fail_times(4)
+
+    def test_one_ip_is_blocked_after_spraying_many_identifiers(self):
+        for i in range(20):
+            self.log_in(f'user{i}@example.com')
+        self.assertEqual(self.log_in('another@example.com').status_code, 429)
+
+    def test_throttle_table_stores_hashes_not_identifiers(self):
+        self.log_in()
+        for event in ThrottleEvent.objects.all():
+            self.assertEqual(len(event.key), 64)
+            self.assertNotIn('sam', event.key)
+
+    def test_forged_forwarded_for_entries_cannot_dodge_the_limit(self):
+        # Only the second-to-last X-Forwarded-For entry (added by the load balancer) is trusted.
+        with override_settings(BEHIND_HTTPS_PROXY=True):
+            for i in range(5):
+                self.log_in(HTTP_X_FORWARDED_FOR=f'6.6.6.{i}, 9.9.9.9, 130.211.0.1')
+            self.assertEqual(
+                self.log_in(password=PASSWORD, HTTP_X_FORWARDED_FOR='1.2.3.4, 9.9.9.9, 130.211.0.1').status_code, 429)
+
+
+class RegisterThrottleTests(TestCase):
+    def register(self, n, **extra):
+        return self.client.post(reverse('register'), {
+            'username': f'user{n}', 'email': f'user{n}@example.com', 'password1': 'x', 'password2': 'x',
+        }, **extra)
+
+    def test_registration_attempts_are_limited_per_ip(self):
+        for n in range(10):
+            self.assertEqual(self.register(n).status_code, 200)
+        response = self.register(11)
+        self.assertEqual(response.status_code, 429)
+        self.assertIn('Retry-After', response)
+        self.assertEqual(self.register(12, REMOTE_ADDR='10.0.0.9').status_code, 200)
+
+    def test_viewing_the_form_is_not_counted(self):
+        for _ in range(15):
+            self.assertEqual(self.client.get(reverse('register')).status_code, 200)
