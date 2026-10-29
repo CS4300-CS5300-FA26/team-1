@@ -19,7 +19,8 @@ conscious students. The application offers personalized workout splits, meal-pre
 * **DB:** PostgreSQL 16 (Cloud SQL for PostgreSQL in production, see [ADR-002](docs/adrs/adr-002.md))
 * **Production Host:** GKE Autopilot on Google Cloud, `us-central1` (see [ADR-003](docs/adrs/adr-003.md))
 * **Infrastructure as Code:** Terraform (`terraform_scripts/`), state in a versioned GCS bucket
-* **Base Docker Image:** TBD (planned: `python:3.12-slim`, multi-stage, non-root)
+* **Docker Image:** multi-stage build on `python:3.12-slim` with uv, running Gunicorn as a non-root user (UID 10001) with a read-only code tree (see `Dockerfile`)
+* **Code quality:** ruff (lint and format), mypy with django-stubs (types), bandit and CodeQL (security scans), all enforced in CI
 
 ## Getting Started
 > [!Note]
@@ -116,13 +117,25 @@ uv run python manage.py behave  # Gherkin scenarios
 ## Contributing
 * Branch naming: `feature/<short-description>`, `fix/<short-description>`
 * Changes to **main** must come through a PR and must be approved by at least one other team member.
-* [TBD linting tool maybe?]
+* **Author:** opens the PR, keeps CI green, and answers review comments. Don't approve your own PR.
+* **Reviewer:** reads the diff and the Codex review comment (`pr-review.yml`), checks that new behavior has tests, and approves or requests changes. The AI review does not replace a human approval.
+* **Before pushing:** run `uv run ruff check .`, `uv run ruff format .`, `uv run mypy .`, `uv run bandit -c pyproject.toml -r .`, and the tests (see [Code quality and security scans](#code-quality-and-security-scans)). CI runs the same checks and fails the PR if any of them fail.
+* **Dependency updates:** Dependabot PRs follow the same review rules. Merge them only when CI passes.
+* **Decisions:** a change that alters the architecture, security posture, or a tradeoff gets an ADR in `docs/adrs/`.
 
 ## Deployment
 Production runs on Google Cloud. Architecture and workflow diagrams are in `docs/diagrams/`, the decisions behind them
 are in `docs/adrs/`, and the one-time GCP setup steps are in
 [deployment_gcp_config.md](docs/configurations/deployment_gcp_config.md). 
 Settings read secrets from `/var/secrets/<name>` in Kubernetes and fall back to environment variables / `.env` locally; set `BEHIND_HTTPS_PROXY=False` to run the production image over plain HTTP.
+
+### Monitoring and incident response
+What exists today:
+* `/livez/` returns 200 while the process is serving requests (no database access). `/healthz/` returns 200 only if the database answers, otherwise 503. The Kubernetes probes and the load balancer health check use them.
+* Application logs, including tracebacks and `accounts.security` throttling warnings, go to stdout and are collected by Cloud Logging.
+* Deploys are gated by CI, a container smoke test, and a migration Job; `scripts/rollback.sh` reverts a bad release.
+
+Alerting and response: monitoring and alerts are currently handled through Google Cloud Monitoring and the Google Cloud mobile app. Caleb Harris owns the infrastructure and is the responsible party for responding to and fixing incidents.
 
 ### Implemented (Terraform, `terraform_scripts/`)
 | Area | Resources |
@@ -173,4 +186,5 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 | Codex | Caleb Harris | Automatic PR review: `pr-review.yml` runs `openai/codex-action` when a PR is opened and posts the feedback as a PR comment | n/a |
 | Claude | Caleb Harris | Reviewed `pr-review.yml` against the other CI workflows and pinned its actions to commit SHAs | n/a |
 | Claude | Nathan Galay | Implemented user story D-1 (user-auth) on the accounts app: generic login error, email login, password and session hardening, Gherkin feature and step definitions, extra Django tests, ADR-005, and this README section | n/a |
+| Claude | Caleb Harris | Claude Code added login/registration rate limiting, database-enforced email uniqueness, ruff/mypy/bandit/CodeQL CI gates and Dependabot config, disabled the admin site, wrote ADR-006 and ADR-007, and corrected this README against the Sprint 1 feedback | n/a |
 | Claude | Caleb Harris | Claude Code applied the PR #20/#27 review follow-ups (merged duplicate test modules, onboarding input bounds, shared base template, ADR-005) and moved the coverage report into `ci.yml` with the 80% gate and artifact on PRs only | n/a |
