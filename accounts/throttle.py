@@ -35,6 +35,11 @@ def client_ip(request):
     return remote
 
 
+def _safe_for_log(value):
+    """Return a single-line representation safe to include in plain-text logs."""
+    return str(value).replace('\r', '').replace('\n', '')
+
+
 def _digest(*parts):
     return hashlib.sha256('|'.join(parts).encode()).hexdigest()
 
@@ -115,7 +120,7 @@ def acquire_login(identifier, ip):
     keys = login_keys(identifier, ip)
     wait = acquire((LOGIN_ID, keys[LOGIN_ID], 'login'), (LOGIN_IP, keys[LOGIN_IP], 'login_ip'))
     if wait:
-        logger.warning('Login throttled for ip=%s', ip)
+        logger.warning('Login throttled for ip=%s', _safe_for_log(ip))
     return wait
 
 
@@ -130,5 +135,5 @@ def acquire_register(ip):
     """Count a registration attempt. Returns 0 or the seconds to wait."""
     wait = acquire((REGISTER_IP, _digest(ip), 'register'))
     if wait:
-        logger.warning('Registration throttled for ip=%s', ip)
+        logger.warning('Registration throttled for ip=%s', _safe_for_log(ip))
     return wait
