@@ -33,6 +33,10 @@ def client_ip(request):
     return remote
 
 
+def _safe_for_log(value):
+    return str(value).replace('\r', '').replace('\n', '')
+
+
 def _digest(*parts):
     return hashlib.sha256('|'.join(parts).encode()).hexdigest()
 
@@ -67,7 +71,7 @@ def login_blocked(identifier, ip):
     keys = login_keys(identifier, ip)
     blocked = is_blocked(LOGIN_ID, keys[LOGIN_ID], 'login') or is_blocked(LOGIN_IP, keys[LOGIN_IP], 'login_ip')
     if blocked:
-        logger.warning('Login throttled for ip=%s', ip)
+        logger.warning('Login throttled for ip=%s', _safe_for_log(ip))
     return blocked
 
 
@@ -84,7 +88,7 @@ def clear_login_failures(identifier, ip):
 def register_blocked(ip):
     blocked = is_blocked(REGISTER_IP, _digest(ip), 'register')
     if blocked:
-        logger.warning('Registration throttled for ip=%s', ip)
+        logger.warning('Registration throttled for ip=%s', _safe_for_log(ip))
     return blocked
 
 
