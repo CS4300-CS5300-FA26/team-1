@@ -4,15 +4,17 @@ The Gherkin scenarios for this story are in features/user_auth.feature. The redi
 the onboarding questionnaire after login is tested in core/test_onboarding.py.
 """
 from datetime import timedelta
+from unittest import mock
 
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from core.models import UserProfile
 
-from .forms import LoginForm
+from .forms import LoginForm, RegisterForm
 from .models import ThrottleEvent
 
 User = get_user_model()
@@ -69,6 +71,25 @@ class RegisterTests(TestCase):
         self.assertContains(response, 'already exists')
         self.assertFalse(User.objects.filter(username='second').exists())
         self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_database_rejects_duplicate_email_if_form_check_is_bypassed(self):
+        # Two sign-ups racing past clean_email(): the unique index must stop the second one.
+        User.objects.create_user('first', 'sam@example.com', PASSWORD)
+        with mock.patch.object(RegisterForm, 'clean_email', lambda self: self.cleaned_data['email'].lower()):
+            response = self.register(username='second', email='SAM@example.com')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'already exists')
+        self.assertFalse(User.objects.filter(username='second').exists())
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_database_enforces_unique_email_case_insensitively(self):
+        User.objects.create_user('first', 'sam@example.com', PASSWORD)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            User.objects.create_user('second', 'SAM@Example.com', PASSWORD)
+
+    def test_blank_emails_do_not_collide(self):
+        User.objects.create_user('a', '', PASSWORD)
+        User.objects.create_user('b', '', PASSWORD)
 
     # Email format (format only: we do not verify that the address is real)
     def test_invalid_email_rejected(self):

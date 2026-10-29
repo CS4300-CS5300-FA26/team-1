@@ -1,5 +1,6 @@
 from django.contrib.auth import login
 from django.contrib.auth.views import LoginView
+from django.db import IntegrityError, transaction
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.debug import sensitive_post_parameters
@@ -7,7 +8,7 @@ from django.views.decorators.debug import sensitive_post_parameters
 from core.models import UserProfile
 
 from . import throttle
-from .forms import LoginForm, RegisterForm
+from .forms import EMAIL_TAKEN_MESSAGE, LoginForm, RegisterForm
 
 
 class CustomLoginView(LoginView):
@@ -61,8 +62,15 @@ def register(request):
         throttle.record_register_attempt(ip)
 
     form = RegisterForm(request.POST or None)
+    user = None
     if request.method == 'POST' and form.is_valid():
-        user = form.save()
+        try:
+            with transaction.atomic():
+                user = form.save()
+        except IntegrityError:
+            # Lost a race with another sign-up for the same email; the database index caught it.
+            form.add_error('email', EMAIL_TAKEN_MESSAGE)
+    if user:
         # Every user needs a profile so the onboarding and dashboard views can read it.
         UserProfile.objects.get_or_create(user=user)
         # login() rotates the session key, which prevents session fixation.

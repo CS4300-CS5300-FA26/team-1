@@ -10,6 +10,9 @@ User = get_user_model()
 INVALID_LOGIN_MESSAGE = 'Invalid email or password'
 
 
+EMAIL_TAKEN_MESSAGE = 'An account with this email already exists.'
+
+
 def no_at_sign(value):
     """Usernames may not contain "@" so a username can never be mistaken for an email."""
     if '@' in value:
@@ -32,7 +35,7 @@ class RegisterForm(UserCreationForm):
     def clean_email(self):
         email = self.cleaned_data['email'].strip().lower()
         if User.objects.filter(email__iexact=email).exists():
-            raise forms.ValidationError('An account with this email already exists.')
+            raise forms.ValidationError(EMAIL_TAKEN_MESSAGE)
         return email
 
 

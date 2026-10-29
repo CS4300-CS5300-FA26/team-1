@@ -86,7 +86,7 @@ uv run python manage.py behave  # Gherkin scenarios
 | Password storage | Hashed with Django's default PBKDF2-SHA256 hasher; never stored or logged in plain text. Password fields are marked sensitive so they are scrubbed from error reports |
 | Password rules | Minimum 10 characters, not a commonly used password, not entirely numeric, not too similar to the username or email (`AUTH_PASSWORD_VALIDATORS`) |
 | Login errors | One generic message, "Invalid email or password", for an unknown user, a wrong password, and an inactive account, so the login form cannot be used to discover accounts |
-| Emails and usernames | Emails are trimmed, lowercased, and checked for duplicates case-insensitively; usernames cannot contain `@`, so a username can never be mistaken for an email |
+| Emails and usernames | Emails are trimmed, lowercased, and checked for duplicates case-insensitively (the form check is backed by a unique database index on `LOWER(email)`); usernames cannot contain `@`, so a username can never be mistaken for an email |
 | Sessions | The session key is rotated on login and registration (prevents session fixation); cookies are `HttpOnly`, `SameSite=Lax`, and `Secure` behind the HTTPS proxy; sessions expire after 7 days |
 | CSRF | Every form posts a CSRF token; Django rejects POSTs without one |
 | Logout | `POST` only, so a third-party page cannot log a user out with a link or image |
@@ -96,7 +96,6 @@ uv run python manage.py behave  # Gherkin scenarios
 ### Known gaps (planned follow-ups)
 * **Rate limiting is in place for login and registration** ([ADR-006](docs/adrs/adr-006.md)), but the
   "email already exists" message required by the user story still reveals that an email has an account.
-* **Email uniqueness is checked in the form, not enforced by the database**, so two simultaneous sign-ups with the same email could both succeed.
 * **Email format is validated, but ownership is not.** Email verification and password reset need a production email backend (`MAILERS` still uses the console backend).
 * **No admin site.** It was removed ([ADR-007](docs/adrs/adr-007.md)); manage data with `manage.py shell` or a one-off Job. Re-adding it needs network-level restriction first.
 * **Password hashing** uses Django's default; Argon2 is a possible upgrade (needs the `argon2-cffi` dependency).
