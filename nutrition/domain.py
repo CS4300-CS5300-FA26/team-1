@@ -88,6 +88,16 @@ class RecipeDetails:
 
 
 @dataclass(frozen=True)
+class MacroRow:
+    """One macro of a meal, for display: grams, the meal's target (if any), and grams as a % of it (max 100)."""
+
+    label: str
+    grams: int
+    target: int | None
+    percent: int
+
+
+@dataclass(frozen=True)
 class PlannedMeal:
     """One serving of a recipe for one meal of the day."""
 
@@ -98,6 +108,15 @@ class PlannedMeal:
     @property
     def cost(self) -> Decimal:
         return money(self.recipe.cost_per_serving)
+
+    def macros(self) -> tuple[MacroRow, ...]:
+        rows = []
+        for label, field in (('Protein', 'protein_g'), ('Carbs', 'carbs_g'), ('Fat', 'fat_g')):
+            grams = round(getattr(self.recipe, field))
+            target = getattr(self.targets, field) if self.targets else None
+            percent = min(round(grams / target * 100), 100) if target else 0
+            rows.append(MacroRow(label, grams, target, percent))
+        return tuple(rows)
 
 
 @dataclass(frozen=True)

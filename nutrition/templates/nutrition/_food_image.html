@@ -1,0 +1,26 @@
+{% comment %}
+A recipe's photo over a course-tinted illustration. The illustration always renders underneath, so if
+there's no photo, or the photo fails to load (decorative images have alt="", which browsers then hide),
+the illustration shows instead. No JavaScript needed.
+Context: recipe; optional size ("hero" for the details panel).
+{% endcomment %}
+<span class="food-image food-image--{{ recipe.course }}{% if size %} food-image--{{ size }}{% endif %}">
+  {% if recipe.course == 'breakfast' %}
+    <svg class="food-image__art" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+      <circle class="food-image__plate" cx="32" cy="34" r="22"/>
+      <path class="food-image__white" d="M20 34c-2-8 6-14 13-12 5-4 14 0 12 8 5 4 2 13-6 12-4 5-13 4-14-2-6 0-8-3-5-6z"/>
+      <circle class="food-image__yolk" cx="32" cy="33" r="6"/>
+      <path class="food-image__steam" d="M48 12c-2 2 2 4 0 6M54 10c-2 2 2 4 0 6"/>
+    </svg>
+  {% else %}
+    <svg class="food-image__art" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+      <path class="food-image__steam" d="M24 8c-3 3 3 6 0 9M32 6c-3 3 3 6 0 9M40 8c-3 3 3 6 0 9"/>
+      <path class="food-image__bowl" d="M8 30h48c0 13-10 22-24 22S8 43 8 30z"/>
+      <rect class="food-image__rim" x="6" y="27" width="52" height="5" rx="2.5"/>
+      <path class="food-image__garnish" d="M18 27c3-6 9-7 13-3 4-5 11-4 14 3z"/>
+    </svg>
+  {% endif %}
+  {% if recipe.image_url %}
+    <img class="food-image__photo" src="{{ recipe.image_url }}" alt="" loading="lazy" decoding="async">
+  {% endif %}
+</span>

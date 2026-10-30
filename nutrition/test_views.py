@@ -127,11 +127,11 @@ class MealPlanPageTests(TestCase):
     def test_selected_meal_shows_its_ingredients_steps_and_targets(self):
         response = self.open_meal_plan(day='monday', meal='lunch')
         title = response.context['selected_meal'].recipe.title
-        self.assertContains(response, f'<h2 class="h3" id="meal-details-title" tabindex="-1">{title}</h2>', html=False)
+        self.assertContains(response, f'id="meal-details-title" tabindex="-1">{title}</h2>', html=False)
         self.assertContains(response, f'1 cup {title} base')
         self.assertContains(response, f'Prepare the {title}.')
-        self.assertContains(response, '15 minutes')
-        self.assertContains(response, 'Meal target')
+        self.assertContains(response, '15 min')
+        self.assertContains(response, 'g target</span>')
         self.assertContains(response, 'data-day="monday" data-meal="lunch" aria-current="true"')
 
     def test_meal_pattern_from_onboarding_sets_the_meals_shown(self):
@@ -147,7 +147,8 @@ class MealPlanPageTests(TestCase):
         self.assertContains(response, 'aria-live="polite" data-day-current>Wednesday</p>', html=False)
         self.assertContains(response, '<span class="visually-hidden">Previous day</span>', html=False)
         self.assertContains(response, 'role="status"')
-        self.assertContains(response, '<aside class="panel" id="meal-details" aria-label="Selected meal"', html=False)
+        self.assertContains(response, 'id="meal-details" aria-label="Selected meal" tabindex="0"', html=False)
+        self.assertContains(response, 'role="tablist" aria-label="Recipe" data-tablist hidden', html=False)
         self.assertContains(response, '<title>Meal plan | FitPro</title>', html=False)
 
     @override_settings(NUTRITION_MACRO_TARGETS_PROVIDER='nutrition.macros.NoMacroTargets')
@@ -233,7 +234,7 @@ class RecipeServiceUnavailableTests(TestCase):
         self.client.force_login(make_user())
         response = self.client.get(reverse('meal_plan'))
         self.assertIsNotNone(response.context['plan'])
-        self.assertContains(response, 'Ingredients and instructions are temporarily unavailable.')
+        self.assertContains(response, 'Ingredients and steps are temporarily unavailable.')
 
 
 @override_settings(NUTRITION_RECIPE_SOURCE=FIXED_SOURCE)

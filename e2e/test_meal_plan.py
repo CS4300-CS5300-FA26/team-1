@@ -7,6 +7,7 @@ recipe API; see TESTING in settings).
 """
 
 import os
+from dataclasses import replace
 from decimal import Decimal
 from unittest import skipUnless
 
@@ -18,6 +19,7 @@ from playwright.sync_api import Browser, Playwright, sync_playwright
 
 from core.models import UserProfile
 from nutrition.planner import DAY_NAMES
+from nutrition.testing import FixedRecipeSource
 
 User = get_user_model()
 PASSWORD = 'Tr4ining-Plan-2026!'
@@ -143,13 +145,80 @@ class MealPlanBrowserTests(StaticLiveServerTestCase):
         self.page.wait_for_function(
             "title => document.querySelector('#meal-details-title').textContent === title", arg=title
         )
-        self.assertIn('Ingredients', details.inner_text())
-        self.assertIn('Instructions', details.inner_text())
-        self.assertGreater(details.locator('.ingredient-list li').count(), 0)
+        self.assertGreater(details.locator('.ingredient-grid li').count(), 0)
+        self.assertEqual(details.get_by_role('tab', name='Ingredients').get_attribute('aria-selected'), 'true')
         self.assertEqual(dinner.get_attribute('aria-current'), 'true')
         self.assertEqual(self.page.evaluate('document.activeElement.id'), 'meal-details-title')
         self.assertIn('meal=dinner', self.page.url)
         self.assert_not_reloaded()
+
+    def test_recipe_tabs_work_with_the_keyboard(self):
+        self.log_in()
+        self.open_meal_plan()
+        details = self.page.get_by_role('complementary', name='Selected meal')
+        ingredients = details.get_by_role('tab', name='Ingredients')
+        steps = details.get_by_role('tab', name='Steps')
+        self.assertTrue(details.get_by_role('tabpanel').locator('.ingredient-grid').is_visible())
+        ingredients.focus()
+        self.page.keyboard.press('ArrowRight')
+        self.assertEqual(steps.get_attribute('aria-selected'), 'true')
+        self.assertEqual(self.page.evaluate('document.activeElement.id'), 'recipe-tab-steps')
+        self.assertTrue(details.locator('.steps').is_visible())
+        self.assertFalse(details.locator('.ingredient-grid').is_visible())
+        self.page.keyboard.press('Home')
+        self.assertEqual(ingredients.get_attribute('aria-selected'), 'true')
+
+    def test_save_generate_new_and_go_back_to_the_saved_plan(self):
+        self.log_in()
+        self.open_meal_plan()
+        self.assertEqual(self.page.locator('.status-badge').inner_text(), 'Not saved')
+        self.page.get_by_role('link', name='Friday').click()
+        self.page.get_by_role('button', name='Save meal plan').click()
+        self.page.wait_for_url('**day=friday**')
+        self.assertIn('Meal plan saved', self.page.get_by_role('status').first.inner_text())
+        self.assertTrue(self.page.locator('.status-badge').inner_text().startswith('Saved'))
+        saved_titles = self.page.locator('[data-day-panel] .media__title').all_text_contents()
+
+        self.page.get_by_role('button', name='Generate a new meal plan').click()
+        self.page.wait_for_load_state()
+        new_titles = self.page.locator('[data-day-panel] .media__title').all_text_contents()
+        self.assertNotEqual(new_titles, saved_titles)
+        self.assertEqual(self.page.locator('.status-badge').inner_text(), 'Not saved')
+
+        self.page.get_by_role('button', name='Back to saved plan').click()
+        self.page.wait_for_load_state()
+        self.assertEqual(self.page.locator('[data-day-panel] .media__title').all_text_contents(), saved_titles)
+
+    def test_report_and_ingredients_download(self):
+        self.log_in('50.00')
+        self.open_meal_plan()
+        self.page.get_by_role('link', name='View report').click()
+        self.page.wait_for_url('**/meal-plan/report/')
+        self.assertEqual(self.page.get_by_role('heading', level=1).inner_text(), 'Meal plan report')
+        self.assertIn('Within budget', self.page.locator('.meter__status').inner_text())
+        self.assertEqual(self.page.locator('.bar-list__row').count(), 7)
+        self.page.locator('summary', has_text='Monday').click()
+        self.assertTrue(self.page.locator('details[open] .ingredient-grid').first.is_visible())
+        with self.page.expect_download() as download_info:
+            self.page.get_by_role('link', name='Download ingredients (CSV)').click()
+        download = download_info.value
+        self.assertRegex(download.suggested_filename, r'^fitpro-ingredients-week-of-\d{4}-\d{2}-\d{2}\.csv$')
+        with open(download.path(), encoding='utf-8-sig') as file:
+            self.assertTrue(file.readline().startswith('Day,Meal,Recipe,Ingredient'))
+
+    @override_settings(NUTRITION_RECIPE_SOURCE='e2e.test_meal_plan.BrokenImageSource')
+    def test_placeholder_art_shows_when_a_photo_fails_to_load(self):
+        self.page.route('https://img.spoonacular.com/**', lambda route: route.abort())  # never leaves the browser
+        self.log_in()
+        self.open_meal_plan()
+        thumb = self.visible_panel().locator('.food-image').first
+        self.assertTrue(thumb.locator('.food-image__art').is_visible())
+        visible_photos = "[...document.querySelectorAll('[data-day-panel]:not([hidden]) .food-image__photo')]"
+        self.page.wait_for_function(f'() => {visible_photos}.every(img => img.complete)')
+        self.assertEqual(thumb.locator('.food-image__photo').evaluate('img => img.naturalWidth'), 0)
+        box = thumb.bounding_box()
+        assert box is not None
+        self.assertGreater(box['width'], 40)
 
     def test_everything_works_without_javascript(self):
         self.new_page(java_script_enabled=False)
@@ -209,3 +278,12 @@ class MealPlanBrowserTests(StaticLiveServerTestCase):
         self.open_meal_plan()
         overflow = self.page.evaluate('document.scrollingElement.scrollWidth - window.innerWidth')
         self.assertLessEqual(overflow, 0)
+
+
+class BrokenImageSource(FixedRecipeSource):
+    """The fixed test recipes, each with a Spoonacular image URL that the test makes fail."""
+
+    def budget_recipes(self):
+        return [
+            replace(r, image_url=f'https://img.spoonacular.com/recipes/{r.id}.jpg') for r in super().budget_recipes()
+        ]
