@@ -145,6 +145,31 @@ jobs:
           for tag in "${tags[@]}"; do args+=(--tag "$tag"); done
           uv run python manage.py check --deploy --fail-level WARNING "${args[@]}"
 
+  e2e:
+    name: Browser tests (Playwright)
+    runs-on: ubuntu-latest
+    env:
+      # Django's live test server with SQLite is enough here; Postgres is covered by the test job.
+      DB_ENGINE: django.db.backends.sqlite3
+      DB_NAME: ""
+      E2E: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Install Chromium for Playwright
+        run: uv run playwright install --with-deps chromium
+
+      - name: Run browser tests
+        run: uv run python manage.py test e2e
+
   container:
     name: Container build and smoke test
     runs-on: ubuntu-latest
