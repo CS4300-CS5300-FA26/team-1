@@ -1,0 +1,676 @@
+/*
+ * FitPro global theme.
+ *
+ * One stylesheet for every page, loaded by core/templates/core/base.html. Pages should use the
+ * classes below instead of inline <style> blocks or hard-coded colours, so contrast and dark
+ * mode stay correct everywhere.
+ *
+ * Contents
+ *   1. Design tokens (colours, spacing, type, radius) for light and dark mode
+ *   2. Base element styles
+ *   3. Layout: .page, .container, .stack, .cluster
+ *   4. Components: header, card, button, form, alert, data list, badge
+ *   5. Utilities
+ *   6. Accessibility preferences (reduced motion, forced colours)
+ *
+ * Accessibility (WCAG 2.2 AA):
+ *   - Text colours are at least 4.5:1 against the surfaces they sit on, and large headings and
+ *     UI boundaries (input borders, focus rings) are at least 3:1. Recheck the ratio if you
+ *     change a token; don't pair tokens that aren't listed as pairs below.
+ *   - Every interactive element gets a visible :focus-visible ring (2.4.7, 2.4.11).
+ *   - Buttons, inputs and checkboxes are at least 44px tall or have a 24px+ target (2.5.8).
+ *   - Status is never shown by colour alone: alerts and errors also carry text.
+ *
+ * Dark mode follows the operating system (prefers-color-scheme). The header toggle overrides
+ * it by setting data-theme="light" or "dark" on <html> (core/static/core/js/theme.js).
+ */
+
+/* 1. Design tokens ------------------------------------------------------------------------ */
+
+:root {
+  color-scheme: light;
+
+  /* Surfaces */
+  --color-bg: #f4f6f8;           /* page background */
+  --color-surface: #ffffff;      /* cards, inputs */
+  --color-surface-raised: #eef1f5; /* hover rows, code, subtle fills */
+
+  /* Text (all >= 4.5:1 on --color-bg and --color-surface) */
+  --color-text: #1b1f24;
+  --color-text-muted: #4a5361;
+
+  /* Borders: --color-border is decorative; --color-border-strong outlines controls (>= 3:1) */
+  --color-border: #d5dae1;
+  --color-border-strong: #6b7280;
+
+  /* Brand / interactive */
+  --color-primary: #1d4ed8;          /* links, primary buttons */
+  --color-primary-hover: #1e40af;
+  --color-on-primary: #ffffff;       /* text on --color-primary */
+  --color-focus: #1d4ed8;
+
+  /* Status: text colour, background tint, border. Text is >= 4.5:1 on its tint. */
+  --color-danger: #b42318;
+  --color-danger-bg: #fdecea;
+  --color-danger-border: #e8a29b;
+  --color-success: #166534;
+  --color-success-bg: #e8f5ec;
+  --color-success-border: #93c9a5;
+  --color-warning: #8a4b00;
+  --color-warning-bg: #fff4e0;
+  --color-warning-border: #e3b66d;
+  --color-info: #1e40af;
+  --color-info-bg: #e8eefc;
+  --color-info-border: #9db3ee;
+
+  --shadow-card: 0 1px 3px rgb(16 24 40 / 0.1), 0 1px 2px rgb(16 24 40 / 0.06);
+
+  /* Type */
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --text-display: clamp(2.25rem, 6vw, 3.25rem);
+  --leading: 1.55;
+
+  /* Spacing scale */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+
+  --radius-sm: 4px;
+  --radius: 8px;
+  --radius-pill: 999px;
+
+  --control-height: 2.75rem; /* 44px minimum target for buttons and inputs */
+  --content-width: 64rem;
+  --card-width: 30rem;
+  --card-width-narrow: 24rem;
+}
+
+/* Dark tokens: used when the OS prefers dark, unless the user picked light in the toggle. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --color-bg: #0f1419;
+    --color-surface: #1a2028;
+    --color-surface-raised: #232b35;
+    --color-text: #e7eaee;
+    --color-text-muted: #aab3bf;
+    --color-border: #313a46;
+    --color-border-strong: #8b95a3;
+    --color-primary: #8ab4ff;
+    --color-primary-hover: #b3ceff;
+    --color-on-primary: #0b1220;
+    --color-focus: #8ab4ff;
+    --color-danger: #ff9b91;
+    --color-danger-bg: #3a1714;
+    --color-danger-border: #8f3a32;
+    --color-success: #7fdc9f;
+    --color-success-bg: #12301d;
+    --color-success-border: #2f7a49;
+    --color-warning: #ffc46b;
+    --color-warning-bg: #352408;
+    --color-warning-border: #8a6020;
+    --color-info: #a9c4ff;
+    --color-info-bg: #16233f;
+    --color-info-border: #3d5a99;
+    --shadow-card: 0 1px 3px rgb(0 0 0 / 0.5);
+  }
+}
+
+/* Same dark tokens, chosen explicitly with the toggle. Keep in sync with the block above. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-bg: #0f1419;
+  --color-surface: #1a2028;
+  --color-surface-raised: #232b35;
+  --color-text: #e7eaee;
+  --color-text-muted: #aab3bf;
+  --color-border: #313a46;
+  --color-border-strong: #8b95a3;
+  --color-primary: #8ab4ff;
+  --color-primary-hover: #b3ceff;
+  --color-on-primary: #0b1220;
+  --color-focus: #8ab4ff;
+  --color-danger: #ff9b91;
+  --color-danger-bg: #3a1714;
+  --color-danger-border: #8f3a32;
+  --color-success: #7fdc9f;
+  --color-success-bg: #12301d;
+  --color-success-border: #2f7a49;
+  --color-warning: #ffc46b;
+  --color-warning-bg: #352408;
+  --color-warning-border: #8a6020;
+  --color-info: #a9c4ff;
+  --color-info-bg: #16233f;
+  --color-info-border: #3d5a99;
+  --shadow-card: 0 1px 3px rgb(0 0 0 / 0.5);
+}
+
+/* 2. Base ---------------------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading);
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0 0 var(--space-3);
+  line-height: 1.25;
+  font-weight: 700;
+}
+
+h1 { font-size: var(--text-2xl); }
+h2 { font-size: var(--text-xl); }
+h3 { font-size: var(--text-lg); }
+
+p { margin: 0 0 var(--space-4); }
+
+/* Links are underlined so they don't rely on colour alone (1.4.1). */
+a {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+a:hover { color: var(--color-primary-hover); }
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  margin: var(--space-5) 0;
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--color-surface-raised);
+  padding: 0.1em 0.3em;
+  border-radius: var(--radius-sm);
+}
+
+/* One focus style for everything that can take focus. */
+:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* 3. Layout -------------------------------------------------------------------------------- */
+
+/* <main class="page"> wraps each page's content; --centered centres it vertically too. */
+.page {
+  flex: 1;
+  width: 100%;
+  padding: var(--space-6) var(--space-4);
+}
+
+.page--centered {
+  display: grid;
+  place-items: center;
+  align-content: center;
+}
+
+.container {
+  width: 100%;
+  max-width: var(--content-width);
+  margin-inline: auto;
+}
+
+/* Vertical rhythm: children get even spacing. */
+.stack > * + * { margin-top: var(--space-4); }
+.stack--sm > * + * { margin-top: var(--space-2); }
+.stack--lg > * + * { margin-top: var(--space-6); }
+
+/* Horizontal group that wraps (buttons, nav links). */
+.cluster {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.cluster--center { justify-content: center; }
+.cluster--end { justify-content: flex-end; }
+
+/* 4. Components ---------------------------------------------------------------------------- */
+
+/* Skip link: first focusable element on every page (2.4.1). */
+.skip-link {
+  position: absolute;
+  left: var(--space-4);
+  top: -100px;
+  z-index: 100;
+  padding: var(--space-2) var(--space-4);
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+}
+
+.skip-link:focus { top: var(--space-4); }
+
+/* Site header */
+.site-header {
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.site-header__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  max-width: var(--content-width);
+  margin-inline: auto;
+  padding: var(--space-2) var(--space-4);
+}
+
+.site-header__brand {
+  font-size: var(--text-lg);
+  font-weight: 800;
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.site-header__brand:hover { color: var(--color-primary); }
+
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.site-nav form { margin: 0; }
+
+.site-nav__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-height);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.site-nav__link:hover {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
+/* aria-current="page" marks where you are; it's shown with an underline, not colour alone. */
+.site-nav__link[aria-current="page"] {
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.35em;
+}
+
+/* Card: the main content surface. */
+.card {
+  width: 100%;
+  max-width: var(--card-width);
+  margin-inline: auto;
+  padding: var(--space-6);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+}
+
+.card--narrow { max-width: var(--card-width-narrow); }
+.card--wide { max-width: var(--content-width); }
+
+.card__title { margin-bottom: var(--space-2); }
+.card__subtitle { color: var(--color-text-muted); margin-bottom: var(--space-5); }
+
+.card__footer {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.card__footer p { margin: 0; }
+
+/* Hero (landing page) */
+.hero {
+  max-width: 40rem;
+  text-align: center;
+}
+
+.hero h1 {
+  font-size: var(--text-display);
+  margin-bottom: var(--space-3);
+}
+
+.hero__lede {
+  font-size: var(--text-lg);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-5);
+}
+
+/* Buttons: use <button class="btn ..."> for actions and <a class="btn ..."> for navigation. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--control-height);
+  padding: 0 var(--space-5);
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.2;
+  text-decoration: none;
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.btn--primary {
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+}
+
+.btn--primary:hover {
+  color: var(--color-on-primary);
+  background: var(--color-primary-hover);
+}
+
+.btn--secondary {
+  color: var(--color-text);
+  background: var(--color-surface);
+  border-color: var(--color-border-strong);
+}
+
+.btn--secondary:hover {
+  color: var(--color-text);
+  background: var(--color-surface-raised);
+}
+
+.btn--ghost {
+  color: var(--color-primary);
+  background: transparent;
+}
+
+.btn--ghost:hover {
+  color: var(--color-primary-hover);
+  background: var(--color-surface-raised);
+}
+
+.btn--danger {
+  color: var(--color-danger);
+  background: var(--color-surface);
+  border-color: currentcolor;
+}
+
+.btn--danger:hover { background: var(--color-danger-bg); }
+
+.btn--sm {
+  min-height: 2.25rem; /* still above the 24px minimum target */
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.btn--block { width: 100%; }
+
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Forms. Django renders widgets without classes, so the bare elements inside .form-field are
+   styled too; add .form-input yourself when building a field by hand. */
+.form { display: grid; gap: var(--space-4); }
+
+.form-field { display: grid; gap: var(--space-1); }
+
+.form-field > label,
+.form-field > legend,
+.form-label {
+  font-weight: 600;
+}
+
+/* Checkbox/radio groups are fieldsets (field.use_fieldset); drop the default box. */
+.form-fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.form-fieldset > legend { padding: 0; margin-bottom: var(--space-1); }
+
+.form-input,
+.form-field input:not([type="checkbox"], [type="radio"], [type="hidden"]),
+.form-field select,
+.form-field textarea {
+  width: 100%;
+  min-height: var(--control-height);
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.form-field textarea { min-height: 6rem; }
+
+.form-input:hover,
+.form-field input:hover,
+.form-field select:hover,
+.form-field textarea:hover {
+  border-color: var(--color-text-muted);
+}
+
+/* Django 5.2+ sets aria-invalid on fields with errors. A thicker border plus the error text
+   means the state isn't shown by colour alone. */
+.form-field [aria-invalid="true"] {
+  border-color: var(--color-danger);
+  border-width: 2px;
+}
+
+.form-help {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.form-help ul { margin: var(--space-1) 0 0; padding-left: var(--space-5); }
+
+/* Error lists: Django's own markup uses .errorlist, so both class names are styled. */
+.form-error,
+.errorlist {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+/* Checkbox and radio groups (Django's CheckboxSelectMultiple / RadioSelect render a div of
+   labelled inputs inside the field). */
+.form-field div:has(> div > label > input[type="checkbox"]),
+.form-field div:has(> div > label > input[type="radio"]),
+.choice-list {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.form-field label:has(> input[type="checkbox"]),
+.form-field label:has(> input[type="radio"]),
+.choice {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-height);
+  font-weight: 400;
+  cursor: pointer;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+  accent-color: var(--color-primary);
+}
+
+/* Alerts: role="alert" for errors that appear after submit, role="status" for confirmations. */
+.alert {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid;
+  border-left-width: 4px;
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+}
+
+.alert ul { margin: 0; padding: 0; list-style: none; }
+
+.alert--error {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+  border-left-color: var(--color-danger);
+}
+
+.alert--success {
+  color: var(--color-success);
+  background: var(--color-success-bg);
+  border-color: var(--color-success-border);
+  border-left-color: var(--color-success);
+}
+
+.alert--warning {
+  color: var(--color-warning);
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning-border);
+  border-left-color: var(--color-warning);
+}
+
+.alert--info {
+  color: var(--color-info);
+  background: var(--color-info-bg);
+  border-color: var(--color-info-border);
+  border-left-color: var(--color-info);
+}
+
+/* Label/value pairs (profile summaries). */
+.data-list {
+  display: grid;
+  grid-template-columns: minmax(8rem, max-content) 1fr;
+  gap: var(--space-2) var(--space-5);
+  margin: 0;
+}
+
+.data-list dt {
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.data-list dd { margin: 0; }
+
+@media (max-width: 30rem) {
+  .data-list { grid-template-columns: 1fr; gap: 0; }
+  .data-list dd { margin-bottom: var(--space-3); }
+}
+
+/* Badge: short labels such as a goal or level. */
+.badge {
+  display: inline-block;
+  padding: 0.1rem var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+}
+
+/* Theme toggle button in the header (hidden until theme.js runs, so it never shows unusable). */
+.theme-toggle__icon { font-size: 1.1em; line-height: 1; }
+
+/* 5. Utilities ----------------------------------------------------------------------------- */
+
+.text-muted { color: var(--color-text-muted); }
+.text-center { text-align: center; }
+.text-sm { font-size: var(--text-sm); }
+.mt-0 { margin-top: 0; }
+.mb-0 { margin-bottom: 0; }
+.mt-4 { margin-top: var(--space-4); }
+.mt-5 { margin-top: var(--space-5); }
+
+/* Hidden visually but still read by screen readers. */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 6. Accessibility preferences ------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Windows High Contrast / forced colours: keep borders and focus visible with system colours. */
+@media (forced-colors: active) {
+  .btn,
+  .card,
+  .alert,
+  .form-input,
+  .form-field input,
+  .form-field select { border: 1px solid CanvasText; }
+
+  :focus-visible { outline-color: Highlight; }
+}

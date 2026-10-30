@@ -1,26 +1,19 @@
 {% extends "core/base.html" %}
-{% block extra_head %}
-  <style>
-    .hero { text-align: center; padding: 1rem; }
-    .hero h1 { font-size: 3rem; margin: 0 0 0.5rem; }
-    .hero p { margin: 0; color: #52606d; }
-    .auth { margin-top: 1.5rem; }
-    .auth form { display: inline; }
-    .auth button { padding: 0.5rem 1rem; }
-  </style>
-{% endblock %}
-{% block body_class %}centered{% endblock %}
+{% block main_class %}page page--centered{% endblock %}
 {% block body %}
-  <main class="hero">
+  <section class="hero">
     <h1>FitPro</h1>
-    <p>Workouts, meal prep, and playlists for beginners and budget-conscious students. Coming soon.</p>
-    <div class="auth">
-      {% if user.is_authenticated %}
-        Signed in as {{ user.username }} &middot;
-        <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">Log out</button></form>
-      {% else %}
-        <a href="{% url 'login' %}">Log in</a> &middot; <a href="{% url 'register' %}">Sign up</a>
-      {% endif %}
-    </div>
-  </main>
+    <p class="hero__lede">Workouts, meal prep, and playlists for beginners and budget-conscious students. Coming soon.</p>
+    {% if user.is_authenticated %}
+      <p class="text-muted">Signed in as {{ user.username }}.</p>
+      <div class="cluster cluster--center">
+        <a class="btn btn--primary" href="{% url 'dashboard' %}">Go to your dashboard</a>
+      </div>
+    {% else %}
+      <div class="cluster cluster--center">
+        <a class="btn btn--primary" href="{% url 'register' %}">Create an account</a>
+        <a class="btn btn--secondary" href="{% url 'login' %}">Log in</a>
+      </div>
+    {% endif %}
+  </section>
 {% endblock %}

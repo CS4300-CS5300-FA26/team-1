@@ -1,28 +1,17 @@
 {% extends "core/base.html" %}
 {% block title %}Dashboard | FitPro{% endblock %}
-{% block extra_head %}
-  <style>
-    h1 { margin-bottom: 1rem; }
-    dt { font-weight: 600; color: #52606d; font-size: .85rem; margin-top: .75rem; }
-    dd { margin: 0; }
-  </style>
-{% endblock %}
 {% block body %}
-  <main class="card">
-    <h1>Dashboard</h1>
-    <h2>Welcome, {{ user.username }}</h2>
-    <h3>Your profile summary</h3>
-    <dl>
-      <dt>Goal</dt><dd>{{ profile.get_goal_display }}</dd>
+  <div class="card">
+    <h1 class="card__title">Dashboard</h1>
+    <p class="card__subtitle">Welcome, {{ user.username }}</p>
+    <h2>Your profile summary</h2>
+    <dl class="data-list">
+      <dt>Goal</dt><dd><span class="badge">{{ profile.get_goal_display }}</span></dd>
       <dt>Height</dt><dd>{{ profile.height_inches }} in</dd>
       <dt>Weight</dt><dd>{{ profile.weight|floatformat:"-2" }} lb</dd>
       <dt>Experience level</dt><dd>{{ profile.get_experience_level_display }}</dd>
       <dt>Weekly food budget</dt><dd>${{ profile.weekly_food_budget|floatformat:2 }}</dd>
       <dt>Available equipment</dt><dd>{{ profile.equipment_labels|join:", " }}</dd>
     </dl>
-  </main>
-  <form method="post" action="{% url 'logout' %}" style="text-align:center">
-    {% csrf_token %}
-    <button type="submit" class="secondary">Log out</button>
-  </form>
+  </div>
 {% endblock %}
