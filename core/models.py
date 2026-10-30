@@ -24,6 +24,14 @@ EQUIPMENT_CHOICES = [
     ('cardio', 'Cardio equipment'),
 ]
 
+# Which meals the meal plan covers (story D-5). The keys are what the planner reads.
+MEAL_PATTERN_CHOICES = [
+    ('three', 'Breakfast, lunch, and dinner'),
+    ('breakfast_dinner', 'Breakfast and dinner'),
+    ('lunch_dinner', 'Lunch and dinner'),
+    ('dinner', 'Dinner only'),
+]
+
 
 class UserProfile(models.Model):
     # username etup with a max length of 100 until we set actual limits
@@ -41,6 +49,7 @@ class UserProfile(models.Model):
     experience_level = models.CharField(max_length=20, choices=EXPERIENCE_CHOICES, blank=True)
     weekly_food_budget = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)  # dollars
     equipment = models.JSONField(default=list, blank=True)  # list of EQUIPMENT_CHOICES keys
+    meal_pattern = models.CharField(max_length=20, choices=MEAL_PATTERN_CHOICES, blank=True)
 
     def __str__(self):
         return f'{self.user.username} (Age: {self.age}, Weight: {self.weight})'

@@ -4,7 +4,7 @@ Feature: D-2 Onboarding questionnaire
 
   Scenario: Complete onboarding
     Given I am logged in and have not completed onboarding
-    When I submit my goal, height, weight, experience level, weekly food budget, and available equipment
+    When I submit my goal, height, weight, experience level, weekly food budget, meals to plan, and available equipment
     Then I see a profile summary showing those values
     And I am taken to my dashboard
 
