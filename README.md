@@ -68,6 +68,36 @@ uv run bandit -c pyproject.toml -r .   # SAST for Python
 CodeQL (`.github/workflows/codeql.yml`) also scans pull requests, `main`, and weekly, with results in the repository's Security tab.
 Dependabot (`.github/dependabot.yml`) opens weekly PRs for uv dependencies, GitHub Actions, and the Docker base image.
 
+## Frontend theme
+Every page extends `core/templates/core/base.html`, which loads the global stylesheet
+[`core/static/core/css/theme.css`](core/static/core/css/theme.css) and the light/dark toggle in
+`core/static/core/js/theme.js`. Style pages with the classes below instead of page-level `<style>` blocks or hard-coded
+colours, so contrast and dark mode stay correct.
+
+| Purpose | Classes |
+| --- | --- |
+| Page layout | `main` gets `page` (default) or `page page--centered` through `{% block main_class %}`; `container`, `stack` / `stack--sm` / `stack--lg`, `cluster` / `cluster--center` / `cluster--end` |
+| Card | `card`, `card--narrow`, `card--wide`, `card__title`, `card__subtitle`, `card__footer` |
+| Buttons | `btn` plus `btn--primary`, `btn--secondary`, `btn--ghost`, or `btn--danger`; modifiers `btn--sm`, `btn--block`. Use `<button>` for actions and `<a class="btn">` for navigation |
+| Forms | `form`, `form-field`, `form-label`, `form-input`, `form-help`, `form-error`, `form-fieldset`, `choice-list`, `choice`. `{% include "core/_form_fields.html" %}` renders a whole Django form with these classes and keeps Django's `aria-describedby` / `aria-invalid` wiring |
+| Feedback | `alert` plus `alert--error`, `alert--success`, `alert--warning`, or `alert--info` (add `role="alert"` or `role="status"`) |
+| Content | `hero`, `hero__lede`, `data-list` (on a `<dl>`), `badge` |
+| Utilities | `text-muted`, `text-center`, `text-sm`, `mt-0`, `mb-0`, `mt-4`, `mt-5`, `visually-hidden` |
+
+Colours, spacing and type are CSS custom properties at the top of `theme.css` (`--color-*`, `--space-*`, `--text-*`).
+Dark mode follows the operating system setting, and the header's "Dark mode" toggle overrides it (saved in
+`localStorage`).
+
+Accessibility (WCAG 2.2 AA):
+* Every text and token pair meets 4.5:1 contrast, and control borders and focus rings meet 3:1, in both modes.
+* Focus rings are visible on every focusable element.
+* There is a skip link on every page, and `aria-current` marks the current nav item.
+* Targets are at least 44px tall.
+* Errors and status are always written out, not shown by colour alone.
+* The theme respects reduced-motion and forced-colours (High Contrast) settings.
+
+If you change a colour token, recheck its contrast against the surfaces it is used on.
+
 ## Authentication
 User story **D-1 (user-auth)**: *as a new user, I want to create an account and log in, so that my plan and history are private to me.*
 Auth lives in the `accounts` app and uses Django's built-in `User` model, sessions, and password hashing

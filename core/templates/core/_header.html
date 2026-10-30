@@ -1,0 +1,31 @@
+{% with current=request.resolver_match.url_name %}
+<header class="site-header">
+  <div class="site-header__inner">
+    <a class="site-header__brand" href="{% url 'home' %}">FitPro</a>
+    <nav aria-label="Main">
+      <ul class="site-nav">
+        {% if user.is_authenticated %}
+          <li><a class="site-nav__link" href="{% url 'dashboard' %}"{% if current == 'dashboard' %} aria-current="page"{% endif %}>Dashboard</a></li>
+          <li><a class="site-nav__link" href="{% url 'user_profile' %}"{% if current == 'user_profile' %} aria-current="page"{% endif %}>Profile</a></li>
+          <li>
+            {# Logout is POST-only, so it is a form rather than a link. #}
+            <form method="post" action="{% url 'logout' %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn--secondary btn--sm">Log out</button>
+            </form>
+          </li>
+        {% else %}
+          <li><a class="site-nav__link" href="{% url 'login' %}"{% if current == 'login' %} aria-current="page"{% endif %}>Log in</a></li>
+          <li><a class="btn btn--primary btn--sm" href="{% url 'register' %}"{% if current == 'register' %} aria-current="page"{% endif %}>Sign up</a></li>
+        {% endif %}
+        <li>
+          <button type="button" class="btn btn--ghost btn--sm" data-theme-toggle hidden>
+            <span class="theme-toggle__icon" data-theme-icon aria-hidden="true"></span>
+            <span>Dark mode</span>
+          </button>
+        </li>
+      </ul>
+    </nav>
+  </div>
+</header>
+{% endwith %}
