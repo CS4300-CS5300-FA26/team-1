@@ -7,7 +7,10 @@
 {% block body %}
   <div class="card card--wide">
     <div class="cluster cluster--between">
-      <h1 class="card__title mb-0">Weekly meal plan</h1>
+      <div>
+        <h1 class="card__title mb-0">Weekly meal plan</h1>
+        <p class="text-muted text-sm mb-0">Week of {{ current.week_start|date:"F j" }} to {{ current.week_end|date:"F j" }}</p>
+      </div>
       {% if plan %}
         <p class="stat">
           <span class="stat__value">Est. ${{ plan.total_cost }}</span>
@@ -16,7 +19,7 @@
       {% endif %}
     </div>
 
-    {% if result.unavailable %}
+    {% if current.unavailable %}
       <div class="alert alert--warning mt-5" role="status">
         <p class="mb-0"><strong>Meal suggestions are temporarily unavailable.</strong>
           Please check back later. Your workouts aren't affected.</p>
@@ -25,6 +28,38 @@
         <a class="btn btn--primary" href="{% url 'dashboard' %}">Go to your dashboard</a>
       </div>
     {% else %}
+      <div class="toolbar mt-4">
+        {% if current.is_saved %}
+          <span class="status-badge status-badge--saved">
+            <svg class="status-badge__icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3.5 8.5l3 3 6-7"/></svg>
+            Saved {{ current.saved.saved_at|date:"M j, g:i A" }}
+          </span>
+        {% else %}
+          <span class="status-badge">Not saved</span>
+        {% endif %}
+        <div class="cluster">
+          {% if not current.is_saved %}
+            <form method="post" action="{% url 'meal_plan_save' %}" data-keep-selection>
+              {% csrf_token %}
+              <input type="hidden" name="day" value="{{ selected_day.day_name|lower }}">
+              <input type="hidden" name="meal" value="{{ selected_meal.meal }}">
+              <button type="submit" class="btn btn--primary btn--sm">Save meal plan</button>
+            </form>
+          {% endif %}
+          <form method="post" action="{% url 'meal_plan_new' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--secondary btn--sm">Generate a new meal plan</button>
+          </form>
+          {% if current.saved and not current.is_saved %}
+            <form method="post" action="{% url 'meal_plan_discard' %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn--ghost btn--sm">Back to saved plan</button>
+            </form>
+          {% endif %}
+          <a class="btn btn--ghost btn--sm" href="{% url 'meal_plan_report' %}">View report</a>
+        </div>
+      </div>
+
       {% if not plan.within_budget %}
         <div class="alert alert--warning mt-4" role="status">
           <p class="mb-0"><strong>${{ plan.over_budget_by }} over your ${{ plan.budget }} budget.</strong>
@@ -32,10 +67,11 @@
         </div>
       {% endif %}
 
-      <p class="text-muted mt-4 mb-0">
-        A different recipe for every meal this week, one serving each.
-        {% if not plan.uses_macro_targets %}Recipes are chosen for cost; they'll also match your macro targets once those are set up.{% endif %}
-      </p>
+      {% if not plan.uses_macro_targets %}
+        <p class="text-muted text-sm mt-4 mb-0">
+          A different recipe for every meal, one serving each. Recipes are chosen for cost; they'll also match your macro targets once those are set up.
+        </p>
+      {% endif %}
 
       <div class="meal-plan mt-5" data-meal-plan data-details-url="{% url 'meal_plan_details' %}">
         <nav class="day-picker" aria-label="Days of the week">
@@ -72,11 +108,7 @@
                     <li>
                       <a class="media media--link" href="?day={{ day.day_name|lower }}&amp;meal={{ meal.meal }}#meal-details"
                          data-meal-link data-day="{{ day.day_name|lower }}" data-meal="{{ meal.meal }}"{% if day == selected_day and meal == selected_meal %} aria-current="true"{% endif %}>
-                        {% if meal.recipe.image_url %}
-                          <img class="media__thumb" src="{{ meal.recipe.image_url }}" alt="" width="64" height="64" loading="lazy">
-                        {% else %}
-                          <span class="media__thumb media__thumb--placeholder" aria-hidden="true">&#127858;</span>
-                        {% endif %}
+                        {% include "nutrition/_food_image.html" with recipe=meal.recipe %}
                         <span class="media__body">
                           <span class="media__eyebrow">{{ meal.meal|capfirst }}</span>
                           <span class="media__title">{{ meal.recipe.title }}</span>
@@ -90,14 +122,14 @@
             {% endfor %}
           </div>
 
-          <aside class="panel" id="meal-details" aria-label="Selected meal" data-meal-details>
+          <aside class="panel panel--sticky" id="meal-details" aria-label="Selected meal" tabindex="0" data-meal-details>
             {% include "nutrition/_meal_details.html" %}
           </aside>
         </div>
       </div>
 
       <div class="card__footer">
-        <p class="text-sm">Prices are estimates and vary by store. {{ result.attribution }}</p>
+        <p class="text-sm">Prices are estimates and vary by store. {{ current.attribution }}</p>
       </div>
     {% endif %}
   </div>

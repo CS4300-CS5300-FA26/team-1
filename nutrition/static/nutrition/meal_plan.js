@@ -1,7 +1,47 @@
-// Meal plan page: switch days and load a meal's details without reloading the page.
-// The page works without this script (every control is a normal link); this only enhances it.
+// Meal plan page: switch days, load a meal's details, and run the details tabs, without reloading.
+// The page works without this script (every control is a normal link and both details sections
+// show); this only enhances it.
 (function () {
   'use strict';
+
+  // Tabs (WAI-ARIA tabs pattern): one tab stop, arrow keys / Home / End move between tabs.
+  function initTabs(container) {
+    container.querySelectorAll('[data-tabs]').forEach(function (tabs) {
+      var list = tabs.querySelector('[data-tablist]');
+      var tabButtons = Array.prototype.slice.call(list.querySelectorAll('[role="tab"]'));
+      var panels = Array.prototype.slice.call(tabs.querySelectorAll('[data-tabpanel]'));
+
+      function select(index, moveFocus) {
+        tabButtons.forEach(function (tab, i) {
+          var selected = i === index;
+          tab.setAttribute('aria-selected', String(selected));
+          tab.tabIndex = selected ? 0 : -1;
+          panels[i].hidden = !selected;
+        });
+        if (moveFocus) tabButtons[index].focus();
+      }
+
+      list.hidden = false;
+      panels.forEach(function (panel, i) {
+        panel.setAttribute('role', 'tabpanel');
+        panel.setAttribute('aria-labelledby', tabButtons[i].id);
+        panel.tabIndex = 0;
+        var heading = panel.querySelector('.tabs__heading');
+        if (heading) heading.hidden = true; // the tab names the panel now
+      });
+      select(0, false);
+
+      tabButtons.forEach(function (tab, i) {
+        tab.addEventListener('click', function () { select(i, false); });
+        tab.addEventListener('keydown', function (event) {
+          var next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabButtons.length - 1 }[event.key];
+          if (next === undefined) return;
+          event.preventDefault();
+          select((next + tabButtons.length) % tabButtons.length, true);
+        });
+      });
+    });
+  }
 
   document.addEventListener('DOMContentLoaded', function () {
     var root = document.querySelector('[data-meal-plan]');
@@ -13,16 +53,23 @@
     var dayLinks = Array.prototype.slice.call(root.querySelectorAll('[data-day-link]'));
     var days = dayLinks.map(function (link) { return link.dataset.dayLink; });
 
+    initTabs(details);
+
     function panelFor(day) {
       return root.querySelector('[data-day-panel="' + day + '"]');
     }
 
-    function rememberInUrl(day, meal) {
+    function rememberSelection(day, meal) {
       var url = new URL(window.location.href);
       url.searchParams.set('day', day);
       if (meal) url.searchParams.set('meal', meal); else url.searchParams.delete('meal');
       url.hash = '';
       window.history.replaceState(null, '', url);
+      // Saving returns to whatever is selected now.
+      document.querySelectorAll('[data-keep-selection]').forEach(function (form) {
+        form.elements.day.value = day;
+        form.elements.meal.value = meal || '';
+      });
     }
 
     function showDay(day) {
@@ -50,9 +97,11 @@
         })
         .then(function (html) {
           details.innerHTML = html; // our own server-rendered, auto-escaped template
+          details.scrollTop = 0;
+          initTabs(details);
           root.querySelectorAll('[data-meal-link]').forEach(function (other) { other.removeAttribute('aria-current'); });
           link.setAttribute('aria-current', 'true');
-          rememberInUrl(link.dataset.day, link.dataset.meal);
+          rememberSelection(link.dataset.day, link.dataset.meal);
           if (moveFocus) {
             var heading = details.querySelector('#meal-details-title');
             if (heading) heading.focus();
@@ -72,7 +121,7 @@
         event.preventDefault();
         var day = new URL(dayControl.href).searchParams.get('day');
         showDay(day);
-        rememberInUrl(day, null);
+        rememberSelection(day, null);
         var firstMeal = panelFor(day).querySelector('[data-meal-link]');
         if (firstMeal) selectMeal(firstMeal, false);
         return;
