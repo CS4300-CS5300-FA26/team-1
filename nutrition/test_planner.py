@@ -83,6 +83,46 @@ class EveryMealDifferentTests(SimpleTestCase):
             build_week_plan([], BIG_BUDGET)
 
 
+class AvoidTests(SimpleTestCase):
+    """Recipes to avoid (plans already shown) are used only when nothing else fits."""
+
+    def test_avoided_recipes_are_replaced_when_there_are_others(self):
+        first = build_week_plan(FIXED_RECIPES, BIG_BUDGET, ('dinner',))
+        second = build_week_plan(FIXED_RECIPES, BIG_BUDGET, ('dinner',), avoid=recipe_ids(first))
+        self.assertFalse(set(recipe_ids(first)) & set(recipe_ids(second)))  # 16 mains: 7 fresh ones exist
+
+    def test_avoided_recipes_fill_in_when_there_are_not_enough_others(self):
+        first = build_week_plan(FIXED_RECIPES, BIG_BUDGET)
+        second = build_week_plan(FIXED_RECIPES, BIG_BUDGET, avoid=recipe_ids(first))
+        breakfasts = {day.meals[0].recipe.id for day in second.days}
+        self.assertEqual(breakfasts & {'b7'}, {'b7'})  # the one unused breakfast is used
+        self.assertEqual(len(set(recipe_ids(second))), 21)  # still all different
+
+    def test_avoid_still_respects_a_budget_that_can_be_met(self):
+        first = build_week_plan(FIXED_RECIPES, Decimal('35'))
+        second = build_week_plan(FIXED_RECIPES, Decimal('35'), avoid=recipe_ids(first))
+        self.assertLessEqual(second.total_cost, Decimal('35'))
+        self.assertNotEqual(recipe_ids(first), recipe_ids(second))
+
+    def test_avoid_with_a_budget_too_low_picks_the_cheapest_new_recipes(self):
+        first = build_week_plan(FIXED_RECIPES, Decimal('1'), ('dinner',))
+        second = build_week_plan(FIXED_RECIPES, Decimal('1'), ('dinner',), avoid=recipe_ids(first))
+        self.assertEqual(recipe_ids(second), [f'm{i}' for i in range(7, 14)])
+
+
+class MacroRowTests(SimpleTestCase):
+    def test_macro_rows_show_grams_targets_and_capped_percentages(self):
+        meal = PlannedMeal('dinner', recipe('x', '1', protein=30, carbs=80, fat=0), MacroTargets(60, 40, 0))
+        rows = {row.label: row for row in meal.macros()}
+        self.assertEqual((rows['Protein'].grams, rows['Protein'].target, rows['Protein'].percent), (30, 60, 50))
+        self.assertEqual(rows['Carbs'].percent, 100)  # 200% of target is drawn as a full bar
+        self.assertEqual(rows['Fat'].percent, 0)  # a 0 g target can't be divided by
+
+    def test_macro_rows_without_targets(self):
+        rows = PlannedMeal('dinner', recipe('x', '1')).macros()
+        self.assertTrue(all(row.target is None and row.percent == 0 for row in rows))
+
+
 class LowestCostTests(SimpleTestCase):
     def test_without_targets_the_lowest_cost_week_is_used(self):
         self.assertEqual(build_week_plan(FIXED_RECIPES, BIG_BUDGET).total_cost, FIXED_LOWEST_WEEKLY_COST)
