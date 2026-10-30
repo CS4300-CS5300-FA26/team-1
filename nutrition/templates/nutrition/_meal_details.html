@@ -1,0 +1,44 @@
+{% comment %}
+Details for one planned meal. Rendered inside the meal plan page and, on its own, by the
+meal_plan_details view that meal_plan.js fetches. Context: selected_day, selected_meal, details (or None).
+{% endcomment %}
+{% with recipe=selected_meal.recipe %}
+  <p class="media__eyebrow mb-0">{{ selected_day.day_name }} &middot; {{ selected_meal.meal|capfirst }}</p>
+  <h2 class="h3" id="meal-details-title" tabindex="-1">{{ recipe.title }}</h2>
+  {% if recipe.image_url %}
+    <img class="panel__image" src="{{ recipe.image_url }}" alt="" width="312" height="231" loading="lazy">
+  {% endif %}
+
+  <dl class="data-list mt-4">
+    <dt>Cost</dt><dd>${{ selected_meal.cost }} per serving</dd>
+    {% if details.ready_in_minutes %}<dt>Ready in</dt><dd>{{ details.ready_in_minutes }} minutes</dd>{% endif %}
+    <dt>Per serving</dt>
+    <dd>{{ recipe.protein_g|floatformat:"0" }} g protein, {{ recipe.carbs_g|floatformat:"0" }} g carbs, {{ recipe.fat_g|floatformat:"0" }} g fat</dd>
+    {% if selected_meal.targets %}
+      <dt>Meal target</dt>
+      <dd>{{ selected_meal.targets.protein_g }} g protein, {{ selected_meal.targets.carbs_g }} g carbs, {{ selected_meal.targets.fat_g }} g fat</dd>
+    {% endif %}
+  </dl>
+
+  {% if details %}
+    {% if details.ingredients %}
+      <h3 class="mt-5">Ingredients</h3>
+      <ul class="ingredient-list">
+        {% for ingredient in details.ingredients %}<li>{{ ingredient.text }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+    {% if details.steps %}
+      <h3 class="mt-5">Instructions</h3>
+      <ol class="step-list">
+        {% for step in details.steps %}<li>{{ step }}</li>{% endfor %}
+      </ol>
+    {% endif %}
+    {% if details.source_url %}
+      <p class="mt-5 mb-0"><a href="{{ details.source_url }}" rel="noopener noreferrer">View the original recipe</a></p>
+    {% endif %}
+  {% else %}
+    <div class="alert alert--info mt-5" role="status">
+      <p class="mb-0">Ingredients and instructions are temporarily unavailable. Please check back later.</p>
+    </div>
+  {% endif %}
+{% endwith %}

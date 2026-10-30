@@ -191,7 +191,8 @@ h4 {
 
 h1 { font-size: var(--text-2xl); }
 h2 { font-size: var(--text-xl); }
-h3 { font-size: var(--text-lg); }
+h3,
+.h3 { font-size: var(--text-lg); }
 
 p { margin: 0 0 var(--space-4); }
 
@@ -650,8 +651,37 @@ input[type="radio"] {
 }
 
 .media__body { min-width: 0; }
-.media__title { font-size: var(--text-base); margin: 0; }
-.media__meta { margin: 0; color: var(--color-text-muted); font-size: var(--text-sm); }
+.media__eyebrow,
+.media__title,
+.media__meta { display: block; margin: 0; }
+.media__eyebrow {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.media__title { font-size: var(--text-base); font-weight: 700; }
+.media__meta { color: var(--color-text-muted); font-size: var(--text-sm); }
+
+/* A whole media row that is a link (choose an item from a list). aria-current="true" marks the
+   chosen one with a thicker border and heavier title as well as colour. */
+.media--link {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.media--link:hover {
+  color: var(--color-text);
+  background: var(--color-surface-raised);
+}
+
+.media--link[aria-current="true"] {
+  border-color: var(--color-primary);
+  box-shadow: inset 4px 0 0 var(--color-primary);
+}
+
+.media--link[aria-current="true"] .media__title { text-decoration: underline; text-underline-offset: 0.2em; }
 
 @media (max-width: 30rem) {
   .media { grid-template-columns: 3rem 1fr; }
@@ -667,6 +697,101 @@ input[type="radio"] {
 @media (max-width: 30rem) {
   .stat { text-align: left; }
 }
+
+/* Day picker: step through a week with arrows, or jump to a day. Links work without JavaScript. */
+.day-picker { display: grid; gap: var(--space-3); }
+
+.day-picker__step {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.day-picker__current {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 700;
+  text-align: center;
+}
+
+.day-picker__days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day-picker__day {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--control-height);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.day-picker__day:hover { color: var(--color-text); background: var(--color-surface-raised); }
+
+@media (max-width: 30rem) {
+  .day-picker__day { font-size: var(--text-sm); }
+}
+
+/* The chosen day is filled in, so it differs in shape and fill, not only hue. */
+.day-picker__day[aria-current="true"] {
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+/* Split: a list on the left and the selected item's details on the right; stacks on small screens. */
+.split {
+  display: grid;
+  gap: var(--space-5);
+}
+
+@media (min-width: 48rem) {
+  .split {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    align-items: start;
+  }
+}
+
+/* Panel: a bordered surface inside a card, e.g. the selected meal's details. */
+.panel {
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.panel[aria-busy="true"] { opacity: 0.6; }
+
+.panel__image {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 14rem;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+/* Ingredient and instruction lists (recipes). */
+.ingredient-list,
+.step-list {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-5);
+}
+
+.ingredient-list > li + li,
+.step-list > li + li { margin-top: var(--space-2); }
+
+.step-list > li::marker { font-weight: 700; }
 
 /* Badge: short labels such as a goal or level. */
 .badge {
@@ -690,6 +815,7 @@ input[type="radio"] {
 .text-sm { font-size: var(--text-sm); }
 .mt-0 { margin-top: 0; }
 .mb-0 { margin-bottom: 0; }
+.mt-3 { margin-top: var(--space-3); }
 .mt-4 { margin-top: var(--space-4); }
 .mt-5 { margin-top: var(--space-5); }
 

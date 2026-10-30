@@ -49,6 +49,9 @@ SECRET_KEY = read_secret('django-secret-key', 'SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env('DEBUG')
 
+# Running the Django tests or Gherkin scenarios (`manage.py test` / `manage.py behave`).
+TESTING = sys.argv[1:2] in (['test'], ['behave'])
+
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['testserver'])
 
 CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
@@ -186,9 +189,15 @@ NUTRITION_RECIPE_SOURCE = NUTRITION_RECIPE_SOURCES[RECIPE_SOURCE]
 # D-4 (macro generation) replaces this with its own provider; until then plans are optimised for cost.
 NUTRITION_MACRO_TARGETS_PROVIDER = 'nutrition.macros.NoMacroTargets'
 SPOONACULAR_API_KEY = read_secret('spoonacular-api-key', 'SPOONACULAR_API_KEY', default='')
-NUTRITION_RECIPE_CACHE_SECONDS = 12 * 60 * 60  # one search serves everyone for half a day (API quota)
+# Recipe API data is cached in the database (nutrition.RecipeCacheEntry), shared by every pod, to save quota.
+NUTRITION_RECIPE_CACHE_SECONDS = 24 * 60 * 60  # the cheap-recipe searches serve everyone for a day
+NUTRITION_RECIPE_DETAILS_CACHE_SECONDS = 30 * 24 * 60 * 60  # a recipe's ingredients and steps rarely change
 NUTRITION_RECIPE_FAILURE_CACHE_SECONDS = 2 * 60  # after a failure, wait before calling the API again
 NUTRITION_RECIPE_TIMEOUT_SECONDS = 5
+if TESTING:
+    # Tests never call the real recipe API or spend its quota, whatever .env says; they fake it instead.
+    NUTRITION_RECIPE_SOURCE = NUTRITION_RECIPE_SOURCES['catalog']
+    SPOONACULAR_API_KEY = ''
 
 
 # Internationalization
@@ -216,9 +225,9 @@ STORAGES = {
     },
 }
 
-# The manifest storage needs `collectstatic` to have run (the Docker build does that). Tests and
-# Gherkin scenarios render templates that use {% static %} without it, so they use plain storage.
-if sys.argv[1:2] in (['test'], ['behave']):
+if TESTING:
+    # The manifest storage needs `collectstatic` to have run (the Docker build does that); tests render
+    # templates that use {% static %} without it, so they use plain storage.
     STORAGES['staticfiles']['BACKEND'] = 'django.contrib.staticfiles.storage.StaticFilesStorage'
 
 

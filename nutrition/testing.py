@@ -6,14 +6,15 @@ They also document the shape of data a real provider must return (D-4 macro targ
 
 from decimal import Decimal
 
-from .domain import MacroTargets, Recipe
+from .domain import Ingredient, MacroTargets, Recipe, RecipeDetails
 from .ports import RecipeServiceUnavailable
 
 
-def recipe(id, cost, protein=30, carbs=50, fat=10, title=None) -> Recipe:
+def recipe(id, cost, course='main', protein=30, carbs=50, fat=10, title=None) -> Recipe:
     return Recipe(
         id=id,
         title=title or f'Recipe {id}',
+        course=course,
         cost_per_serving=Decimal(cost),
         protein_g=protein,
         carbs_g=carbs,
@@ -21,23 +22,36 @@ def recipe(id, cost, protein=30, carbs=50, fat=10, title=None) -> Recipe:
     )
 
 
-# A small, fixed catalog with known prices, so expected totals can be worked out by hand.
-# At 3 servings a day and at most 2 uses per recipe, the lowest-cost week is
-# 2 x oats + 2 x lentils + 2 x chili + 1 x rice bowl = 3 x (2*0.90 + 2*1.00 + 2*1.20 + 1.50) = $23.10.
-FIXED_RECIPES = (
-    recipe('oats', '0.90', protein=12, carbs=55, fat=10, title='Peanut butter oats'),
-    recipe('lentils', '1.00', protein=18, carbs=60, fat=6, title='Lentil curry'),
-    recipe('chili', '1.20', protein=20, carbs=45, fat=7, title='Bean chili'),
-    recipe('rice-bowl', '1.50', protein=42, carbs=55, fat=9, title='Chicken rice bowl'),
-    recipe('pasta', '1.80', protein=38, carbs=62, fat=12, title='Turkey pasta'),
-    recipe('burrito', '2.20', protein=45, carbs=60, fat=14, title='Chicken burrito bowl'),
+# A fixed catalog with known prices, so expected totals can be worked out by hand.
+# 8 breakfasts at $0.50, $0.60 ... $1.20, and 16 mains at $1.00, $1.10 ... $2.50; protein rises with price.
+FIXED_BREAKFASTS = tuple(
+    recipe(
+        f'b{i}', f'{0.50 + i / 10:.2f}', course='breakfast', protein=10 + 2 * i, carbs=40, fat=8, title=f'Breakfast {i}'
+    )
+    for i in range(8)
 )
-FIXED_LOWEST_WEEKLY_COST = Decimal('23.10')
+FIXED_MAINS = tuple(
+    recipe(f'm{i}', f'{1.00 + i / 10:.2f}', course='main', protein=15 + 3 * i, carbs=55, fat=12, title=f'Main {i}')
+    for i in range(16)
+)
+FIXED_RECIPES = FIXED_BREAKFASTS + FIXED_MAINS
+
+# Lowest-cost three-meal week, every meal different: the 7 cheapest breakfasts ($0.50 to $1.10 = $5.60)
+# plus the 14 cheapest mains ($1.00 to $2.30 = $23.10).
+FIXED_LOWEST_WEEKLY_COST = Decimal('28.70')
 
 # A training-week shape like D-4 is expected to produce: lower carbs on the two rest days.
 TRAINING_DAY = MacroTargets(protein_g=150, carbs_g=200, fat_g=40)
 REST_DAY = MacroTargets(protein_g=150, carbs_g=150, fat_g=40)
 FIXED_WEEKLY_TARGETS = (TRAINING_DAY, TRAINING_DAY, REST_DAY, TRAINING_DAY, TRAINING_DAY, REST_DAY, TRAINING_DAY)
+
+
+def fixed_details(recipe: Recipe) -> RecipeDetails:
+    return RecipeDetails(
+        ingredients=(Ingredient(text=f'1 cup {recipe.title} base'), Ingredient(text='Salt and pepper')),
+        steps=(f'Prepare the {recipe.title}.', 'Serve.'),
+        ready_in_minutes=15,
+    )
 
 
 class FixedRecipeSource:
@@ -46,11 +60,24 @@ class FixedRecipeSource:
     def budget_recipes(self):
         return list(FIXED_RECIPES)
 
+    def recipe_details(self, recipe):
+        return fixed_details(recipe)
+
+
+class DetailsUnavailableRecipeSource(FixedRecipeSource):
+    """Recipes load, but ingredients and steps don't (the details call is down)."""
+
+    def recipe_details(self, recipe):
+        raise RecipeServiceUnavailable('Simulated details outage.')
+
 
 class UnavailableRecipeSource:
     attribution = 'Test recipes.'
 
     def budget_recipes(self):
+        raise RecipeServiceUnavailable('Simulated outage.')
+
+    def recipe_details(self, recipe):
         raise RecipeServiceUnavailable('Simulated outage.')
 
 

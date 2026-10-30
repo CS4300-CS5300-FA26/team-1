@@ -68,7 +68,10 @@ def step_recipes_each_day(context):
     plan = context.response.context['plan']
     context.test.assertEqual([day.day_name for day in plan.days], list(DAY_NAMES))
     for day in plan.days:
-        context.test.assertContains(context.response, f'{day.day_name}: {day.recipe.title}')
+        context.test.assertTrue(day.meals)
+        context.test.assertContains(context.response, f'id="day-{day.day_name.lower()}-title">{day.day_name}</h2>')
+        for meal in day.meals:
+            context.test.assertContains(context.response, meal.recipe.title)
 
 
 @then('the estimated weekly cost is ${limit:d} or less')
