@@ -10,10 +10,12 @@ Rules:
   it is. Otherwise, with macro targets, each meal gets the recipe that best fits its share of the day
   while the rest of the week can still be bought within budget. Without targets, the lowest-cost week
   is used.
+* Recipes to `avoid` (plans already shown) are used only when nothing else fits, so a regenerated plan
+  differs as much as the recipes available allow.
 """
 
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from decimal import Decimal
 from math import ceil
 
@@ -43,8 +45,13 @@ def build_week_plan(
     budget: Decimal,
     meals: Sequence[str] = MEALS,
     targets: Sequence[MacroTargets] | None = None,
+    avoid: Collection[str] = frozenset(),
 ) -> MealPlan:
-    """Return the week's plan for `budget` (dollars), covering `meals` each day and fitting `targets` if given."""
+    """Return the week's plan for `budget` (dollars), covering `meals` each day and fitting `targets` if given.
+
+    Recipe ids in `avoid` (for example the plans already shown this week) are used only when nothing else
+    fits, which is how "Generate a new meal plan" gets different meals.
+    """
     budget = money(budget)
     if budget < 0:
         raise ValueError('Budget cannot be negative.')
@@ -56,13 +63,16 @@ def build_week_plan(
 
     slots = [(day, meal) for day in range(len(DAY_NAMES)) for meal in meals]
     shares = meal_shares(meals)
+    meal_targets = (
+        {(day, meal): targets[day].share(shares[meal]) for day, meal in slots} if targets is not None else None
+    )
     week = _Week(recipes, slots)
-    lowest_cost = week.lowest_cost_assignment()
-    if targets is None or week.cost_of(lowest_cost.values()) > budget:
-        chosen = lowest_cost
+    if week.lowest_cost() <= budget:
+        chosen = week.assign(meal_targets, budget, frozenset(avoid))
     else:
-        meal_targets = {(day, meal): targets[day].share(shares[meal]) for day, meal in slots}
-        chosen = week.best_fit_assignment(meal_targets, budget)
+        # Nothing fits, so don't trade up for macro fit: this gives the lowest-cost week itself
+        # (or, when asked to avoid recipes, the cheapest week of different ones).
+        chosen = week.assign(None, None, frozenset(avoid))
 
     return MealPlan(
         days=tuple(
@@ -72,7 +82,7 @@ def build_week_plan(
                     PlannedMeal(
                         meal=meal,
                         recipe=chosen[(day, meal)],
-                        targets=targets[day].share(shares[meal]) if targets is not None else None,
+                        targets=meal_targets[(day, meal)] if meal_targets is not None else None,
                     )
                     for meal in meals
                 ),
@@ -85,7 +95,7 @@ def build_week_plan(
 
 
 class _Week:
-    """Recipe pools per course and the costing rules shared by both ways of filling the week."""
+    """Recipe pools per course and the costing rules for filling the week."""
 
     def __init__(self, recipes: Sequence[Recipe], slots: Sequence[tuple[int, str]]):
         self.slots = slots
@@ -120,20 +130,26 @@ class _Week:
                 break
         return fill
 
-    def lowest_cost_assignment(self) -> dict[tuple[int, str], Recipe]:
-        """Cheapest recipes per course, handed out in day order (Monday gets the cheapest)."""
-        queues = {course: self.cheapest_fill(course, count, Counter()) for course, count in self.needed.items()}
-        return {slot: queues[COURSE_FOR_MEAL[slot[1]]].pop(0) for slot in self.slots}
+    def lowest_cost(self) -> Decimal:
+        return sum(
+            (self.cost_of(self.cheapest_fill(course, count, Counter())) for course, count in self.needed.items()),
+            Decimal(0),
+        )
 
-    def best_fit_assignment(
-        self, meal_targets: dict[tuple[int, str], MacroTargets], budget: Decimal
+    def assign(
+        self,
+        meal_targets: dict[tuple[int, str], MacroTargets] | None,
+        budget: Decimal | None,
+        avoid: frozenset[str],
     ) -> dict[tuple[int, str], Recipe]:
-        """Meal by meal, the best-fitting recipe that still leaves the rest of the week affordable.
+        """Meal by meal (Monday breakfast first), the preferred recipe that keeps the week affordable.
 
-        A choice is allowed only if every remaining meal can still be filled at the lowest possible
-        cost within budget. The caller has checked that the lowest-cost week fits, so at every step at
-        least one recipe qualifies (the next one in that lowest-cost week) and the week never goes over
-        budget.
+        Preference: not in `avoid`, then best fit to the meal's targets (when there are targets), then
+        cheapest. With a budget, a choice is allowed only if every remaining meal can still be filled at the
+        lowest possible cost within it. The caller only passes a budget the lowest-cost week fits, so at every
+        step at least one recipe qualifies (the next one in that lowest-cost week) and the week never goes
+        over. With no targets and nothing to avoid this hands out the cheapest recipes in day order, which is
+        the lowest-cost week.
         """
         chosen: dict[tuple[int, str], Recipe] = {}
         used: Counter = Counter()
@@ -146,15 +162,17 @@ class _Week:
             for recipe in self.pools[course]:
                 if used[recipe.id] >= self.cap[course]:
                     continue
-                used[recipe.id] += 1
-                rest = sum(
-                    (self.cost_of(self.cheapest_fill(c, n, used)) for c, n in remaining.items() if n),
-                    Decimal(0),
-                )
-                used[recipe.id] -= 1
-                if spent + money(recipe.cost_per_serving) + rest > budget:
-                    continue
-                key = (_fit_error(recipe, meal_targets[slot]), recipe.cost_per_serving, recipe.title, recipe.id)
+                if budget is not None:
+                    used[recipe.id] += 1
+                    rest = sum(
+                        (self.cost_of(self.cheapest_fill(c, n, used)) for c, n in remaining.items() if n),
+                        Decimal(0),
+                    )
+                    used[recipe.id] -= 1
+                    if spent + money(recipe.cost_per_serving) + rest > budget:
+                        continue
+                fit = _fit_error(recipe, meal_targets[slot]) if meal_targets is not None else 0.0
+                key = (recipe.id in avoid, fit, recipe.cost_per_serving, recipe.title, recipe.id)
                 if best_key is None or key < best_key:
                     best_key, best = key, recipe
             assert best is not None  # noqa: S101 - guaranteed by the affordability invariant above
