@@ -13,5 +13,8 @@
       <dt>Weekly food budget</dt><dd>${{ profile.weekly_food_budget|floatformat:2 }}</dd>
       <dt>Available equipment</dt><dd>{{ profile.equipment_labels|join:", " }}</dd>
     </dl>
+    <div class="cluster mt-5">
+      <a class="btn btn--primary" href="{% url 'meal_plan' %}">View meal plan</a>
+    </div>
   </div>
 {% endblock %}

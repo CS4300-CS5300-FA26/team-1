@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 import environ
+from django.core.exceptions import ImproperlyConfigured
 
 # Implementing django-environ to prevent secrets from getting committed in the settings file
 #  ref: https://django-environ.readthedocs.io/en/latest/quickstart.html
@@ -63,6 +64,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'core',
     'accounts',
+    'nutrition',
 ]
 
 # behave-django runs the Gherkin scenarios in features/ (`manage.py behave`). It is a dev
@@ -169,6 +171,24 @@ AUTH_THROTTLE = {
     'login_ip': (20, 15 * 60),  # failed logins per IP, any identifier
     'register': (10, 60 * 60),  # registration attempts per IP
 }
+
+
+# Meal planning (story D-5, ADR-008). The planner talks to two plug-in points, chosen here by dotted path.
+# RECIPE_SOURCE: 'catalog' (built-in starter recipes, no network) or 'spoonacular' (needs SPOONACULAR_API_KEY).
+NUTRITION_RECIPE_SOURCES = {
+    'catalog': 'nutrition.recipe_sources.StarterCatalogSource',
+    'spoonacular': 'nutrition.recipe_sources.SpoonacularRecipeSource',
+}
+RECIPE_SOURCE = env('RECIPE_SOURCE', default='catalog')
+if RECIPE_SOURCE not in NUTRITION_RECIPE_SOURCES:
+    raise ImproperlyConfigured(f'RECIPE_SOURCE must be one of {sorted(NUTRITION_RECIPE_SOURCES)}.')
+NUTRITION_RECIPE_SOURCE = NUTRITION_RECIPE_SOURCES[RECIPE_SOURCE]
+# D-4 (macro generation) replaces this with its own provider; until then plans are optimised for cost.
+NUTRITION_MACRO_TARGETS_PROVIDER = 'nutrition.macros.NoMacroTargets'
+SPOONACULAR_API_KEY = read_secret('spoonacular-api-key', 'SPOONACULAR_API_KEY', default='')
+NUTRITION_RECIPE_CACHE_SECONDS = 12 * 60 * 60  # one search serves everyone for half a day (API quota)
+NUTRITION_RECIPE_FAILURE_CACHE_SECONDS = 2 * 60  # after a failure, wait before calling the API again
+NUTRITION_RECIPE_TIMEOUT_SECONDS = 5
 
 
 # Internationalization

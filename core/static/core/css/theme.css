@@ -260,6 +260,7 @@ code {
 
 .cluster--center { justify-content: center; }
 .cluster--end { justify-content: flex-end; }
+.cluster--between { justify-content: space-between; }
 
 /* 4. Components ---------------------------------------------------------------------------- */
 
@@ -610,6 +611,61 @@ input[type="radio"] {
 @media (max-width: 30rem) {
   .data-list { grid-template-columns: 1fr; gap: 0; }
   .data-list dd { margin-bottom: var(--space-3); }
+}
+
+/* Media list: rows of a thumbnail plus text (meal plan days, workout days). Use an <ol>/<ul>
+   with class="media-list" and <li class="media">. */
+.media-list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.media {
+  display: grid;
+  grid-template-columns: 4rem 1fr;
+  gap: var(--space-3) var(--space-4);
+  align-items: center;
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+/* Images are decorative here (the title says what it is), so give them alt="". */
+.media__thumb {
+  width: 4rem;
+  height: 4rem;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+}
+
+.media__thumb--placeholder {
+  display: grid;
+  place-items: center;
+  font-size: 1.5rem;
+}
+
+.media__body { min-width: 0; }
+.media__title { font-size: var(--text-base); margin: 0; }
+.media__meta { margin: 0; color: var(--color-text-muted); font-size: var(--text-sm); }
+
+@media (max-width: 30rem) {
+  .media { grid-template-columns: 3rem 1fr; }
+  .media__thumb { width: 3rem; height: 3rem; }
+}
+
+/* Stat: a headline number with a label, e.g. "Est. $46.20 of $50.00". */
+.stat { margin: 0; text-align: right; }
+.stat__value { display: block; font-size: var(--text-xl); font-weight: 700; line-height: 1.2; }
+.stat__label { color: var(--color-text-muted); font-size: var(--text-sm); }
+
+/* On narrow screens the stat wraps under its heading, so align it with the heading. */
+@media (max-width: 30rem) {
+  .stat { text-align: left; }
 }
 
 /* Badge: short labels such as a goal or level. */

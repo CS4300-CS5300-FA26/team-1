@@ -1,0 +1,17 @@
+{
+  "_comment": "Built-in budget recipes used when no recipe API is configured (RECIPE_SOURCE=catalog). Prices are estimated US grocery costs per serving in dollars; macros are approximate grams per serving. Review prices each semester.",
+  "recipes": [
+    {"id": "starter-lentil-curry", "title": "Lentil curry with rice", "cost_per_serving": "1.10", "protein_g": 18, "carbs_g": 62, "fat_g": 7},
+    {"id": "starter-bean-chili", "title": "Black bean chili", "cost_per_serving": "1.25", "protein_g": 19, "carbs_g": 48, "fat_g": 6},
+    {"id": "starter-egg-fried-rice", "title": "Egg fried rice", "cost_per_serving": "1.20", "protein_g": 16, "carbs_g": 58, "fat_g": 12},
+    {"id": "starter-pb-oats", "title": "Peanut butter banana oats", "cost_per_serving": "0.95", "protein_g": 15, "carbs_g": 55, "fat_g": 14},
+    {"id": "starter-chickpea-stew", "title": "Chickpea and spinach stew", "cost_per_serving": "1.35", "protein_g": 17, "carbs_g": 50, "fat_g": 9},
+    {"id": "starter-chicken-rice-bowl", "title": "Chicken rice bowl", "cost_per_serving": "1.80", "protein_g": 42, "carbs_g": 55, "fat_g": 9},
+    {"id": "starter-turkey-pasta", "title": "Ground turkey pasta", "cost_per_serving": "2.10", "protein_g": 38, "carbs_g": 62, "fat_g": 12},
+    {"id": "starter-tuna-pasta-salad", "title": "Tuna pasta salad", "cost_per_serving": "1.70", "protein_g": 32, "carbs_g": 50, "fat_g": 10},
+    {"id": "starter-chicken-burrito-bowl", "title": "Chicken burrito bowl", "cost_per_serving": "2.25", "protein_g": 40, "carbs_g": 60, "fat_g": 13},
+    {"id": "starter-tofu-stir-fry", "title": "Tofu and vegetable stir-fry", "cost_per_serving": "1.65", "protein_g": 22, "carbs_g": 45, "fat_g": 14},
+    {"id": "starter-egg-veggie-scramble", "title": "Egg and potato scramble", "cost_per_serving": "1.40", "protein_g": 24, "carbs_g": 38, "fat_g": 16},
+    {"id": "starter-greek-yogurt-bowl", "title": "Greek yogurt oat bowl", "cost_per_serving": "1.55", "protein_g": 30, "carbs_g": 48, "fat_g": 8}
+  ]
+}
