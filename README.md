@@ -145,7 +145,8 @@ uv run python manage.py behave  # Gherkin scenarios
 * **Password hashing** uses Django's default; Argon2 is a possible upgrade (needs the `argon2-cffi` dependency).
 
 ## Contributing
-* Branch naming: `feature/<short-description>`, `fix/<short-description>`
+* Read [AGENTS.md](AGENTS.md) first: it is the team's working agreement (security rules, code standards, ADRs, frontend theme and accessibility, workflow) for humans and AI coding tools alike.
+* Branch naming: `feat/<short-description>`, `fix/<short-description>`, `chore/<short-description>`, or `<issue-number>-<short-description>`
 * Changes to **main** must come through a PR and must be approved by at least one other team member.
 * **Author:** opens the PR, keeps CI green, and answers review comments. Don't approve your own PR.
 * **Reviewer:** reads the diff and the Codex review comment (`pr-review.yml`), checks that new behavior has tests, and approves or requests changes. The AI review does not replace a human approval.
@@ -202,19 +203,19 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 
 # AI Usage
 
-| LLM | Contributor | Usage | Transcript |
-| --- | --- | --- | --- |
-| Pardot | Caleb Harris | Validated issues created in GitHub against Sprint 0-2 Requirements | n/a |
-| Claude | Caleb Harris | Generated Lo-Fi wireframe given spec | Used `agents` tab in Figma |
-| Pardot | Caleb Harris | PR Review | [Link](https://github.com/CS4300-CS5300-FA26/team-1/pull/16) |
-| Claude | Caleb Harris | Security review of the Terraform GKE infrastructure setup, with fixes and README deployment docs | n/a |
-| Claude | Caleb Harris | Generated draft Dockerfile and dockerignore file | n/a |
-| Claude | Caleb Harris | Generated k8s manifests | n/a |
-| Claude | Caleb Harris | Generated deployment script | n/a |
-| Claude | Caleb Harris | Claude Code implemented the CD portion of the GitHub Actions pipeline (Workload Identity Federation auth, image build/push, deploy via scripts/deploy.sh) | n/a |
-| Claude | Nathan Galay | Generated register/login pages (accounts app) | n/a |
-| Codex | Caleb Harris | Automatic PR review: `pr-review.yml` runs `openai/codex-action` when a PR is opened and posts the feedback as a PR comment | n/a |
-| Claude | Caleb Harris | Reviewed `pr-review.yml` against the other CI workflows and pinned its actions to commit SHAs | n/a |
-| Claude | Nathan Galay | Implemented user story D-1 (user-auth) on the accounts app: generic login error, email login, password and session hardening, Gherkin feature and step definitions, extra Django tests, ADR-005, and this README section | n/a |
-| Claude | Caleb Harris | Claude Code added login/registration rate limiting, database-enforced email uniqueness, ruff/mypy/bandit/CodeQL CI gates and Dependabot config, disabled the admin site, wrote ADR-006 and ADR-007, and corrected this README against the Sprint 1 feedback | n/a |
-| Claude | Caleb Harris | Claude Code applied the PR #20/#27 review follow-ups (merged duplicate test modules, onboarding input bounds, shared base template, ADR-005) and moved the coverage report into `ci.yml` with the 80% gate and artifact on PRs only | n/a |
+| LLM | Contributor | Usage |
+| --- | --- | --- |
+| Pardot | Caleb Harris | Validated issues created in GitHub against Sprint 0-2 Requirements |
+| Claude | Caleb Harris | Generated Lo-Fi wireframe given spec (used `agents` tab in Figma) |
+| Pardot | Caleb Harris | PR Review |
+| Claude | Caleb Harris | Security review of the Terraform GKE infrastructure setup, with fixes and README deployment docs |
+| Claude | Caleb Harris | Generated draft Dockerfile and dockerignore file |
+| Claude | Caleb Harris | Generated k8s manifests |
+| Claude | Caleb Harris | Generated deployment script |
+| Claude | Caleb Harris | Claude Code implemented the CD portion of the GitHub Actions pipeline (Workload Identity Federation auth, image build/push, deploy via scripts/deploy.sh) |
+| Claude | Nathan Galay | Generated register/login pages (accounts app) |
+| Codex | Caleb Harris | Automatic PR review: `pr-review.yml` runs `openai/codex-action` when a PR is opened and posts the feedback as a PR comment |
+| Claude | Caleb Harris | Reviewed `pr-review.yml` against the other CI workflows and pinned its actions to commit SHAs |
+| Claude | Nathan Galay | Implemented user story D-1 (user-auth) on the accounts app: generic login error, email login, password and session hardening, Gherkin feature and step definitions, extra Django tests, ADR-005, and this README section |
+| Claude | Caleb Harris | Claude Code added login/registration rate limiting, database-enforced email uniqueness, ruff/mypy/bandit/CodeQL CI gates and Dependabot config, disabled the admin site, wrote ADR-006 and ADR-007, and corrected this README against the Sprint 1 feedback |
+| Claude | Caleb Harris | Claude Code applied the PR #20/#27 review follow-ups (merged duplicate test modules, onboarding input bounds, shared base template, ADR-005) and moved the coverage report into `ci.yml` with the 80% gate and artifact on PRs only |
