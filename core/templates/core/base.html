@@ -1,51 +1,31 @@
-<!DOCTYPE html>
+{% load static %}<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>{% block title %}FitPro{% endblock %}</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 2rem 1rem;
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-      background: #f5f7fa;
-      color: #1f2933;
-    }
-    /* Vertically centered pages (home, log in, sign up). */
-    body.centered { min-height: 100vh; box-sizing: border-box; display: grid; place-items: center; padding: 0; }
-    .card {
-      width: 100%;
-      max-width: 480px;
-      margin: 0 auto 1rem;
-      padding: 2rem;
-      box-sizing: border-box;
-      background: #fff;
-      border-radius: 8px;
-      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
-    }
-    .card.narrow { max-width: 380px; margin: 1rem; }
-    h1 { font-size: 1.6rem; margin: 0 0 1.25rem; }
-    .field { margin-bottom: 1rem; }
-    .field > label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
-    input[type=text], input[type=email], input[type=password], input[type=number], select {
-      width: 100%; padding: 0.5rem; box-sizing: border-box; font: inherit; border: 1px solid #cbd2d9; border-radius: 4px;
-    }
-    .help { color: #52606d; font-size: 0.8rem; margin-top: 0.25rem; }
-    .help ul { margin: 0.25rem 0 0; padding-left: 1.1rem; }
-    .errorlist { color: #b00020; list-style: none; margin: 0.25rem 0 0; padding: 0; font-size: 0.9rem; }
-    button { padding: 0.6rem 1rem; font: inherit; font-weight: 600; color: #fff; background: #1f6feb; border: 0; border-radius: 4px; cursor: pointer; }
-    button.block { width: 100%; }
-    button.secondary { font-weight: normal; color: inherit; background: #fff; border: 1px solid #cbd2d9; }
-    .alt { margin: 1.25rem 0 0; text-align: center; color: #52606d; }
-  </style>
+  <script>
+    // Apply a saved light/dark choice before the first paint, so the page doesn't flash.
+    try {
+      var savedTheme = localStorage.getItem('fitpro-theme');
+      if (savedTheme === 'light' || savedTheme === 'dark') document.documentElement.dataset.theme = savedTheme;
+    } catch (e) {}
+  </script>
+  {# Global theme: tokens, components and utilities for every page. Use its classes rather than page-level <style> blocks. #}
+  <link rel="stylesheet" href="{% static 'core/css/theme.css' %}">
+  <script src="{% static 'core/js/theme.js' %}" defer></script>
   {% block extra_head %}{% endblock %}
 </head>
-<body class="{% block body_class %}{% endblock %}">
-  {% block body %}
-    <main class="card">
-      {% block content %}{% endblock %}
-    </main>
-  {% endblock %}
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  {% include "core/_header.html" %}
+  <main id="main" class="{% block main_class %}page{% endblock %}" tabindex="-1">
+    {% block body %}
+      <div class="card">
+        {% block content %}{% endblock %}
+      </div>
+    {% endblock %}
+  </main>
 </body>
 </html>

@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import importlib.util
+import sys
 from pathlib import Path
 
 import environ
@@ -194,6 +195,11 @@ STORAGES = {
         'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
     },
 }
+
+# The manifest storage needs `collectstatic` to have run (the Docker build does that). Tests and
+# Gherkin scenarios render templates that use {% static %} without it, so they use plain storage.
+if sys.argv[1:2] in (['test'], ['behave']):
+    STORAGES['staticfiles']['BACKEND'] = 'django.contrib.staticfiles.storage.StaticFilesStorage'
 
 
 # HTTPS behind the GKE load balancer
