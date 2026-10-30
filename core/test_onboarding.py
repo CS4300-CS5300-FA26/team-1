@@ -22,6 +22,7 @@ VALID_ANSWERS = {
     'weight': '180.5',
     'experience_level': 'intermediate',
     'weekly_food_budget': '85.50',
+    'meal_pattern': 'breakfast_dinner',
     'equipment': ['dumbbells', 'bands'],
 }
 
@@ -32,6 +33,7 @@ REQUIRED_MESSAGES = {
     'weight': 'Your weight is required.',
     'experience_level': 'Your experience level is required.',
     'weekly_food_budget': 'Weekly food budget is required.',
+    'meal_pattern': 'Choose which meals to plan.',
     'equipment': 'Select at least one option for available equipment.',
 }
 
@@ -42,6 +44,7 @@ COMPLETED_ANSWERS = {
     'weight': Decimal('180.50'),
     'experience_level': 'intermediate',
     'weekly_food_budget': Decimal('85.50'),
+    'meal_pattern': 'three',
     'equipment': ['dumbbells'],
 }
 
@@ -88,6 +91,7 @@ class CompleteOnboardingTests(OnboardingTestBase):
         self.assertEqual(profile.experience_level, 'intermediate')
         self.assertEqual(profile.weekly_food_budget, Decimal('85.50'))
         self.assertCountEqual(profile.equipment, ['dumbbells', 'bands'])
+        self.assertEqual(profile.meal_pattern, 'breakfast_dinner')
 
     def test_user_ends_up_on_dashboard_showing_their_values(self):
         self.log_in_as(self.make_user())
@@ -103,6 +107,7 @@ class CompleteOnboardingTests(OnboardingTestBase):
         self.assertContains(response, '$85.50')
         self.assertContains(response, 'Dumbbells')
         self.assertContains(response, 'Resistance bands')
+        self.assertContains(response, 'Breakfast and dinner')
 
     def test_zero_budget_is_accepted(self):
         user = self.make_user()
@@ -200,6 +205,7 @@ class MissingAnswerTests(OnboardingTestBase):
             ('weight', '700.01'),
             ('weekly_food_budget', 'lots'),
             ('weekly_food_budget', '-1'),
+            ('meal_pattern', 'brunch_only'),
             ('equipment', ['jetpack']),
             ('equipment', ['none', 'dumbbells']),
         ]

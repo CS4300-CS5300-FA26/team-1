@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import EQUIPMENT_CHOICES, UserProfile
+from .models import EQUIPMENT_CHOICES, MEAL_PATTERN_CHOICES, UserProfile
 
 
 class OnboardingForm(forms.ModelForm):
@@ -36,9 +36,24 @@ class OnboardingForm(forms.ModelForm):
         error_messages={'required': 'Select at least one option for available equipment.'},
     )
 
+    meal_pattern = forms.ChoiceField(
+        label='Which meals should your meal plan cover?',
+        choices=MEAL_PATTERN_CHOICES,
+        widget=forms.RadioSelect,
+        error_messages={'required': 'Choose which meals to plan.'},
+    )
+
     class Meta:
         model = UserProfile
-        fields = ['goal', 'height_inches', 'weight', 'experience_level', 'weekly_food_budget', 'equipment']
+        fields = [
+            'goal',
+            'height_inches',
+            'weight',
+            'experience_level',
+            'weekly_food_budget',
+            'meal_pattern',
+            'equipment',
+        ]
         labels = {
             'goal': 'Your goal',
             'experience_level': 'Experience level',

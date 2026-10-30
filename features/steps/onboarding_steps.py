@@ -25,6 +25,7 @@ ANSWERS = {
     'weight': '180.5',
     'experience_level': 'intermediate',
     'weekly_food_budget': '85.50',
+    'meal_pattern': 'breakfast_dinner',
     'equipment': ['dumbbells', 'bands'],
 }
 
@@ -35,6 +36,7 @@ SAVED_ANSWERS = {
     'weight': Decimal('180.50'),
     'experience_level': 'intermediate',
     'weekly_food_budget': Decimal('85.50'),
+    'meal_pattern': 'three',
     'equipment': ['dumbbells'],
 }
 
@@ -56,7 +58,7 @@ def step_logged_in_not_onboarded(context):
     log_in_directly(context)
 
 
-@when('I submit my goal, height, weight, experience level, weekly food budget, and available equipment')
+@when('I submit my goal, height, weight, experience level, weekly food budget, meals to plan, and available equipment')
 def step_submit_all_answers(context):
     # follow=True so the next steps see the page the user ends up on.
     context.response = context.test.client.post(reverse('onboarding'), ANSWERS, follow=True)
@@ -65,7 +67,16 @@ def step_submit_all_answers(context):
 @then('I see a profile summary showing those values')
 def step_see_profile_summary(context):
     context.test.assertContains(context.response, 'Your profile summary')
-    for text in ('Build muscle', '70 in', '180.5', 'Intermediate', '$85.50', 'Dumbbells', 'Resistance bands'):
+    for text in (
+        'Build muscle',
+        '70 in',
+        '180.5',
+        'Intermediate',
+        '$85.50',
+        'Breakfast and dinner',
+        'Dumbbells',
+        'Resistance bands',
+    ):
         context.test.assertContains(context.response, text)
 
 
