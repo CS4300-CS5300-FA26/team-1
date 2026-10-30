@@ -1,0 +1,68 @@
+{% extends "core/base.html" %}
+{% block title %}Meal plan | FitPro{% endblock %}
+{% block body %}
+  <div class="card card--wide">
+    <div class="cluster cluster--between">
+      <h1 class="card__title mb-0">Weekly meal plan</h1>
+      {% if plan %}
+        <p class="stat">
+          <span class="stat__value">Est. ${{ plan.total_cost }}</span>
+          <span class="stat__label">of your ${{ plan.budget }} weekly budget</span>
+        </p>
+      {% endif %}
+    </div>
+
+    {% if result.unavailable %}
+      <div class="alert alert--warning mt-5" role="status">
+        <p class="mb-0"><strong>Meal suggestions are temporarily unavailable.</strong>
+          Please check back later. Your workouts aren't affected.</p>
+      </div>
+      <div class="cluster mt-5">
+        <a class="btn btn--primary" href="{% url 'dashboard' %}">Go to your dashboard</a>
+      </div>
+    {% else %}
+      {% if not plan.within_budget %}
+        <div class="alert alert--warning mt-4" role="status">
+          <p class="mb-0"><strong>${{ plan.over_budget_by }} over your ${{ plan.budget }} budget.</strong>
+            Your budget is too low for a full week, so this is the lowest-cost plan available.</p>
+        </div>
+      {% endif %}
+
+      <p class="text-muted mt-4">
+        One recipe a day, cooked as {{ plan.days.0.servings }} servings: cook once, eat all day.
+        {% if not plan.uses_macro_targets %}Recipes are chosen for cost; they'll also match your macro targets once those are set up.{% endif %}
+      </p>
+
+      <h2 class="visually-hidden">This week's meals</h2>
+      <ol class="media-list mt-4">
+        {% for day in plan.days %}
+          <li class="media">
+            {% if day.recipe.image_url %}
+              <img class="media__thumb" src="{{ day.recipe.image_url }}" alt="" width="64" height="64" loading="lazy">
+            {% else %}
+              <span class="media__thumb media__thumb--placeholder" aria-hidden="true">&#127858;</span>
+            {% endif %}
+            <div class="media__body">
+              {# Kept on one line so the heading reads "Monday: Recipe title" with no stray whitespace. #}
+              <h3 class="media__title">{{ day.day_name }}: {% if day.recipe.source_url %}<a href="{{ day.recipe.source_url }}" rel="noopener noreferrer">{{ day.recipe.title }}</a>{% else %}{{ day.recipe.title }}{% endif %}</h3>
+              <p class="media__meta">
+                ${{ day.recipe.cost_per_serving }}/serving &middot; ${{ day.cost }} for the day
+                &middot; {{ day.recipe.protein_g|floatformat:"0" }} g protein per serving
+              </p>
+              {% if day.targets %}
+                <p class="media__meta">
+                  Day total: {{ day.protein_g }} g protein, {{ day.carbs_g }} g carbs, {{ day.fat_g }} g fat
+                  (target {{ day.targets.protein_g }} / {{ day.targets.carbs_g }} / {{ day.targets.fat_g }} g)
+                </p>
+              {% endif %}
+            </div>
+          </li>
+        {% endfor %}
+      </ol>
+
+      <div class="card__footer">
+        <p class="text-sm">Prices are estimates and vary by store. {{ result.attribution }}</p>
+      </div>
+    {% endif %}
+  </div>
+{% endblock %}

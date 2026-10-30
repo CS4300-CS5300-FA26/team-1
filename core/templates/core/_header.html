@@ -6,6 +6,7 @@
       <ul class="site-nav">
         {% if user.is_authenticated %}
           <li><a class="site-nav__link" href="{% url 'dashboard' %}"{% if current == 'dashboard' %} aria-current="page"{% endif %}>Dashboard</a></li>
+          <li><a class="site-nav__link" href="{% url 'meal_plan' %}"{% if current == 'meal_plan' %} aria-current="page"{% endif %}>Meal plan</a></li>
           <li><a class="site-nav__link" href="{% url 'user_profile' %}"{% if current == 'user_profile' %} aria-current="page"{% endif %}>Profile</a></li>
           <li>
             {# Logout is POST-only, so it is a form rather than a link. #}
