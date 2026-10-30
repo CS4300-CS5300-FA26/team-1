@@ -2,7 +2,8 @@
 
 The planner owns these interfaces; implementations live elsewhere (dependency inversion, ADR-008):
 
-* RecipeSource: where recipes come from (the starter catalog, Spoonacular, or a test fake).
+* RecipeSource: where recipes and their ingredients/steps come from (the starter catalog, Spoonacular,
+  or a test fake).
 * MacroTargetsProvider: daily macro targets. D-4 (macro generation) supplies the real implementation;
   until then `nutrition.macros.NoMacroTargets` returns None and plans are optimised for cost alone.
 
@@ -17,7 +18,7 @@ from typing import Protocol, cast
 from django.conf import settings
 from django.utils.module_loading import import_string
 
-from .domain import MacroTargets, Recipe
+from .domain import MacroTargets, Recipe, RecipeDetails
 
 
 class RecipeServiceUnavailable(Exception):  # noqa: N818 - reads naturally at the call site
@@ -28,7 +29,11 @@ class RecipeSource(Protocol):
     attribution: str  # credit line shown under the plan (some APIs require one)
 
     def budget_recipes(self) -> Sequence[Recipe]:
-        """Return cheap, complete recipes to plan from. Raise RecipeServiceUnavailable on any failure."""
+        """Return cheap, complete breakfast and main recipes. Raise RecipeServiceUnavailable on any failure."""
+        ...
+
+    def recipe_details(self, recipe: Recipe) -> RecipeDetails:
+        """Return ingredients and steps for one of this source's recipes, or raise RecipeServiceUnavailable."""
         ...
 
 

@@ -1,5 +1,9 @@
 {% extends "core/base.html" %}
+{% load static %}
 {% block title %}Meal plan | FitPro{% endblock %}
+{% block extra_head %}
+  <script src="{% static 'nutrition/meal_plan.js' %}" defer></script>
+{% endblock %}
 {% block body %}
   <div class="card card--wide">
     <div class="cluster cluster--between">
@@ -7,7 +11,7 @@
       {% if plan %}
         <p class="stat">
           <span class="stat__value">Est. ${{ plan.total_cost }}</span>
-          <span class="stat__label">of your ${{ plan.budget }} weekly budget</span>
+          <span class="stat__label">for the week, of your ${{ plan.budget }} budget</span>
         </p>
       {% endif %}
     </div>
@@ -28,37 +32,69 @@
         </div>
       {% endif %}
 
-      <p class="text-muted mt-4">
-        One recipe a day, cooked as {{ plan.days.0.servings }} servings: cook once, eat all day.
+      <p class="text-muted mt-4 mb-0">
+        A different recipe for every meal this week, one serving each.
         {% if not plan.uses_macro_targets %}Recipes are chosen for cost; they'll also match your macro targets once those are set up.{% endif %}
       </p>
 
-      <h2 class="visually-hidden">This week's meals</h2>
-      <ol class="media-list mt-4">
-        {% for day in plan.days %}
-          <li class="media">
-            {% if day.recipe.image_url %}
-              <img class="media__thumb" src="{{ day.recipe.image_url }}" alt="" width="64" height="64" loading="lazy">
-            {% else %}
-              <span class="media__thumb media__thumb--placeholder" aria-hidden="true">&#127858;</span>
-            {% endif %}
-            <div class="media__body">
-              {# Kept on one line so the heading reads "Monday: Recipe title" with no stray whitespace. #}
-              <h3 class="media__title">{{ day.day_name }}: {% if day.recipe.source_url %}<a href="{{ day.recipe.source_url }}" rel="noopener noreferrer">{{ day.recipe.title }}</a>{% else %}{{ day.recipe.title }}{% endif %}</h3>
-              <p class="media__meta">
-                ${{ day.recipe.cost_per_serving }}/serving &middot; ${{ day.cost }} for the day
-                &middot; {{ day.recipe.protein_g|floatformat:"0" }} g protein per serving
-              </p>
-              {% if day.targets %}
-                <p class="media__meta">
-                  Day total: {{ day.protein_g }} g protein, {{ day.carbs_g }} g carbs, {{ day.fat_g }} g fat
-                  (target {{ day.targets.protein_g }} / {{ day.targets.carbs_g }} / {{ day.targets.fat_g }} g)
-                </p>
-              {% endif %}
-            </div>
-          </li>
-        {% endfor %}
-      </ol>
+      <div class="meal-plan mt-5" data-meal-plan data-details-url="{% url 'meal_plan_details' %}">
+        <nav class="day-picker" aria-label="Days of the week">
+          <div class="day-picker__step">
+            <a class="btn btn--ghost btn--sm" href="?day={{ previous_day.day_name|lower }}" data-day-step="-1">
+              <span aria-hidden="true">&larr;</span><span class="visually-hidden">Previous day</span>
+            </a>
+            <p class="day-picker__current" aria-live="polite" data-day-current>{{ selected_day.day_name }}</p>
+            <a class="btn btn--ghost btn--sm" href="?day={{ next_day.day_name|lower }}" data-day-step="1">
+              <span aria-hidden="true">&rarr;</span><span class="visually-hidden">Next day</span>
+            </a>
+          </div>
+          <ul class="day-picker__days">
+            {% for day in plan.days %}
+              <li>
+                <a class="day-picker__day" href="?day={{ day.day_name|lower }}" data-day-link="{{ day.day_name|lower }}"{% if day == selected_day %} aria-current="true"{% endif %}>
+                  <span aria-hidden="true">{{ day.day_name|slice:":3" }}</span><span class="visually-hidden">{{ day.day_name }}</span>
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
+        </nav>
+
+        <div class="split mt-4">
+          <div>
+            {% for day in plan.days %}
+              <section class="day-panel" id="day-{{ day.day_name|lower }}" data-day-panel="{{ day.day_name|lower }}"
+                       aria-labelledby="day-{{ day.day_name|lower }}-title"{% if day != selected_day %} hidden{% endif %}>
+                {# The day picker already shows the day name; this heading gives the section its name for screen readers. #}
+                <h2 class="visually-hidden" id="day-{{ day.day_name|lower }}-title">{{ day.day_name }}</h2>
+                <p class="text-muted text-sm mb-0">Day total: ${{ day.cost }} &middot; {{ day.protein_g }} g protein</p>
+                <ol class="media-list mt-3">
+                  {% for meal in day.meals %}
+                    <li>
+                      <a class="media media--link" href="?day={{ day.day_name|lower }}&amp;meal={{ meal.meal }}#meal-details"
+                         data-meal-link data-day="{{ day.day_name|lower }}" data-meal="{{ meal.meal }}"{% if day == selected_day and meal == selected_meal %} aria-current="true"{% endif %}>
+                        {% if meal.recipe.image_url %}
+                          <img class="media__thumb" src="{{ meal.recipe.image_url }}" alt="" width="64" height="64" loading="lazy">
+                        {% else %}
+                          <span class="media__thumb media__thumb--placeholder" aria-hidden="true">&#127858;</span>
+                        {% endif %}
+                        <span class="media__body">
+                          <span class="media__eyebrow">{{ meal.meal|capfirst }}</span>
+                          <span class="media__title">{{ meal.recipe.title }}</span>
+                          <span class="media__meta">${{ meal.cost }} &middot; {{ meal.recipe.protein_g|floatformat:"0" }} g protein</span>
+                        </span>
+                      </a>
+                    </li>
+                  {% endfor %}
+                </ol>
+              </section>
+            {% endfor %}
+          </div>
+
+          <aside class="panel" id="meal-details" aria-label="Selected meal" data-meal-details>
+            {% include "nutrition/_meal_details.html" %}
+          </aside>
+        </div>
+      </div>
 
       <div class="card__footer">
         <p class="text-sm">Prices are estimates and vary by store. {{ result.attribution }}</p>
