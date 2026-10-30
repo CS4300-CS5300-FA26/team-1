@@ -17,9 +17,7 @@ import environ
 
 # Implementing django-environ to prevent secrets from getting committed in the settings file
 #  ref: https://django-environ.readthedocs.io/en/latest/quickstart.html
-env = environ.Env(
-    DEBUG=(bool, False)
-)
+env = environ.Env(DEBUG=(bool, False))
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -55,7 +53,7 @@ CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
 
 # Application definition
 INSTALLED_APPS = [
-    'django.contrib.admin',
+    # 'django.contrib.admin',  # admin disabled, see ADR-007
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -154,6 +152,22 @@ LOGOUT_REDIRECT_URL = 'home'
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 7  # one week, then log in again
+CSRF_COOKIE_SAMESITE = 'Lax'
+
+# Browser-facing security headers set by SecurityMiddleware / XFrameOptionsMiddleware. These
+# are Django's defaults, pinned so a future edit can't loosen them unnoticed.
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'same-origin'
+SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'
+X_FRAME_OPTIONS = 'DENY'
+
+# Rate limits (ADR-006): (allowed attempts, window in seconds). Once the count inside the
+# window is reached, further attempts get HTTP 429 until old ones age out.
+AUTH_THROTTLE = {
+    'login': (5, 15 * 60),  # failed logins per identifier + IP
+    'login_ip': (20, 15 * 60),  # failed logins per IP, any identifier
+    'register': (10, 60 * 60),  # registration attempts per IP
+}
 
 
 # Internationalization
