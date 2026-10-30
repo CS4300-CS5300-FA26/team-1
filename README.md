@@ -42,6 +42,7 @@ conscious students. The application offers personalized workout splits, meal-pre
 * `uv run python manage.py migrate` [Applies database migrations]
 * `uv run python manage.py test` [Runs Django tests]
 * `uv run python manage.py behave` [Runs the Gherkin acceptance scenarios in `features/`]
+* `E2E=1 uv run python manage.py test e2e` [Runs the Playwright browser tests in `e2e/`; run `uv run playwright install chromium` once first]
 
 ### Test coverage
 CI runs the Django tests and the Gherkin scenarios once, under `coverage`, on every push. On pull requests into `main`
@@ -76,12 +77,12 @@ colours, so contrast and dark mode stay correct.
 
 | Purpose | Classes |
 | --- | --- |
-| Page layout | `main` gets `page` (default) or `page page--centered` through `{% block main_class %}`; `container`, `stack` / `stack--sm` / `stack--lg`, `cluster` / `cluster--center` / `cluster--end` |
+| Page layout | `main` gets `page` (default) or `page page--centered` through `{% block main_class %}`; `container`, `stack` / `stack--sm` / `stack--lg`, `cluster` / `cluster--center` / `cluster--end` / `cluster--between` |
 | Card | `card`, `card--narrow`, `card--wide`, `card__title`, `card__subtitle`, `card__footer` |
 | Buttons | `btn` plus `btn--primary`, `btn--secondary`, `btn--ghost`, or `btn--danger`; modifiers `btn--sm`, `btn--block`. Use `<button>` for actions and `<a class="btn">` for navigation |
 | Forms | `form`, `form-field`, `form-label`, `form-input`, `form-help`, `form-error`, `form-fieldset`, `choice-list`, `choice`. `{% include "core/_form_fields.html" %}` renders a whole Django form with these classes and keeps Django's `aria-describedby` / `aria-invalid` wiring |
 | Feedback | `alert` plus `alert--error`, `alert--success`, `alert--warning`, or `alert--info` (add `role="alert"` or `role="status"`) |
-| Content | `hero`, `hero__lede`, `data-list` (on a `<dl>`), `badge` |
+| Content | `hero`, `hero__lede`, `data-list` (on a `<dl>`), `badge`, `media-list` with `media` / `media__thumb` / `media__body` / `media__title` / `media__meta` (rows of thumbnail + text), `stat` / `stat__value` / `stat__label` (a headline number) |
 | Utilities | `text-muted`, `text-center`, `text-sm`, `mt-0`, `mb-0`, `mt-4`, `mt-5`, `visually-hidden` |
 
 Colours, spacing and type are CSS custom properties at the top of `theme.css` (`--color-*`, `--space-*`, `--text-*`).
@@ -111,13 +112,16 @@ Auth lives in the `accounts` app and uses Django's built-in `User` model, sessio
 | `/onboarding/` | `onboarding` | Login required | Onboarding questionnaire (story D-2). Users who already finished it are sent to `/dashboard/` |
 | `/dashboard/` | `dashboard` | Login required | Profile summary. Users who haven't finished onboarding are sent to `/onboarding/` |
 | `/users/` | `user_profile` | Login required | The signed-in user's own profile only |
+| `/meal-plan/` | `meal_plan` | Login required (onboarded users) | This week's budget meal plan (story D-5, [ADR-008](docs/adrs/adr-008.md)): a recipe for each day, estimated cost against the weekly budget, an over-budget notice, and a "temporarily unavailable" state when the recipe service is down |
 
 ### Acceptance scenarios
 The Gherkin scenarios live in [`features/user_auth.feature`](features/user_auth.feature) (successful registration, email
 already registered, wrong password) and [`features/onboarding.feature`](features/onboarding.feature) (complete
-onboarding, missing required answer, returning user skips onboarding). Step definitions are in `features/steps/`.
+onboarding, missing required answer, returning user skips onboarding), and [`features/meal_plan.feature`](features/meal_plan.feature)
+(plan within budget, budget too low, recipe service unavailable). Step definitions are in `features/steps/`.
 Django tests are in `accounts/tests.py` (registration, login, logout), `core/test_onboarding.py` (onboarding, dashboard,
-and the login redirect), and `core/tests.py` (models, health checks, and access control).
+and the login redirect), `core/tests.py` (models, health checks, and access control), and `nutrition/test_*.py` (meal
+planner, recipe sources, Meal Plan page). Browser tests for the Meal Plan page are in `e2e/` (see Common Commands).
 
 ```shell
 uv run python manage.py test    # Django tests
@@ -142,6 +146,7 @@ uv run python manage.py behave  # Gherkin scenarios
   "email already exists" message required by the user story still reveals that an email has an account.
 * **Email format is validated, but ownership is not.** Email verification and password reset need a production email backend (`MAILERS` still uses the console backend).
 * **No admin site.** It was removed ([ADR-007](docs/adrs/adr-007.md)); manage data with `manage.py shell` or a one-off Job. Re-adding it needs network-level restriction first.
+* **Meal plan (D-5)**: the "temporarily unavailable" notice links to the dashboard until "This Week" and starting a workout ship with D-3. Plans are optimised for cost until D-4 provides macro targets. Spoonacular is off in production until `spoonacular-api-key` is added to Secret Manager and the SecretProviderClass and `RECIPE_SOURCE=spoonacular` is set; the built-in starter catalog is used meanwhile (see ADR-008).
 * **Password hashing** uses Django's default; Argon2 is a possible upgrade (needs the `argon2-cffi` dependency).
 
 ## Contributing
@@ -219,3 +224,4 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 | Claude | Nathan Galay | Implemented user story D-1 (user-auth) on the accounts app: generic login error, email login, password and session hardening, Gherkin feature and step definitions, extra Django tests, ADR-005, and this README section |
 | Claude | Caleb Harris | Claude Code added login/registration rate limiting, database-enforced email uniqueness, ruff/mypy/bandit/CodeQL CI gates and Dependabot config, disabled the admin site, wrote ADR-006 and ADR-007, and corrected this README against the Sprint 1 feedback |
 | Claude | Caleb Harris | Claude Code applied the PR #20/#27 review follow-ups (merged duplicate test modules, onboarding input bounds, shared base template, ADR-005) and moved the coverage report into `ci.yml` with the 80% gate and artifact on PRs only |
+| Claude | Caleb Harris | Claude Code implemented story D-5 (weekly budget meal plan): `nutrition` app with a pure planner behind recipe-source and macro-target ports, Spoonacular adapter and starter catalog, Meal Plan page on the global theme, unit/Gherkin/Playwright tests, and ADR-008 |
