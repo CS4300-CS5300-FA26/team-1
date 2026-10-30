@@ -13,6 +13,10 @@ from core.models import UserProfile
 from . import throttle
 from .forms import EMAIL_TAKEN_MESSAGE, LoginForm, RegisterForm
 
+# Created in migration accounts/0002_unique_email_index.
+EMAIL_UNIQUE_INDEX = 'auth_user_email_lower_uniq'
+USERNAME_TAKEN_MESSAGE = 'A user with that username already exists.'
+
 
 class CustomLoginView(LoginView):
     """Log in, then send users who haven't finished the onboarding checklist to it."""
@@ -70,9 +74,16 @@ def register(request):
         try:
             with transaction.atomic():
                 user = form.save()
-        except IntegrityError:
-            # Lost a race with another sign-up for the same email; the database index caught it.
-            form.add_error('email', EMAIL_TAKEN_MESSAGE)
+        except IntegrityError as exc:
+            # Lost a race with another sign-up; the database caught the duplicate. Say which
+            # field collided, and let anything else surface instead of mislabelling it.
+            # PostgreSQL and SQLite both put the violated constraint's name in the message.
+            if EMAIL_UNIQUE_INDEX in str(exc):
+                form.add_error('email', EMAIL_TAKEN_MESSAGE)
+            elif 'username' in str(exc):
+                form.add_error('username', USERNAME_TAKEN_MESSAGE)
+            else:
+                raise
     if user:
         # Every user needs a profile so the onboarding and dashboard views can read it.
         UserProfile.objects.get_or_create(user=user)

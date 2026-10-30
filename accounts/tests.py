@@ -90,6 +90,16 @@ class RegisterTests(TestCase):
         self.assertFalse(User.objects.filter(username='second').exists())
         self.assertNotIn('_auth_user_id', self.client.session)
 
+    def test_username_race_is_reported_as_a_username_conflict_not_an_email_one(self):
+        # Same username, different email, racing past the form's uniqueness check.
+        User.objects.create_user('sam', 'first@example.com', PASSWORD)
+        with mock.patch.object(RegisterForm, 'validate_unique', lambda self: None):
+            response = self.register(username='sam', email='second@example.com')
+        self.assertEqual(response.status_code, 200)
+        self.assertFormError(response.context['form'], 'username', 'A user with that username already exists.')
+        self.assertEqual(response.context['form'].errors.get('email'), None)
+        self.assertNotIn('_auth_user_id', self.client.session)
+
     def test_database_enforces_unique_email_case_insensitively(self):
         User.objects.create_user('first', 'sam@example.com', PASSWORD)
         with self.assertRaises(IntegrityError), transaction.atomic():
