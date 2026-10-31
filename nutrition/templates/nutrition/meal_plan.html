@@ -1,5 +1,5 @@
 {% extends "core/base.html" %}
-{% load static %}
+{% load static meal_plan %}
 {% block title %}Meal plan | FitPro{% endblock %}
 {% block extra_head %}
   <script src="{% static 'nutrition/meal_plan.js' %}" defer></script>
@@ -9,127 +9,155 @@
     <div class="cluster cluster--between">
       <div>
         <h1 class="card__title mb-0">Weekly meal plan</h1>
-        <p class="text-muted text-sm mb-0">Week of {{ current.week_start|date:"F j" }} to {{ current.week_end|date:"F j" }}</p>
+        <p class="text-muted text-sm mb-0">Week of {{ result.week_start|date:"F j" }} to {{ result.week_end|date:"F j" }}</p>
       </div>
-      {% if plan %}
+      {% if result.cost is not None %}
         <p class="stat">
-          <span class="stat__value">Est. ${{ plan.total_cost }}</span>
-          <span class="stat__label">for the week, of your ${{ plan.budget }} budget</span>
+          <span class="stat__value">Est. ${{ result.cost }}</span>
+          <span class="stat__label">grocery cost for the week{% if result.budget is not None %}, of your ${{ result.budget }} budget{% endif %}</span>
         </p>
       {% endif %}
     </div>
 
-    {% if current.unavailable %}
+    {% if result.unavailable %}
       <div class="alert alert--warning mt-5" role="status">
         <p class="mb-0"><strong>Meal suggestions are temporarily unavailable.</strong>
           Please check back later. Your workouts aren't affected.</p>
       </div>
       <div class="cluster mt-5">
-        <a class="btn btn--primary" href="{% url 'dashboard' %}">Go to your dashboard</a>
+        <a class="btn btn--primary" href="{% url workouts_link.url_name %}">{{ workouts_link.text }}</a>
       </div>
     {% else %}
-      <div class="toolbar mt-4">
-        {% if current.is_saved %}
-          <span class="status-badge status-badge--saved">
-            <svg class="status-badge__icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3.5 8.5l3 3 6-7"/></svg>
-            Saved {{ current.saved.saved_at|date:"M j, g:i A" }}
-          </span>
-        {% else %}
-          <span class="status-badge">Not saved</span>
-        {% endif %}
-        <div class="cluster">
-          {% if not current.is_saved %}
-            <form method="post" action="{% url 'meal_plan_save' %}" data-keep-selection>
-              {% csrf_token %}
-              <input type="hidden" name="day" value="{{ selected_day.day_name|lower }}">
-              <input type="hidden" name="meal" value="{{ selected_meal.meal }}">
-              <button type="submit" class="btn btn--primary btn--sm">Save meal plan</button>
-            </form>
-          {% endif %}
-          <form method="post" action="{% url 'meal_plan_new' %}">
-            {% csrf_token %}
-            <button type="submit" class="btn btn--secondary btn--sm">Generate a new meal plan</button>
-          </form>
-          {% if current.saved and not current.is_saved %}
-            <form method="post" action="{% url 'meal_plan_discard' %}">
-              {% csrf_token %}
-              <button type="submit" class="btn btn--ghost btn--sm">Back to saved plan</button>
-            </form>
-          {% endif %}
-          <a class="btn btn--ghost btn--sm" href="{% url 'meal_plan_report' %}">View report</a>
+      {% if result.over_budget_by %}
+        <div class="alert alert--warning mt-4" role="status">
+          <p class="mb-0"><strong>${{ result.over_budget_by }} over your ${{ result.budget }} budget.</strong>
+            Your budget is too low for a full week of these recipes, so this is the lowest-cost plan available.</p>
         </div>
+      {% endif %}
+
+      <div class="alert alert--info mt-4" role="note">
+        <p class="mb-0"><strong>How this plan was made</strong></p>
+        <ul class="alert__list">
+          {% if result.personal_targets %}
+            <li>Meals are matched to your daily macro targets.</li>
+          {% else %}
+            <li>Your personal macro targets aren't ready yet, so meals are matched to the {{ daily_values_kcal|floatformat:"0g" }}-calorie FDA Daily Values: {{ daily_values.protein_g|floatformat:"0" }} g protein, {{ daily_values.carbs_g|floatformat:"0" }} g carbohydrate, and {{ daily_values.fat_g|floatformat:"0" }} g fat a day.</li>
+          {% endif %}
+          {% if result.prices == 'not_connected' %}
+            <li>Grocery prices aren't available yet, so there's no cost estimate and this plan isn't limited by your weekly budget.</li>
+          {% elif result.prices == 'incomplete' %}
+            <li>Grocery prices are only available for some ingredients, so there's no cost estimate yet and this plan isn't limited by your weekly budget.</li>
+          {% elif result.budget is None %}
+            <li>You haven't set a weekly food budget, so this plan is chosen for nutrition alone.</li>
+          {% endif %}
+          {% if result.cost is not None %}
+            <li>The estimate averages current grocery prices and buys whole packages, so some ingredients will be left over. Meals that share ingredients keep it down.</li>
+          {% endif %}
+          <li>Nutrition comes from USDA FoodData Central.</li>
+        </ul>
       </div>
 
-      {% if not plan.within_budget %}
-        <div class="alert alert--warning mt-4" role="status">
-          <p class="mb-0"><strong>${{ plan.over_budget_by }} over your ${{ plan.budget }} budget.</strong>
-            Your budget is too low for a full week, so this is the lowest-cost plan available.</p>
+      <div class="meal-plan mt-5" data-meal-plan>
+        <div class="cluster cluster--between">
+          <h2 class="h3 mb-0">This week</h2>
+          <form method="post" action="{% url 'meal_plan_new' %}">
+            {% csrf_token %}
+            <input type="hidden" name="day" value="{{ selected_day_key }}" data-day-input>
+            <button type="submit" class="btn btn--secondary btn--sm">Generate a new meal plan</button>
+          </form>
         </div>
-      {% endif %}
 
-      {% if not plan.uses_macro_targets %}
-        <p class="text-muted text-sm mt-4 mb-0">
-          A different recipe for every meal, one serving each. Recipes are chosen for cost; they'll also match your macro targets once those are set up.
-        </p>
-      {% endif %}
-
-      <div class="meal-plan mt-5" data-meal-plan data-details-url="{% url 'meal_plan_details' %}">
-        <nav class="day-picker" aria-label="Days of the week">
+        <nav class="day-picker mt-4" aria-label="Days of the week">
           <div class="day-picker__step">
-            <a class="btn btn--ghost btn--sm" href="?day={{ previous_day.day_name|lower }}" data-day-step="-1">
+            <a class="btn btn--ghost btn--sm" href="?day={{ previous_day_key }}" data-day-step="-1">
               <span aria-hidden="true">&larr;</span><span class="visually-hidden">Previous day</span>
             </a>
-            <p class="day-picker__current" aria-live="polite" data-day-current>{{ selected_day.day_name }}</p>
-            <a class="btn btn--ghost btn--sm" href="?day={{ next_day.day_name|lower }}" data-day-step="1">
+            <p class="day-picker__current" aria-live="polite" data-day-current>{{ selected_day_name }}</p>
+            <a class="btn btn--ghost btn--sm" href="?day={{ next_day_key }}" data-day-step="1">
               <span aria-hidden="true">&rarr;</span><span class="visually-hidden">Next day</span>
             </a>
           </div>
           <ul class="day-picker__days">
-            {% for day in plan.days %}
+            {% for day in days %}
               <li>
-                <a class="day-picker__day" href="?day={{ day.day_name|lower }}" data-day-link="{{ day.day_name|lower }}"{% if day == selected_day %} aria-current="true"{% endif %}>
-                  <span aria-hidden="true">{{ day.day_name|slice:":3" }}</span><span class="visually-hidden">{{ day.day_name }}</span>
+                <a class="day-picker__day" href="?day={{ day.key }}" data-day-link="{{ day.key }}" data-day-name="{{ day.name }}"
+                   {% if day.is_selected %}aria-current="true"{% endif %}>
+                  <span class="day-picker__name" aria-hidden="true">{{ day.name|slice:":3" }}</span>
+                  <span class="day-picker__date" aria-hidden="true">{{ day.date|date:"j" }}</span>
+                  <span class="visually-hidden">{{ day.name }}, {{ day.date|date:"F j" }}{% if day.is_today %} (today){% endif %}</span>
+                  {% if day.is_today %}<span class="day-picker__today" aria-hidden="true">Today</span>{% endif %}
                 </a>
               </li>
             {% endfor %}
           </ul>
         </nav>
 
-        <div class="split mt-4">
-          <div>
-            {% for day in plan.days %}
-              <section class="day-panel" id="day-{{ day.day_name|lower }}" data-day-panel="{{ day.day_name|lower }}"
-                       aria-labelledby="day-{{ day.day_name|lower }}-title"{% if day != selected_day %} hidden{% endif %}>
-                {# The day picker already shows the day name; this heading gives the section its name for screen readers. #}
-                <h2 class="visually-hidden" id="day-{{ day.day_name|lower }}-title">{{ day.day_name }}</h2>
-                <p class="text-muted text-sm mb-0">Day total: ${{ day.cost }} &middot; {{ day.protein_g }} g protein</p>
-                <ol class="media-list mt-3">
-                  {% for meal in day.meals %}
-                    <li>
-                      <a class="media media--link" href="?day={{ day.day_name|lower }}&amp;meal={{ meal.meal }}#meal-details"
-                         data-meal-link data-day="{{ day.day_name|lower }}" data-meal="{{ meal.meal }}"{% if day == selected_day and meal == selected_meal %} aria-current="true"{% endif %}>
-                        {% include "nutrition/_food_image.html" with recipe=meal.recipe %}
-                        <span class="media__body">
-                          <span class="media__eyebrow">{{ meal.meal|capfirst }}</span>
-                          <span class="media__title">{{ meal.recipe.title }}</span>
-                          <span class="media__meta">${{ meal.cost }} &middot; {{ meal.recipe.protein_g|floatformat:"0" }} g protein</span>
-                        </span>
-                      </a>
-                    </li>
+        {% for day in days %}
+          <section class="day-plan mt-5" id="day-{{ day.key }}" data-day-panel="{{ day.key }}" aria-labelledby="day-{{ day.key }}-title"
+                   {% if not day.is_selected %}hidden{% endif %}>
+            {# The day picker shows the day; this heading names the section for screen readers. #}
+            <h2 class="visually-hidden" id="day-{{ day.key }}-title">{{ day.name }}, {{ day.date|date:"F j" }}</h2>
+            <div class="split split--main-first">
+              {# First in the page so phones show the totals above the meals; wide screens put them on the right. #}
+              <aside class="panel panel--sticky split__aside" aria-labelledby="day-{{ day.key }}-totals">
+                <h3 class="h4" id="day-{{ day.key }}-totals">{{ day.name }}'s totals</h3>
+                <p class="stat stat--start mb-0">
+                  <span class="stat__value">{{ day.nutrients.kcal|floatformat:"0g" }} kcal</span>
+                  <span class="stat__label">across {{ day.meals|length }} meal{{ day.meals|length|pluralize }}</span>
+                </p>
+                <dl class="macro-list mt-4">
+                  {% for row in day.macros %}
+                    <div class="macro-list__row">
+                      <dt>{{ row.label }}</dt>
+                      <dd>{{ row.grams }} g <span class="text-muted">of {{ row.target }} g</span></dd>
+                      {# Decorative: the numbers carry the value. #}
+                      <dd class="macro-list__meter" aria-hidden="true">
+                        <svg class="bar" width="100%" height="6" focusable="false">
+                          <rect class="bar__track" width="100%" height="6" rx="3"/>
+                          {% if row.percent %}<rect class="bar__fill" width="{{ row.percent }}%" height="6" rx="3"/>{% endif %}
+                        </svg>
+                      </dd>
+                    </div>
                   {% endfor %}
-                </ol>
-              </section>
-            {% endfor %}
-          </div>
-
-          <aside class="panel panel--sticky" id="meal-details" aria-label="Selected meal" tabindex="0" data-meal-details>
-            {% include "nutrition/_meal_details.html" %}
-          </aside>
-        </div>
-      </div>
-
-      <div class="card__footer">
-        <p class="text-sm">Prices are estimates and vary by store. {{ current.attribution }}</p>
+                </dl>
+                {% if partial_day %}<p class="text-muted text-sm mt-3 mb-0">Targets are scaled to the meals you plan each day.</p>{% endif %}
+              </aside>
+              <ol class="meal-stack split__main">
+                {% for meal in day.meals %}
+                  <li class="meal-card">
+                    <div class="meal-card__header">
+                      {% include "nutrition/_food_image.html" with recipe=meal.recipe %}
+                      <div class="meal-card__heading">
+                        <p class="eyebrow mb-0">{{ meal.meal|capfirst }} &middot; {{ meal.servings|servings }}</p>
+                        <h3 class="meal-card__title">{{ meal.recipe.title }}</h3>
+                        <p class="meal-card__meta">{{ meal.nutrients.kcal|floatformat:"0" }} kcal &middot; {{ meal.nutrients.protein_g|floatformat:"0" }} g protein &middot; {{ meal.nutrients.carbs_g|floatformat:"0" }} g carbs &middot; {{ meal.nutrients.fat_g|floatformat:"0" }} g fat</p>
+                      </div>
+                    </div>
+                    <details class="disclosure meal-card__recipe">
+                      <summary class="disclosure__summary">
+                        Recipe
+                        <span class="text-muted text-sm">{{ meal.recipe.lines|length }} ingredients{% if meal.recipe.ready_in_minutes %} &middot; {{ meal.recipe.ready_in_minutes }} min{% endif %}</span>
+                      </summary>
+                      <div class="disclosure__body">
+                        <h4 class="h4">Ingredients</h4>
+                        {% if meal.servings != 1 %}<p class="text-muted text-sm">Weights are for {{ meal.servings|servings }}.</p>{% endif %}
+                        <ul class="ingredient-grid ingredient-grid--weighed">
+                          {% for line, grams in meal.lines %}
+                            <li><span>{{ line.text }}</span>{% if grams %} <span class="ingredient-grid__amount">{{ grams|floatformat:"0" }} g</span>{% endif %}</li>
+                          {% endfor %}
+                        </ul>
+                        <h4 class="h4 mt-4">Steps</h4>
+                        <ol class="steps">
+                          {% for step in meal.recipe.steps %}<li class="steps__item">{{ step }}</li>{% endfor %}
+                        </ol>
+                      </div>
+                    </details>
+                  </li>
+                {% endfor %}
+              </ol>
+            </div>
+          </section>
+        {% endfor %}
       </div>
     {% endif %}
   </div>

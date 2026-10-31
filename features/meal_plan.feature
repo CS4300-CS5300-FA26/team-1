@@ -19,3 +19,17 @@ Feature: D-5 Weekly budget meal plan
     When I open Meal Plan
     Then I see that meal suggestions are temporarily unavailable
     And I can still open This Week and start a workout
+
+  # Fallbacks while the features this one connects to (D-4 macro targets, D-6 grocery prices) aren't ready (ADR-008).
+
+  Scenario: No personal macro targets yet
+    Given my macro targets have not been generated yet
+    When I open Meal Plan
+    Then I see recipes for each day of the week
+    And I am told the plan uses the published Daily Values
+
+  Scenario: No grocery prices yet
+    Given grocery prices are not available yet
+    When I open Meal Plan
+    Then I see recipes for each day of the week
+    And I am told there is no cost estimate and my budget isn't applied yet

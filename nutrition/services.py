@@ -1,56 +1,68 @@
-"""Use cases for the meal plan (ADR-008): this week's plan, saving it, generating a new one, and meal details.
+"""Use cases for the weekly meal plan (story D-5, ADR-008). The one place that wires the connectors to the planner.
 
-This is the one place that wires the configured ports to the planner. Other features (for example the
-D-6 grocery list) should call these functions rather than reaching into the planner or the sources.
+* `current_meal_plan`: this week's plan for a user. The stored plan is reused while what it was made from (budget,
+  meals, daily targets, whether prices are connected) is unchanged; otherwise a new one is made and stored.
+* `new_meal_plan`: replace this week's plan with a different one.
+* `stored_week_plan`: for D-6 (grocery list) and other features: the stored plan, read-only. None when the user has
+  no plan this week (D-6's "Empty week" scenario).
 
-Which plan a user sees this week, in order:
-1. their unsaved draft (kept in the server-side session), if it still matches their budget and meals;
-2. the plan they saved for this week (SavedMealPlan);
-3. a freshly generated plan, which becomes the draft.
-"Save meal plan" stores the current plan for the week; "Generate a new meal plan" replaces the draft with
-one that avoids the recipes already shown this week.
+Fallbacks when a connected feature has nothing yet (each is shown to the user):
+* no personal macro targets (D-4)  -> the FDA Daily Values for a 2,000-calorie diet;
+* no prices (D-6)                  -> no cost estimate, and the plan isn't limited by the budget;
+* no weekly budget                 -> a plan chosen for nutrition alone, with its cost shown if prices exist.
 """
 
 import logging
-from collections.abc import Collection, MutableMapping, Sequence
+import secrets
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 
+from django.db import transaction
 from django.utils import timezone
 
-from . import plan_store
-from .domain import MEALS, MacroTargets, MealPlan, Recipe, RecipeDetails
-from .models import SavedMealPlan
-from .planner import DAY_NAMES, NoRecipesError, build_week_plan
-from .ports import RecipeServiceUnavailable, macro_targets_provider, recipe_source
+from . import pricing
+from .domain import MacroTargets, PlannedMeal, PriceEstimate, Recipe, WeekPlan, purchase_cost
+from .models import PlannedMealEntry, WeeklyMealPlan
+from .planner import NoRecipesError, build_week_plan, covers_meals, recipes_with_prices
+from .ports import RecipeServiceUnavailable, grocery_price_source, macro_targets_provider, recipe_source
+from .targets import published_weekly_targets
 
 logger = logging.getLogger(__name__)
 
-# Onboarding's meal pattern answer (core.models.MEAL_PATTERN_CHOICES) -> the meals planned each day.
-MEALS_FOR_PATTERN = {
-    'three': ('breakfast', 'lunch', 'dinner'),
-    'breakfast_dinner': ('breakfast', 'dinner'),
-    'lunch_dinner': ('lunch', 'dinner'),
-    'dinner': ('dinner',),
-}
+PRICES_CONNECTED = 'connected'  # every planned meal can be priced
+PRICES_INCOMPLETE = 'incomplete'  # some prices, but too few recipes fully priced to plan with
+PRICES_NOT_CONNECTED = 'not_connected'  # no prices at all (D-6 not connected yet, or down)
 
 
 @dataclass(frozen=True)
 class MealPlanResult:
-    """A plan, or None when suggestions are unavailable. `attribution` credits the recipe source."""
+    """This week's plan and how it was made, for the page. `plan` is None when recipes are unavailable."""
 
-    plan: MealPlan | None
-    attribution: str = ''
+    week_start: date
+    plan: WeekPlan | None
+    personal_targets: bool = False
+    prices: str = PRICES_NOT_CONNECTED
+    budget: Decimal | None = None
+    cost: Decimal | None = None
 
     @property
     def unavailable(self) -> bool:
         return self.plan is None
 
+    @property
+    def budget_applied(self) -> bool:
+        return self.budget is not None and self.prices == PRICES_CONNECTED
 
-def meals_for_pattern(pattern: str) -> tuple[str, ...]:
-    """The meals to plan for an onboarding answer; all three if it's blank (users who onboarded before it existed)."""
-    return MEALS_FOR_PATTERN.get(pattern, MEALS)
+    @property
+    def over_budget_by(self) -> Decimal | None:
+        if not self.budget_applied or self.cost is None or self.budget is None:
+            return None
+        return max(self.cost - self.budget, Decimal('0.00'))
+
+    @property
+    def week_end(self) -> date:
+        return self.week_start + timedelta(days=6)
 
 
 def week_start(today: date | None = None) -> date:
@@ -59,148 +71,133 @@ def week_start(today: date | None = None) -> date:
     return today - timedelta(days=today.weekday())
 
 
-def weekly_meal_plan(
-    user,
-    budget: Decimal | None,
-    meals: Sequence[str] = MEALS,
-    today: date | None = None,
-    avoid: Collection[str] = frozenset(),
-) -> MealPlanResult:
-    """Generate this week's meals for `user`. A missing or negative budget counts as $0.
+def current_meal_plan(user, meals, budget: Decimal | None, today: date | None = None) -> MealPlanResult:
+    return _meal_plan(user, tuple(meals), budget, week_start(today), regenerate=False)
 
-    Never raises for an unavailable recipe service; the result says so instead.
+
+def new_meal_plan(user, meals, budget: Decimal | None, today: date | None = None) -> MealPlanResult:
+    return _meal_plan(user, tuple(meals), budget, week_start(today), regenerate=True)
+
+
+def stored_week_plan(user, monday: date | None = None) -> WeekPlan | None:
+    """The user's stored plan for the week starting `monday` (this week by default), or None if there isn't one.
+
+    Read-only, for other features: D-6 combines `plan.meals[i].lines()` (each ingredient line with its grams for
+    that meal's servings) into a grocery list. Never creates a plan.
     """
-    budget = max(budget or Decimal(0), Decimal(0))
-    targets = _targets_or_none(user, week_start(today))
-    source = recipe_source()
-    try:
-        plan = build_week_plan(source.budget_recipes(), budget, meals, targets, avoid)
-    except (RecipeServiceUnavailable, NoRecipesError):
-        return MealPlanResult(plan=None)
-    return MealPlanResult(plan=plan, attribution=source.attribution)
-
-
-DRAFT_SESSION_KEY = 'nutrition.meal_plan_draft'
-
-
-@dataclass(frozen=True)
-class CurrentPlan:
-    """The plan a user sees this week, and whether it's the one they saved."""
-
-    week_start: date
-    snapshot: plan_store.Snapshot | None
-    saved: SavedMealPlan | None = None
-
-    @property
-    def plan(self) -> MealPlan | None:
-        return self.snapshot.plan if self.snapshot else None
-
-    @property
-    def attribution(self) -> str:
-        return self.snapshot.attribution if self.snapshot else ''
-
-    @property
-    def unavailable(self) -> bool:
-        return self.snapshot is None
-
-    @property
-    def is_saved(self) -> bool:
-        if self.saved is None or self.snapshot is None:
-            return False
-        return plan_store.dump(self.snapshot) == self.saved.plan
-
-    @property
-    def week_end(self) -> date:
-        return self.week_start + timedelta(days=6)
-
-
-def _fingerprint(monday: date, budget: Decimal | None, meals: Sequence[str]) -> str:
-    """What a draft was generated for; a draft for a different week, budget, or meals is stale."""
-    return f'{monday.isoformat()}|{max(budget or Decimal(0), Decimal(0)):.2f}|{",".join(meals)}'
-
-
-def _recipe_ids(plan: MealPlan | None) -> set[str]:
-    return {meal.recipe.id for day in plan.days for meal in day.meals} if plan else set()
-
-
-def current_meal_plan(
-    user, session: MutableMapping, budget: Decimal | None, meals: Sequence[str], today: date | None = None
-) -> CurrentPlan:
-    """The plan to show this week: the matching draft, else the saved plan, else a new plan (kept as the draft)."""
-    monday = week_start(today)
-    fingerprint = _fingerprint(monday, budget, meals)
-    saved = SavedMealPlan.objects.filter(user=user, week_start=monday).first()
-
-    draft = session.get(DRAFT_SESSION_KEY)
-    snapshot = None
-    if draft and draft.get('fingerprint') == fingerprint:
-        snapshot = plan_store.load(draft.get('plan'))
-    if snapshot is None:
-        session.pop(DRAFT_SESSION_KEY, None)
-        if saved:
-            snapshot = plan_store.load(saved.plan)
-    if snapshot is None:
-        result = weekly_meal_plan(user, budget, meals, today)
-        if result.plan:
-            snapshot = plan_store.Snapshot(result.plan, result.attribution)
-            _store_draft(session, fingerprint, snapshot, seen=_recipe_ids(result.plan))
-    return CurrentPlan(week_start=monday, snapshot=snapshot, saved=saved)
-
-
-def save_meal_plan(
-    user, session: MutableMapping, budget: Decimal | None, meals: Sequence[str], today: date | None = None
-) -> CurrentPlan | None:
-    """Keep the current plan as this week's saved plan. None if there's no plan to save."""
-    current = current_meal_plan(user, session, budget, meals, today)
-    if current.snapshot is None:
+    stored = WeeklyMealPlan.objects.filter(user=user, week_start=monday or week_start()).first()
+    if stored is None:
         return None
-    saved, _ = SavedMealPlan.objects.update_or_create(
-        user=user, week_start=current.week_start, defaults={'plan': plan_store.dump(current.snapshot)}
-    )
-    session.pop(DRAFT_SESSION_KEY, None)
-    return CurrentPlan(week_start=current.week_start, snapshot=current.snapshot, saved=saved)
-
-
-def generate_new_meal_plan(
-    user, session: MutableMapping, budget: Decimal | None, meals: Sequence[str], today: date | None = None
-) -> CurrentPlan | None:
-    """Replace the draft with a plan that avoids the recipes already shown this week. None if unavailable."""
-    current = current_meal_plan(user, session, budget, meals, today)
-    draft = session.get(DRAFT_SESSION_KEY) or {}
-    seen = set(draft.get('seen', [])) | _recipe_ids(current.plan)
-    result = weekly_meal_plan(user, budget, meals, today, avoid=seen)
-    if result.plan is None:
-        return None
-    snapshot = plan_store.Snapshot(result.plan, result.attribution)
-    fingerprint = _fingerprint(current.week_start, budget, meals)
-    _store_draft(session, fingerprint, snapshot, seen=seen | _recipe_ids(result.plan))
-    return CurrentPlan(week_start=current.week_start, snapshot=snapshot, saved=current.saved)
-
-
-def discard_draft(session: MutableMapping) -> None:
-    """Drop the unsaved draft, so the saved plan (if any) shows again."""
-    session.pop(DRAFT_SESSION_KEY, None)
-
-
-def _store_draft(session: MutableMapping, fingerprint: str, snapshot: plan_store.Snapshot, seen: set[str]) -> None:
-    session[DRAFT_SESSION_KEY] = {'fingerprint': fingerprint, 'plan': plan_store.dump(snapshot), 'seen': sorted(seen)}
-
-
-def meal_details(recipe: Recipe) -> RecipeDetails | None:
-    """Ingredients and steps for a planned recipe, or None if the recipe service can't provide them now."""
     try:
-        return recipe_source().recipe_details(recipe)
+        recipes = {r.id: r for r in recipe_source().recipes()}
     except RecipeServiceUnavailable:
         return None
+    return _load(stored, recipes)
 
 
-def _targets_or_none(user, monday: date) -> list[MacroTargets] | None:
-    """Ask the macro provider for this week's targets; a broken answer means "plan by cost alone"."""
-    targets = macro_targets_provider().weekly_targets(user, monday)
-    if targets is None:
+def _meal_plan(user, meals: tuple[str, ...], budget: Decimal | None, monday: date, regenerate: bool) -> MealPlanResult:
+    budget = max(budget, Decimal(0)) if budget is not None else None
+    targets, personal = _targets(user, monday)
+    try:
+        recipes = list(recipe_source().recipes())
+    except RecipeServiceUnavailable:
+        return MealPlanResult(week_start=monday, plan=None)
+    prices, price_status = _prices(recipes, meals)
+    inputs = {
+        'meals': list(meals),
+        'budget': str(budget) if budget is not None else None,
+        'targets': [[t.protein_g, t.carbs_g, t.fat_g] for t in targets],
+        'priced': price_status == PRICES_CONNECTED,
+    }
+    stored = WeeklyMealPlan.objects.filter(user=user, week_start=monday).first()
+    plan = None
+    if stored is not None and stored.inputs == inputs and not regenerate:
+        plan = _load(stored, {r.id: r for r in recipes})
+    if plan is None:
+        avoid = _load_ids(stored) if regenerate and stored is not None else set()
+        try:
+            plan = _generate_and_store(
+                user, monday, recipes, meals, targets, prices, price_status, budget, inputs, avoid
+            )
+        except NoRecipesError:
+            logger.error('The recipe catalog has no recipes for one of the meals %s.', ', '.join(meals))
+            return MealPlanResult(week_start=monday, plan=None)
+    cost = purchase_cost(plan.grams_needed(), prices) if price_status == PRICES_CONNECTED else None
+    return MealPlanResult(
+        week_start=monday, plan=plan, personal_targets=personal, prices=price_status, budget=budget, cost=cost
+    )
+
+
+def _generate_and_store(user, monday, recipes, meals, targets, prices, price_status, budget, inputs, avoid) -> WeekPlan:
+    seed = secrets.randbelow(2**31)
+    priced = price_status == PRICES_CONNECTED
+    result = build_week_plan(
+        recipes,
+        meals,
+        targets,
+        prices=prices if priced else None,
+        budget=budget if priced else None,
+        seed=seed,
+        avoid=avoid,
+    )
+    with transaction.atomic():
+        stored, _ = WeeklyMealPlan.objects.update_or_create(
+            user=user, week_start=monday, defaults={'inputs': inputs, 'seed': seed}
+        )
+        stored.entries.all().delete()
+        PlannedMealEntry.objects.bulk_create(
+            PlannedMealEntry(plan=stored, day=m.day, meal=m.meal, recipe_id=m.recipe.id, servings=m.servings)
+            for m in result.plan.meals
+        )
+    return result.plan
+
+
+def _load(stored: WeeklyMealPlan, recipes: dict[str, Recipe]) -> WeekPlan | None:
+    """Rebuild a stored plan; None if it no longer fits (a recipe left the catalog, or the data is unreadable)."""
+    meals = tuple(stored.inputs.get('meals') or ())
+    order = {meal: index for index, meal in enumerate(meals)}
+    entries = sorted(stored.entries.all(), key=lambda e: (e.day, order.get(e.meal, len(order))))
+    if not meals or len(entries) != 7 * len(meals) or any(e.recipe_id not in recipes for e in entries):
         return None
-    targets = list(targets)
-    if len(targets) != len(DAY_NAMES) or not all(isinstance(t, MacroTargets) for t in targets):
-        logger.error('Macro targets provider returned an invalid week; planning by cost alone.')
+    try:
+        targets = tuple(MacroTargets(*values) for values in stored.inputs['targets'])
+        planned = tuple(PlannedMeal(e.day, e.meal, recipes[e.recipe_id], e.servings) for e in entries)
+        return WeekPlan(meals=planned, daily_targets=targets, meal_keys=meals)
+    except (KeyError, TypeError, ValueError) as exc:
+        logger.warning('Ignoring an unreadable stored meal plan: %s', type(exc).__name__)
         return None
-    return targets
+
+
+def _load_ids(stored: WeeklyMealPlan) -> set[str]:
+    return set(stored.entries.values_list('recipe_id', flat=True))
+
+
+def _targets(user, monday: date) -> tuple[tuple[MacroTargets, ...], bool]:
+    """Seven daily targets from the macro connector (D-4), or the published Daily Values. True if personal."""
+    try:
+        targets = macro_targets_provider().weekly_targets(user, monday)
+    except Exception:  # noqa: BLE001 - a teammate's connector failing must not take the meal plan down
+        logger.exception('The macro targets connector failed; using the published Daily Values.')
+        targets = None
+    if targets is not None:
+        targets = tuple(targets)
+        if len(targets) == 7 and all(isinstance(t, MacroTargets) for t in targets):
+            return targets, True
+        logger.error('The macro targets connector returned an invalid week; using the published Daily Values.')
+    return published_weekly_targets(), False
+
+
+def _prices(recipes: list[Recipe], meals: tuple[str, ...]) -> tuple[dict[str, PriceEstimate], str]:
+    """Average prices from the grocery price connector (D-6), and whether they are enough to plan with."""
+    ingredients = list({key: i for r in recipes for key, i in r.ingredients.items()}.values())
+    try:
+        quotes = grocery_price_source().quotes(ingredients)
+    except Exception:  # noqa: BLE001 - a teammate's connector failing must not take the meal plan down
+        logger.exception('The grocery price connector failed; planning without prices.')
+        quotes = {}
+    estimates = pricing.estimates(ingredients, quotes or {})
+    if not estimates:
+        return {}, PRICES_NOT_CONNECTED
+    if covers_meals(recipes_with_prices(recipes, estimates), meals):
+        return estimates, PRICES_CONNECTED
+    return estimates, PRICES_INCOMPLETE

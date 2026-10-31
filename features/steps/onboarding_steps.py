@@ -25,7 +25,7 @@ ANSWERS = {
     'weight': '180.5',
     'experience_level': 'intermediate',
     'weekly_food_budget': '85.50',
-    'meal_pattern': 'breakfast_dinner',
+    'planned_meals': ['breakfast', 'dinner'],
     'equipment': ['dumbbells', 'bands'],
 }
 
@@ -36,7 +36,7 @@ SAVED_ANSWERS = {
     'weight': Decimal('180.50'),
     'experience_level': 'intermediate',
     'weekly_food_budget': Decimal('85.50'),
-    'meal_pattern': 'three',
+    'planned_meals': ['breakfast', 'lunch', 'dinner'],
     'equipment': ['dumbbells'],
 }
 
@@ -73,7 +73,7 @@ def step_see_profile_summary(context):
         '180.5',
         'Intermediate',
         '$85.50',
-        'Breakfast and dinner',
+        'Breakfast, Dinner',
         'Dumbbells',
         'Resistance bands',
     ):

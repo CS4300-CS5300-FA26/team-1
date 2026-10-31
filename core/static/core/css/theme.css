@@ -821,8 +821,7 @@ input[type="radio"] {
   letter-spacing: 0.04em;
 }
 
-/* Food image: a recipe photo over course-tinted artwork. The art always renders underneath, so a
-   missing or broken photo (decorative, alt="") just shows the art. */
+/* Food image: course-tinted placeholder artwork for a recipe (decorative). */
 .food-image {
   position: relative;
   display: grid;
@@ -860,14 +859,6 @@ input[type="radio"] {
   stroke-width: 2;
   stroke-linecap: round;
   opacity: 0.6;
-}
-
-.food-image__photo {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 
 /* Toolbar: a status on the left and actions on the right; wraps on small screens. */
@@ -1212,13 +1203,32 @@ input[type="radio"] {
 .disclosure__summary {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-3);
   min-height: var(--control-height);
   padding: 0 var(--space-4);
   font-weight: 700;
   cursor: pointer;
+  list-style: none;
 }
+
+.disclosure__summary::-webkit-details-marker { display: none; }
+
+/* A chevron that points right when closed and down when open (the flex summary hides the native marker). */
+.disclosure__summary::before {
+  content: "";
+  flex-shrink: 0;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-right: 2px solid currentcolor;
+  border-bottom: 2px solid currentcolor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+
+.disclosure[open] > .disclosure__summary::before { transform: rotate(45deg); }
+
+/* Anything after the label (counts, times) sits at the end. */
+.disclosure__summary > * { margin-left: auto; }
 
 .disclosure__body { padding: 0 var(--space-4) var(--space-4); }
 
@@ -1236,6 +1246,104 @@ input[type="radio"] {
 
 /* Theme toggle button in the header (hidden until theme.js runs, so it never shows unusable). */
 .theme-toggle__icon { font-size: 1.1em; line-height: 1; }
+
+/* Meal cards: one planned meal (art, what it is, its numbers) with its recipe in a disclosure underneath, so
+   opening a recipe expands in place instead of moving the page. */
+.meal-stack {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.meal-card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.meal-card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.meal-card__heading { display: grid; gap: var(--space-1); min-width: 0; }
+.meal-card__title { margin: 0; font-size: var(--text-lg); }
+.meal-card__meta { margin: 0; color: var(--color-text-muted); font-size: var(--text-sm); }
+.meal-card__recipe { background: var(--color-surface-raised); }
+
+@media (max-width: 30rem) {
+  .meal-card { padding: var(--space-3); }
+  .meal-card .food-image { width: 3rem; height: 3rem; }
+}
+
+/* Split variant: a wider main column with a summary beside it. Put the summary (.split__aside) first in the HTML so
+   phones show it above the main content (.split__main); wide screens place it in the right-hand column. Placing it
+   with the grid keeps reading order and visual order the same on phones, unlike `order` or a reversed flexbox. */
+@media (min-width: 48rem) {
+  .split--main-first { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+  .split--main-first > .split__main { grid-column: 1; grid-row: 1; }
+  .split--main-first > .split__aside { grid-column: 2; grid-row: 1; }
+}
+
+/* Macro list: each macro's grams against a target, with a thin bar. */
+.macro-list { display: grid; gap: var(--space-3); margin: 0; }
+
+.macro-list__row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-3);
+  align-items: baseline;
+}
+
+.macro-list__row dt { font-weight: 600; }
+.macro-list__row dd { margin: 0; text-align: right; }
+.macro-list__meter { grid-column: 1 / -1; line-height: 0; }
+
+/* A stat aligned with the start of its column instead of the end. */
+.stat--start { text-align: left; }
+
+/* A short bullet list inside an alert. */
+.alert .alert__list {
+  display: grid;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+  padding-left: var(--space-5);
+  font-weight: 400;
+  list-style: disc;
+}
+
+/* Day picker days with the date under the weekday, and "Today" marked in words. */
+/* Every day fills the row's height, so the one with "Today" doesn't stand taller than the rest. */
+.day-picker__days > li { display: flex; }
+.day-picker__day { flex: 1; flex-direction: column; gap: 0; padding: var(--space-1) 0; line-height: 1.2; }
+.day-picker__date { font-size: var(--text-sm); font-weight: 400; }
+.day-picker__today { font-size: 0.75rem; font-weight: 700; text-decoration: underline; }
+
+/* Ingredients with a weight at the end of each line (one per row). */
+.ingredient-grid--weighed { grid-template-columns: minmax(0, 1fr); }
+
+.ingredient-grid--weighed > li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0 var(--space-3);
+}
+
+.ingredient-grid__amount {
+  margin-left: auto;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.h4 { font-size: var(--text-base); }
 
 /* 5. Utilities ----------------------------------------------------------------------------- */
 
