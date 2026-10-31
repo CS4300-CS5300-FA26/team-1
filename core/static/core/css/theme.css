@@ -63,6 +63,19 @@
   --color-info-bg: #e8eefc;
   --color-info-border: #9db3ee;
 
+  /* Charts: meter tracks are a lighter step of their fill's hue. */
+  --color-meter-track: #d5e0fa;
+  --color-meter-track-danger: #f6d3cf;
+
+  /* Food placeholder art (decorative; tints by course). */
+  --color-food-breakfast-bg: #fff0d6;
+  --color-food-breakfast-art: #c26a0c;
+  --color-food-breakfast-accent: #f5a524;
+  --color-food-main-bg: #e2f1e5;
+  --color-food-main-art: #2f7a49;
+  --color-food-main-accent: #8cc79c;
+  --color-food-plate: #ffffff;
+
   --shadow-card: 0 1px 3px rgb(16 24 40 / 0.1), 0 1px 2px rgb(16 24 40 / 0.06);
 
   /* Type */
@@ -122,6 +135,15 @@
     --color-info: #a9c4ff;
     --color-info-bg: #16233f;
     --color-info-border: #3d5a99;
+    --color-meter-track: #2a3a5e;
+    --color-meter-track-danger: #4d2622;
+    --color-food-breakfast-bg: #3b2b14;
+    --color-food-breakfast-art: #f0a64a;
+    --color-food-breakfast-accent: #ffcf7a;
+    --color-food-main-bg: #173022;
+    --color-food-main-art: #6fcf8f;
+    --color-food-main-accent: #2f6b43;
+    --color-food-plate: #2b333d;
     --shadow-card: 0 1px 3px rgb(0 0 0 / 0.5);
   }
 }
@@ -152,6 +174,15 @@
   --color-info: #a9c4ff;
   --color-info-bg: #16233f;
   --color-info-border: #3d5a99;
+  --color-meter-track: #2a3a5e;
+  --color-meter-track-danger: #4d2622;
+  --color-food-breakfast-bg: #3b2b14;
+  --color-food-breakfast-art: #f0a64a;
+  --color-food-breakfast-accent: #ffcf7a;
+  --color-food-main-bg: #173022;
+  --color-food-main-art: #6fcf8f;
+  --color-food-main-accent: #2f6b43;
+  --color-food-plate: #2b333d;
   --shadow-card: 0 1px 3px rgb(0 0 0 / 0.5);
 }
 
@@ -191,7 +222,8 @@ h4 {
 
 h1 { font-size: var(--text-2xl); }
 h2 { font-size: var(--text-xl); }
-h3 { font-size: var(--text-lg); }
+h3,
+.h3 { font-size: var(--text-lg); }
 
 p { margin: 0 0 var(--space-4); }
 
@@ -260,6 +292,7 @@ code {
 
 .cluster--center { justify-content: center; }
 .cluster--end { justify-content: flex-end; }
+.cluster--between { justify-content: space-between; }
 
 /* 4. Components ---------------------------------------------------------------------------- */
 
@@ -612,6 +645,593 @@ input[type="radio"] {
   .data-list dd { margin-bottom: var(--space-3); }
 }
 
+/* Media list: rows of a thumbnail plus text (meal plan days, workout days). Use an <ol>/<ul>
+   with class="media-list" and <li class="media">. */
+.media-list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.media {
+  display: grid;
+  grid-template-columns: 4rem 1fr;
+  gap: var(--space-3) var(--space-4);
+  align-items: center;
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+/* The first column holds a .food-image (or any 4rem square thumbnail). */
+.media__body { min-width: 0; }
+.media__eyebrow,
+.media__title,
+.media__meta { display: block; margin: 0; }
+.media__title { font-size: var(--text-base); font-weight: 700; }
+.media__meta { color: var(--color-text-muted); font-size: var(--text-sm); }
+
+/* A whole media row that is a link (choose an item from a list). aria-current="true" marks the
+   chosen one with a thicker border and heavier title as well as colour. */
+.media--link {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.media--link:hover {
+  color: var(--color-text);
+  background: var(--color-surface-raised);
+}
+
+.media--link[aria-current="true"] {
+  border-color: var(--color-primary);
+  box-shadow: inset 4px 0 0 var(--color-primary);
+}
+
+.media--link[aria-current="true"] .media__title { text-decoration: underline; text-underline-offset: 0.2em; }
+
+@media (max-width: 30rem) {
+  .media { grid-template-columns: 3rem 1fr; }
+  .media > .food-image { width: 3rem; height: 3rem; }
+}
+
+/* Stat: a headline number with a label, e.g. "Est. $46.20 of $50.00". */
+.stat { margin: 0; text-align: right; }
+.stat__value { display: block; font-size: var(--text-xl); font-weight: 700; line-height: 1.2; }
+.stat__label { color: var(--color-text-muted); font-size: var(--text-sm); }
+
+/* On narrow screens the stat wraps under its heading, so align it with the heading. */
+@media (max-width: 30rem) {
+  .stat { text-align: left; }
+}
+
+/* Day picker: step through a week with arrows, or jump to a day. Links work without JavaScript. */
+.day-picker { display: grid; gap: var(--space-3); }
+
+.day-picker__step {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.day-picker__current {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 700;
+  text-align: center;
+}
+
+.day-picker__days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day-picker__day {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--control-height);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.day-picker__day:hover { color: var(--color-text); background: var(--color-surface-raised); }
+
+@media (max-width: 30rem) {
+  .day-picker__day { font-size: var(--text-sm); }
+}
+
+/* The chosen day is filled in, so it differs in shape and fill, not only hue. */
+.day-picker__day[aria-current="true"] {
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+/* Split: a list on the left and the selected item's details on the right; stacks on small screens. */
+.split {
+  display: grid;
+  gap: var(--space-5);
+}
+
+@media (min-width: 48rem) {
+  .split {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    align-items: start;
+  }
+}
+
+/* Panel: a bordered surface inside a card, e.g. the selected meal's details. */
+.panel {
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.panel[aria-busy="true"] { opacity: 0.6; }
+
+.panel__image {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 14rem;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+/* Ingredient and instruction lists (recipes). */
+.ingredient-list,
+.step-list {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-5);
+}
+
+.ingredient-list > li + li,
+.step-list > li + li { margin-top: var(--space-2); }
+
+.step-list > li::marker { font-weight: 700; }
+
+/* Messages: confirmations and errors after an action, above the page content. */
+.messages {
+  display: grid;
+  gap: var(--space-2);
+  max-width: var(--content-width);
+  margin: 0 auto var(--space-4);
+}
+
+/* Eyebrow: a small uppercase label above a title. */
+.eyebrow,
+.media__eyebrow {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Food image: course-tinted placeholder artwork for a recipe (decorative). */
+.food-image {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 4rem;
+  height: 4rem;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--color-food-main-bg);
+  color: var(--color-food-main-art);
+}
+
+.food-image--breakfast {
+  background: var(--color-food-breakfast-bg);
+  color: var(--color-food-breakfast-art);
+}
+
+.food-image--hero {
+  width: 7rem;
+  height: 7rem;
+  flex-shrink: 0;
+}
+
+.food-image__art { width: 70%; height: 70%; }
+.food-image__plate { fill: var(--color-food-plate); }
+.food-image__white { fill: var(--color-food-plate); stroke: currentcolor; stroke-width: 1.5; }
+.food-image__yolk { fill: var(--color-food-breakfast-accent); }
+.food-image__bowl { fill: currentcolor; }
+.food-image__rim { fill: currentcolor; opacity: 0.8; }
+.food-image__garnish { fill: var(--color-food-main-accent); }
+
+.food-image__steam {
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  opacity: 0.6;
+}
+
+/* Toolbar: a status on the left and actions on the right; wraps on small screens. */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-surface-raised);
+  border-radius: var(--radius);
+}
+
+.toolbar form { margin: 0; }
+
+/* Status badge: text says the state; the icon and colour only reinforce it. */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0.15rem var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+}
+
+.status-badge--saved {
+  color: var(--color-success);
+  background: var(--color-success-bg);
+  border-color: var(--color-success-border);
+}
+
+.status-badge__icon,
+.meter__icon,
+.chip__icon {
+  width: 1em;
+  height: 1em;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Sticky panel: on wide screens it stays in view and scrolls on its own, so long details never
+   stretch the page past the list beside it. */
+@media (min-width: 48rem) {
+  .panel--sticky {
+    position: sticky;
+    top: var(--space-4);
+    max-height: calc(100vh - 2 * var(--space-4));
+    overflow-y: auto;
+  }
+}
+
+/* Recipe card (the selected meal). */
+.recipe__header {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-start;
+}
+
+.recipe__heading { display: grid; gap: var(--space-2); min-width: 0; }
+
+@media (max-width: 30rem) {
+  .recipe__header { flex-direction: column; }
+  .food-image--hero { width: 100%; height: 9rem; }
+}
+
+/* Chips: small at-a-glance facts. */
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0.15rem var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  background: var(--color-surface-raised);
+  border-radius: var(--radius-pill);
+}
+
+/* Macro tiles: protein / carbs / fat side by side. */
+.macro-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: var(--space-4) 0 0;
+}
+
+.macro {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-raised);
+  border-radius: var(--radius-sm);
+}
+
+.macro__label { color: var(--color-text-muted); font-size: var(--text-sm); font-weight: 600; }
+.macro__value { margin: 0; font-size: var(--text-lg); font-weight: 700; }
+.macro__target { display: block; color: var(--color-text-muted); font-size: var(--text-sm); font-weight: 400; }
+.macro__meter { margin: 0; line-height: 0; }
+
+/* Bars (SVG): widths come from SVG attributes, colours from these classes. */
+.bar { display: block; overflow: visible; }
+.bar__track { fill: var(--color-meter-track); }
+.bar__fill { fill: var(--color-primary); }
+.bar__marker { fill: var(--color-text-muted); }
+
+/* Tabs: meal_plan.js shows the tab list and hides the per-section headings; without JavaScript both
+   sections show, each under its heading. */
+.tabs__list {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.tabs__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-height);
+  padding: 0 var(--space-4);
+  margin-bottom: -1px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: none;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+}
+
+.tabs__tab:hover { color: var(--color-text); }
+
+/* The selected tab is marked by a thick underline and darker text, not colour alone. */
+.tabs__tab[aria-selected="true"] {
+  color: var(--color-text);
+  border-bottom-color: var(--color-primary);
+}
+
+.tabs__count {
+  padding: 0 var(--space-2);
+  font-size: var(--text-sm);
+  background: var(--color-surface-raised);
+  border-radius: var(--radius-pill);
+}
+
+.tabs__panel { padding-top: var(--space-4); }
+.tabs__panel + .tabs__panel { margin-top: var(--space-2); }
+.tabs__heading { font-size: var(--text-base); margin-bottom: var(--space-3); }
+
+/* Ingredients as a two-column list with dot markers. */
+.ingredient-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ingredient-grid > li {
+  position: relative;
+  padding-left: var(--space-4);
+}
+
+.ingredient-grid > li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.6em;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+
+/* Steps: numbered circles down a timeline. */
+.steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.steps__item {
+  position: relative;
+  padding: 0 0 var(--space-4) calc(2rem + var(--space-3));
+  counter-increment: step;
+}
+
+.steps__item::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  font-weight: 700;
+  font-size: var(--text-sm);
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  border-radius: 50%;
+}
+
+.steps__item:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: calc(1rem - 1px);
+  top: 2.25rem;
+  bottom: var(--space-1);
+  width: 2px;
+  background: var(--color-border);
+}
+
+/* Report sections. */
+.report-section {
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
+}
+
+/* Hero figure: the one number a view leads with. */
+.hero-figure {
+  font-size: 3rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+/* Meter: one value against a limit. The fill says the state (accent within, danger over) and the
+   track is a lighter step of the same hue; the status line says it in words too. */
+.meter__bar { display: block; }
+.meter__track { fill: var(--color-meter-track); }
+.meter__fill { fill: var(--color-primary); }
+.meter--over .meter__track { fill: var(--color-meter-track-danger); }
+.meter--over .meter__fill { fill: var(--color-danger); }
+
+.meter__status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.meter--over .meter__icon { color: var(--color-danger); }
+
+/* Stat tiles in a row (key numbers). */
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.stat-tile {
+  padding: var(--space-3);
+  background: var(--color-surface-raised);
+  border-radius: var(--radius-sm);
+}
+
+.stat-tile dt { color: var(--color-text-muted); font-size: var(--text-sm); }
+.stat-tile dd { margin: 0; font-size: var(--text-lg); font-weight: 700; }
+
+/* Bar list: one labelled horizontal bar per row, value at the bar's end. */
+.bar-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bar-list__row {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr) 4.5rem;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.bar-list__label { font-weight: 600; }
+
+.bar-list__value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Data table. */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.data-table th,
+.data-table td {
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.data-table thead th { color: var(--color-text-muted); font-weight: 600; }
+
+.data-table__num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table th.data-table__num,
+.data-table td.data-table__num { text-align: right; }
+
+/* Wrap wide tables so only the table scrolls sideways on small screens, never the page. Give the
+   wrapper role="region", a label, and tabindex="0" so keyboard users can scroll it. */
+.table-scroll { overflow-x: auto; }
+
+/* Disclosure list: collapsible groups (<details>). */
+.disclosure-list { display: grid; gap: var(--space-2); }
+
+.disclosure {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.disclosure__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--control-height);
+  padding: 0 var(--space-4);
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+.disclosure__summary::-webkit-details-marker { display: none; }
+
+/* A chevron that points right when closed and down when open (the flex summary hides the native marker). */
+.disclosure__summary::before {
+  content: "";
+  flex-shrink: 0;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-right: 2px solid currentcolor;
+  border-bottom: 2px solid currentcolor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+
+.disclosure[open] > .disclosure__summary::before { transform: rotate(45deg); }
+
+/* Anything after the label (counts, times) sits at the end. */
+.disclosure__summary > * { margin-left: auto; }
+
+.disclosure__body { padding: 0 var(--space-4) var(--space-4); }
+
 /* Badge: short labels such as a goal or level. */
 .badge {
   display: inline-block;
@@ -627,6 +1247,104 @@ input[type="radio"] {
 /* Theme toggle button in the header (hidden until theme.js runs, so it never shows unusable). */
 .theme-toggle__icon { font-size: 1.1em; line-height: 1; }
 
+/* Meal cards: one planned meal (art, what it is, its numbers) with its recipe in a disclosure underneath, so
+   opening a recipe expands in place instead of moving the page. */
+.meal-stack {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.meal-card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.meal-card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.meal-card__heading { display: grid; gap: var(--space-1); min-width: 0; }
+.meal-card__title { margin: 0; font-size: var(--text-lg); }
+.meal-card__meta { margin: 0; color: var(--color-text-muted); font-size: var(--text-sm); }
+.meal-card__recipe { background: var(--color-surface-raised); }
+
+@media (max-width: 30rem) {
+  .meal-card { padding: var(--space-3); }
+  .meal-card .food-image { width: 3rem; height: 3rem; }
+}
+
+/* Split variant: a wider main column with a summary beside it. Put the summary (.split__aside) first in the HTML so
+   phones show it above the main content (.split__main); wide screens place it in the right-hand column. Placing it
+   with the grid keeps reading order and visual order the same on phones, unlike `order` or a reversed flexbox. */
+@media (min-width: 48rem) {
+  .split--main-first { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+  .split--main-first > .split__main { grid-column: 1; grid-row: 1; }
+  .split--main-first > .split__aside { grid-column: 2; grid-row: 1; }
+}
+
+/* Macro list: each macro's grams against a target, with a thin bar. */
+.macro-list { display: grid; gap: var(--space-3); margin: 0; }
+
+.macro-list__row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-3);
+  align-items: baseline;
+}
+
+.macro-list__row dt { font-weight: 600; }
+.macro-list__row dd { margin: 0; text-align: right; }
+.macro-list__meter { grid-column: 1 / -1; line-height: 0; }
+
+/* A stat aligned with the start of its column instead of the end. */
+.stat--start { text-align: left; }
+
+/* A short bullet list inside an alert. */
+.alert .alert__list {
+  display: grid;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+  padding-left: var(--space-5);
+  font-weight: 400;
+  list-style: disc;
+}
+
+/* Day picker days with the date under the weekday, and "Today" marked in words. */
+/* Every day fills the row's height, so the one with "Today" doesn't stand taller than the rest. */
+.day-picker__days > li { display: flex; }
+.day-picker__day { flex: 1; flex-direction: column; gap: 0; padding: var(--space-1) 0; line-height: 1.2; }
+.day-picker__date { font-size: var(--text-sm); font-weight: 400; }
+.day-picker__today { font-size: 0.75rem; font-weight: 700; text-decoration: underline; }
+
+/* Ingredients with a weight at the end of each line (one per row). */
+.ingredient-grid--weighed { grid-template-columns: minmax(0, 1fr); }
+
+.ingredient-grid--weighed > li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0 var(--space-3);
+}
+
+.ingredient-grid__amount {
+  margin-left: auto;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.h4 { font-size: var(--text-base); }
+
 /* 5. Utilities ----------------------------------------------------------------------------- */
 
 .text-muted { color: var(--color-text-muted); }
@@ -634,6 +1352,7 @@ input[type="radio"] {
 .text-sm { font-size: var(--text-sm); }
 .mt-0 { margin-top: 0; }
 .mb-0 { margin-bottom: 0; }
+.mt-3 { margin-top: var(--space-3); }
 .mt-4 { margin-top: var(--space-4); }
 .mt-5 { margin-top: var(--space-5); }
 

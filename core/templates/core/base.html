@@ -21,6 +21,15 @@
   <a class="skip-link" href="#main">Skip to main content</a>
   {% include "core/_header.html" %}
   <main id="main" class="{% block main_class %}page{% endblock %}" tabindex="-1">
+    {% if messages %}
+      <div class="messages">
+        {% for message in messages %}
+          {# Errors interrupt (role="alert"); confirmations are announced politely (role="status"). #}
+          <div class="alert alert--{% if message.level_tag == 'error' %}error{% elif message.level_tag == 'success' %}success{% elif message.level_tag == 'warning' %}warning{% else %}info{% endif %}"
+               role="{% if message.level_tag == 'error' %}alert{% else %}status{% endif %}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
     {% block body %}
       <div class="card">
         {% block content %}{% endblock %}

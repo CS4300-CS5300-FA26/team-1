@@ -1,0 +1,1568 @@
+{
+ "_comment": "FitPro recipe catalog (ADR-008), loaded into the database after every `migrate` and by `manage.py load_recipe_catalog`. Nutrients per 100 g, grams_per_ml (from the 1-cup portion), and grams_per_each are copied from USDA FoodData Central SR Legacy (April 2018, public domain) for the fdc_id given: see https://fdc.nal.usda.gov/food-details/<fdc_id>/nutrients. Line weights are for one serving and are the FoodData Central portion weight for the amount in the line text. Lines without an ingredient (salt, spices) are not weighed. There are no prices here: they come from the grocery price connector (D-6).",
+ "ingredients": [
+  {
+   "key": "rolled-oats",
+   "name": "Rolled oats",
+   "fdc_id": 173904,
+   "fdc_description": "Cereals, oats, regular and quick, not fortified, dry",
+   "kcal_per_100g": "379.00",
+   "protein_per_100g": "13.15",
+   "carbs_per_100g": "67.70",
+   "fat_per_100g": "6.52",
+   "grams_per_ml": "0.342",
+   "grams_per_each": null
+  },
+  {
+   "key": "whole-milk",
+   "name": "Whole milk",
+   "fdc_id": 171265,
+   "fdc_description": "Milk, whole, 3.25% milkfat, with added vitamin D",
+   "kcal_per_100g": "61.00",
+   "protein_per_100g": "3.15",
+   "carbs_per_100g": "4.80",
+   "fat_per_100g": "3.25",
+   "grams_per_ml": "1.031",
+   "grams_per_each": null
+  },
+  {
+   "key": "peanut-butter",
+   "name": "Peanut butter",
+   "fdc_id": 172470,
+   "fdc_description": "Peanut butter, smooth style, without salt",
+   "kcal_per_100g": "598.00",
+   "protein_per_100g": "22.21",
+   "carbs_per_100g": "22.31",
+   "fat_per_100g": "51.36",
+   "grams_per_ml": "1.091",
+   "grams_per_each": null
+  },
+  {
+   "key": "bananas",
+   "name": "Bananas",
+   "fdc_id": 173944,
+   "fdc_description": "Bananas, raw",
+   "kcal_per_100g": "89.00",
+   "protein_per_100g": "1.09",
+   "carbs_per_100g": "22.84",
+   "fat_per_100g": "0.33",
+   "grams_per_ml": null,
+   "grams_per_each": "118.00"
+  },
+  {
+   "key": "eggs",
+   "name": "Eggs",
+   "fdc_id": 171287,
+   "fdc_description": "Egg, whole, raw, fresh",
+   "kcal_per_100g": "143.00",
+   "protein_per_100g": "12.56",
+   "carbs_per_100g": "0.72",
+   "fat_per_100g": "9.51",
+   "grams_per_ml": null,
+   "grams_per_each": "50.00"
+  },
+  {
+   "key": "whole-wheat-bread",
+   "name": "Whole wheat bread",
+   "fdc_id": 172688,
+   "fdc_description": "Bread, whole-wheat, commercially prepared",
+   "kcal_per_100g": "252.00",
+   "protein_per_100g": "12.45",
+   "carbs_per_100g": "42.71",
+   "fat_per_100g": "3.50",
+   "grams_per_ml": null,
+   "grams_per_each": "32.00"
+  },
+  {
+   "key": "butter",
+   "name": "Butter",
+   "fdc_id": 173430,
+   "fdc_description": "Butter, without salt",
+   "kcal_per_100g": "717.00",
+   "protein_per_100g": "0.85",
+   "carbs_per_100g": "0.06",
+   "fat_per_100g": "81.11",
+   "grams_per_ml": "0.959",
+   "grams_per_each": null
+  },
+  {
+   "key": "vegetable-oil",
+   "name": "Vegetable oil",
+   "fdc_id": 172370,
+   "fdc_description": "Oil, vegetable, soybean, refined",
+   "kcal_per_100g": "884.00",
+   "protein_per_100g": "0.00",
+   "carbs_per_100g": "0.00",
+   "fat_per_100g": "100.00",
+   "grams_per_ml": "0.921",
+   "grams_per_each": null
+  },
+  {
+   "key": "greek-yogurt",
+   "name": "Plain nonfat Greek yogurt",
+   "fdc_id": 170894,
+   "fdc_description": "Yogurt, Greek, plain, nonfat (Includes foods for USDA's Food Distribution Program)",
+   "kcal_per_100g": "59.00",
+   "protein_per_100g": "10.19",
+   "carbs_per_100g": "3.60",
+   "fat_per_100g": "0.39",
+   "grams_per_ml": null,
+   "grams_per_each": "170.00"
+  },
+  {
+   "key": "plain-yogurt",
+   "name": "Plain low-fat yogurt",
+   "fdc_id": 170886,
+   "fdc_description": "Yogurt, plain, low fat",
+   "kcal_per_100g": "63.00",
+   "protein_per_100g": "5.25",
+   "carbs_per_100g": "7.04",
+   "fat_per_100g": "1.55",
+   "grams_per_ml": "1.036",
+   "grams_per_each": null
+  },
+  {
+   "key": "frozen-blueberries",
+   "name": "Frozen blueberries",
+   "fdc_id": 173950,
+   "fdc_description": "Blueberries, frozen, unsweetened (Includes foods for USDA's Food Distribution Program)",
+   "kcal_per_100g": "51.00",
+   "protein_per_100g": "0.42",
+   "carbs_per_100g": "12.17",
+   "fat_per_100g": "0.64",
+   "grams_per_ml": null,
+   "grams_per_each": null
+  },
+  {
+   "key": "honey",
+   "name": "Honey",
+   "fdc_id": 169640,
+   "fdc_description": "Honey",
+   "kcal_per_100g": "304.00",
+   "protein_per_100g": "0.30",
+   "carbs_per_100g": "82.40",
+   "fat_per_100g": "0.00",
+   "grams_per_ml": "1.433",
+   "grams_per_each": null
+  },
+  {
+   "key": "flour-tortillas",
+   "name": "Flour tortillas",
+   "fdc_id": 173242,
+   "fdc_description": "Tortillas, ready-to-bake or -fry, flour, without added calcium",
+   "kcal_per_100g": "325.00",
+   "protein_per_100g": "8.70",
+   "carbs_per_100g": "55.60",
+   "fat_per_100g": "7.10",
+   "grams_per_ml": null,
+   "grams_per_each": "72.00"
+  },
+  {
+   "key": "black-beans-canned",
+   "name": "Canned black beans",
+   "fdc_id": 175188,
+   "fdc_description": "Beans, black turtle, mature seeds, canned",
+   "kcal_per_100g": "91.00",
+   "protein_per_100g": "6.03",
+   "carbs_per_100g": "16.55",
+   "fat_per_100g": "0.29",
+   "grams_per_ml": "1.014",
+   "grams_per_each": null
+  },
+  {
+   "key": "salsa",
+   "name": "Salsa",
+   "fdc_id": 174524,
+   "fdc_description": "Sauce, salsa, ready-to-serve",
+   "kcal_per_100g": "29.00",
+   "protein_per_100g": "1.52",
+   "carbs_per_100g": "6.64",
+   "fat_per_100g": "0.17",
+   "grams_per_ml": "1.095",
+   "grams_per_each": null
+  },
+  {
+   "key": "cheddar-cheese",
+   "name": "Cheddar cheese",
+   "fdc_id": 173414,
+   "fdc_description": "Cheese, cheddar (Includes foods for USDA's Food Distribution Program)",
+   "kcal_per_100g": "403.00",
+   "protein_per_100g": "22.87",
+   "carbs_per_100g": "3.37",
+   "fat_per_100g": "33.31",
+   "grams_per_ml": null,
+   "grams_per_each": null
+  },
+  {
+   "key": "chia-seeds",
+   "name": "Chia seeds",
+   "fdc_id": 170554,
+   "fdc_description": "Seeds, chia seeds, dried",
+   "kcal_per_100g": "486.00",
+   "protein_per_100g": "16.54",
+   "carbs_per_100g": "42.12",
+   "fat_per_100g": "30.74",
+   "grams_per_ml": null,
+   "grams_per_each": null
+  },
+  {
+   "key": "maple-syrup",
+   "name": "Maple syrup",
+   "fdc_id": 169661,
+   "fdc_description": "Syrups, maple",
+   "kcal_per_100g": "260.00",
+   "protein_per_100g": "0.04",
+   "carbs_per_100g": "67.04",
+   "fat_per_100g": "0.06",
+   "grams_per_ml": "1.331",
+   "grams_per_each": null
+  },
+  {
+   "key": "cottage-cheese",
+   "name": "Low-fat cottage cheese",
+   "fdc_id": 172182,
+   "fdc_description": "Cheese, cottage, lowfat, 2% milkfat",
+   "kcal_per_100g": "81.00",
+   "protein_per_100g": "10.45",
+   "carbs_per_100g": "4.76",
+   "fat_per_100g": "2.27",
+   "grams_per_ml": "0.955",
+   "grams_per_each": null
+  },
+  {
+   "key": "tomatoes",
+   "name": "Tomatoes",
+   "fdc_id": 170457,
+   "fdc_description": "Tomatoes, red, ripe, raw, year round average",
+   "kcal_per_100g": "18.00",
+   "protein_per_100g": "0.88",
+   "carbs_per_100g": "3.89",
+   "fat_per_100g": "0.20",
+   "grams_per_ml": null,
+   "grams_per_each": "123.00"
+  },
+  {
+   "key": "spinach",
+   "name": "Spinach",
+   "fdc_id": 168462,
+   "fdc_description": "Spinach, raw",
+   "kcal_per_100g": "23.00",
+   "protein_per_100g": "2.86",
+   "carbs_per_100g": "3.63",
+   "fat_per_100g": "0.39",
+   "grams_per_ml": null,
+   "grams_per_each": null
+  },
+  {
+   "key": "red-lentils",
+   "name": "Red lentils",
+   "fdc_id": 174284,
+   "fdc_description": "Lentils, pink or red, raw",
+   "kcal_per_100g": "358.00",
+   "protein_per_100g": "23.91",
+   "carbs_per_100g": "63.10",
+   "fat_per_100g": "2.17",
+   "grams_per_ml": "0.812",
+   "grams_per_each": null
+  },
+  {
+   "key": "white-rice",
+   "name": "White rice",
+   "fdc_id": 168877,
+   "fdc_description": "Rice, white, long-grain, regular, raw, enriched",
+   "kcal_per_100g": "365.00",
+   "protein_per_100g": "7.13",
+   "carbs_per_100g": "79.95",
+   "fat_per_100g": "0.66",
+   "grams_per_ml": "0.782",
+   "grams_per_each": null
+  },
+  {
+   "key": "onions",
+   "name": "Onions",
+   "fdc_id": 170000,
+   "fdc_description": "Onions, raw",
+   "kcal_per_100g": "40.00",
+   "protein_per_100g": "1.10",
+   "carbs_per_100g": "9.34",
+   "fat_per_100g": "0.10",
+   "grams_per_ml": null,
+   "grams_per_each": "110.00"
+  },
+  {
+   "key": "canned-tomatoes",
+   "name": "Canned diced tomatoes",
+   "fdc_id": 170051,
+   "fdc_description": "Tomatoes, red, ripe, canned, packed in tomato juice",
+   "kcal_per_100g": "16.00",
+   "protein_per_100g": "0.79",
+   "carbs_per_100g": "3.47",
+   "fat_per_100g": "0.25",
+   "grams_per_ml": "1.014",
+   "grams_per_each": null
+  },
+  {
+   "key": "frozen-corn",
+   "name": "Frozen corn",
+   "fdc_id": 168398,
+   "fdc_description": "Corn, sweet, yellow, frozen, kernels cut off cob, unprepared (Includes foods for USDA's Food Distribution Program)",
+   "kcal_per_100g": "88.00",
+   "protein_per_100g": "3.02",
+   "carbs_per_100g": "20.71",
+   "fat_per_100g": "0.78",
+   "grams_per_ml": null,
+   "grams_per_each": null
+  },
+  {
+   "key": "frozen-peas",
+   "name": "Frozen peas",
+   "fdc_id": 170016,
+   "fdc_description": "Peas, green, frozen, unprepared (Includes foods for USDA's Food Distribution Program)",
+   "kcal_per_100g": "77.00",
+   "protein_per_100g": "5.22",
+   "carbs_per_100g": "13.62",
+   "fat_per_100g": "0.40",
+   "grams_per_ml": null,
+   "grams_per_each": null
+  },
+  {
+   "key": "frozen-peas-carrots",
+   "name": "Frozen peas and carrots",
+   "fdc_id": 170425,
+   "fdc_description": "Peas and carrots, frozen, unprepared",
+   "kcal_per_100g": "53.00",
+   "protein_per_100g": "3.40",
+   "carbs_per_100g": "11.15",
+   "fat_per_100g": "0.47",
+   "grams_per_ml": null,
+   "grams_per_each": null
+  },
+  {
+   "key": "frozen-mixed-vegetables",
+   "name": "Frozen mixed vegetables",
+   "fdc_id": 170471,
+   "fdc_description": "Vegetables, mixed, frozen, unprepared",
+   "kcal_per_100g": "72.00",
+   "protein_per_100g": "3.33",
+   "carbs_per_100g": "13.47",
+   "fat_per_100g": "0.52",
+   "grams_per_ml": null,
+   "grams_per_each": null
+  },
+  {
+   "key": "frozen-broccoli",
+   "name": "Frozen broccoli",
+   "fdc_id": 169968,
+   "fdc_description": "Broccoli, frozen, chopped, unprepared",
+   "kcal_per_100g": "26.00",
+   "protein_per_100g": "2.81",
+   "carbs_per_100g": "4.78",
+   "fat_per_100g": "0.29",
+   "grams_per_ml": null,
+   "grams_per_each": null
+  },
+  {
+   "key": "soy-sauce",
+   "name": "Soy sauce",
+   "fdc_id": 174277,
+   "fdc_description": "Soy sauce made from soy and wheat (shoyu)",
+   "kcal_per_100g": "53.00",
+   "protein_per_100g": "8.14",
+   "carbs_per_100g": "4.93",
+   "fat_per_100g": "0.57",
+   "grams_per_ml": "1.078",
+   "grams_per_each": null
+  },
+  {
+   "key": "chickpeas-canned",
+   "name": "Canned chickpeas",
+   "fdc_id": 173801,
+   "fdc_description": "Chickpeas (garbanzo beans, bengal gram), mature seeds, canned, drained, rinsed in tap water",
+   "kcal_per_100g": "138.00",
+   "protein_per_100g": "7.04",
+   "carbs_per_100g": "22.87",
+   "fat_per_100g": "2.47",
+   "grams_per_ml": null,
+   "grams_per_each": null
+  },
+  {
+   "key": "garlic",
+   "name": "Garlic",
+   "fdc_id": 169230,
+   "fdc_description": "Garlic, raw",
+   "kcal_per_100g": "149.00",
+   "protein_per_100g": "6.36",
+   "carbs_per_100g": "33.06",
+   "fat_per_100g": "0.50",
+   "grams_per_ml": null,
+   "grams_per_each": "3.00"
+  },
+  {
+   "key": "chicken-thighs",
+   "name": "Boneless chicken thighs",
+   "fdc_id": 173627,
+   "fdc_description": "Chicken, broilers or fryers, dark meat, thigh, meat only, raw",
+   "kcal_per_100g": "121.00",
+   "protein_per_100g": "19.66",
+   "carbs_per_100g": "0.00",
+   "fat_per_100g": "4.12",
+   "grams_per_ml": null,
+   "grams_per_each": "149.00"
+  },
+  {
+   "key": "chicken-breast",
+   "name": "Boneless chicken breast",
+   "fdc_id": 171077,
+   "fdc_description": "Chicken, broiler or fryers, breast, skinless, boneless, meat only, raw",
+   "kcal_per_100g": "120.00",
+   "protein_per_100g": "22.50",
+   "carbs_per_100g": "0.00",
+   "fat_per_100g": "2.62",
+   "grams_per_ml": null,
+   "grams_per_each": null
+  },
+  {
+   "key": "ground-turkey",
+   "name": "Ground turkey",
+   "fdc_id": 171505,
+   "fdc_description": "Turkey, Ground, raw",
+   "kcal_per_100g": "148.00",
+   "protein_per_100g": "19.66",
+   "carbs_per_100g": "0.00",
+   "fat_per_100g": "7.66",
+   "grams_per_ml": null,
+   "grams_per_each": null
+  },
+  {
+   "key": "marinara-sauce",
+   "name": "Marinara sauce",
+   "fdc_id": 171192,
+   "fdc_description": "Sauce, pasta, spaghetti/marinara, ready-to-serve",
+   "kcal_per_100g": "50.00",
+   "protein_per_100g": "1.39",
+   "carbs_per_100g": "7.43",
+   "fat_per_100g": "1.61",
+   "grams_per_ml": null,
+   "grams_per_each": null
+  },
+  {
+   "key": "tuna-canned",
+   "name": "Canned light tuna",
+   "fdc_id": 173709,
+   "fdc_description": "Fish, tuna, light, canned in water, drained solids (Includes foods for USDA's Food Distribution Program)",
+   "kcal_per_100g": "86.00",
+   "protein_per_100g": "19.44",
+   "carbs_per_100g": "0.00",
+   "fat_per_100g": "0.96",
+   "grams_per_ml": null,
+   "grams_per_each": "165.00"
+  },
+  {
+   "key": "light-mayonnaise",
+   "name": "Light mayonnaise",
+   "fdc_id": 173594,
+   "fdc_description": "Salad dressing, mayonnaise, light",
+   "kcal_per_100g": "238.00",
+   "protein_per_100g": "0.37",
+   "carbs_per_100g": "9.23",
+   "fat_per_100g": "22.22",
+   "grams_per_ml": null,
+   "grams_per_each": null
+  },
+  {
+   "key": "firm-tofu",
+   "name": "Firm tofu",
+   "fdc_id": 172475,
+   "fdc_description": "Tofu, raw, firm, prepared with calcium sulfate",
+   "kcal_per_100g": "144.00",
+   "protein_per_100g": "17.27",
+   "carbs_per_100g": "2.78",
+   "fat_per_100g": "8.72",
+   "grams_per_ml": null,
+   "grams_per_each": null
+  },
+  {
+   "key": "smoked-sausage",
+   "name": "Smoked sausage",
+   "fdc_id": 172939,
+   "fdc_description": "Sausage, smoked link sausage, pork and beef (nonfat dry milk added)",
+   "kcal_per_100g": "313.00",
+   "protein_per_100g": "13.28",
+   "carbs_per_100g": "1.92",
+   "fat_per_100g": "27.61",
+   "grams_per_ml": null,
+   "grams_per_each": "68.00"
+  },
+  {
+   "key": "bell-peppers",
+   "name": "Red bell peppers",
+   "fdc_id": 170108,
+   "fdc_description": "Peppers, sweet, red, raw",
+   "kcal_per_100g": "26.00",
+   "protein_per_100g": "0.99",
+   "carbs_per_100g": "6.03",
+   "fat_per_100g": "0.30",
+   "grams_per_ml": null,
+   "grams_per_each": "119.00"
+  },
+  {
+   "key": "refried-beans",
+   "name": "Canned refried beans",
+   "fdc_id": 172438,
+   "fdc_description": "Refried beans, canned, traditional style",
+   "kcal_per_100g": "90.00",
+   "protein_per_100g": "4.98",
+   "carbs_per_100g": "13.55",
+   "fat_per_100g": "2.01",
+   "grams_per_ml": "1.006",
+   "grams_per_each": null
+  },
+  {
+   "key": "egg-noodles",
+   "name": "Egg noodles",
+   "fdc_id": 169731,
+   "fdc_description": "Noodles, egg, dry, enriched",
+   "kcal_per_100g": "384.00",
+   "protein_per_100g": "14.16",
+   "carbs_per_100g": "71.27",
+   "fat_per_100g": "4.44",
+   "grams_per_ml": null,
+   "grams_per_each": null
+  },
+  {
+   "key": "chicken-broth",
+   "name": "Chicken broth",
+   "fdc_id": 174536,
+   "fdc_description": "Soup, chicken broth, ready-to-serve",
+   "kcal_per_100g": "6.00",
+   "protein_per_100g": "0.64",
+   "carbs_per_100g": "0.44",
+   "fat_per_100g": "0.21",
+   "grams_per_ml": "1.052",
+   "grams_per_each": null
+  },
+  {
+   "key": "canned-chili",
+   "name": "Canned chili with beans",
+   "fdc_id": 175207,
+   "fdc_description": "Chili with beans, canned",
+   "kcal_per_100g": "103.00",
+   "protein_per_100g": "6.12",
+   "carbs_per_100g": "13.24",
+   "fat_per_100g": "3.76",
+   "grams_per_ml": "1.082",
+   "grams_per_each": null
+  },
+  {
+   "key": "green-onions",
+   "name": "Green onions",
+   "fdc_id": 170005,
+   "fdc_description": "Onions, spring or scallions (includes tops and bulb), raw",
+   "kcal_per_100g": "32.00",
+   "protein_per_100g": "1.83",
+   "carbs_per_100g": "7.34",
+   "fat_per_100g": "0.19",
+   "grams_per_ml": null,
+   "grams_per_each": "15.00"
+  },
+  {
+   "key": "parmesan",
+   "name": "Grated parmesan",
+   "fdc_id": 171247,
+   "fdc_description": "Cheese, parmesan, grated",
+   "kcal_per_100g": "420.00",
+   "protein_per_100g": "28.42",
+   "carbs_per_100g": "13.91",
+   "fat_per_100g": "27.84",
+   "grams_per_ml": "0.423",
+   "grams_per_each": null
+  },
+  {
+   "key": "salmon-canned",
+   "name": "Canned pink salmon",
+   "fdc_id": 173724,
+   "fdc_description": "Fish, Salmon, pink, canned, drained solids, without skin and bones",
+   "kcal_per_100g": "136.00",
+   "protein_per_100g": "24.62",
+   "carbs_per_100g": "0.00",
+   "fat_per_100g": "4.21",
+   "grams_per_ml": null,
+   "grams_per_each": null
+  },
+  {
+   "key": "cucumbers",
+   "name": "Cucumbers",
+   "fdc_id": 168409,
+   "fdc_description": "Cucumber, with peel, raw",
+   "kcal_per_100g": "15.00",
+   "protein_per_100g": "0.65",
+   "carbs_per_100g": "3.63",
+   "fat_per_100g": "0.11",
+   "grams_per_ml": null,
+   "grams_per_each": "301.00"
+  },
+  {
+   "key": "sesame-oil",
+   "name": "Sesame oil",
+   "fdc_id": 171016,
+   "fdc_description": "Oil, sesame, salad or cooking",
+   "kcal_per_100g": "884.00",
+   "protein_per_100g": "0.00",
+   "carbs_per_100g": "0.00",
+   "fat_per_100g": "100.00",
+   "grams_per_ml": "0.921",
+   "grams_per_each": null
+  },
+  {
+   "key": "instant-ramen",
+   "name": "Instant ramen noodles",
+   "fdc_id": 171177,
+   "fdc_description": "Soup, ramen noodle, any flavor, dry",
+   "kcal_per_100g": "440.00",
+   "protein_per_100g": "10.17",
+   "carbs_per_100g": "60.26",
+   "fat_per_100g": "17.59",
+   "grams_per_ml": null,
+   "grams_per_each": "81.00"
+  },
+  {
+   "key": "lemon-juice",
+   "name": "Lemon juice",
+   "fdc_id": 167748,
+   "fdc_description": "Lemon juice from concentrate, canned or bottled",
+   "kcal_per_100g": "17.00",
+   "protein_per_100g": "0.45",
+   "carbs_per_100g": "5.62",
+   "fat_per_100g": "0.07",
+   "grams_per_ml": "1.031",
+   "grams_per_each": null
+  },
+  {
+   "key": "dry-pasta",
+   "name": "Dry pasta",
+   "fdc_id": 169736,
+   "fdc_description": "Pasta, dry, enriched",
+   "kcal_per_100g": "371.00",
+   "protein_per_100g": "13.04",
+   "carbs_per_100g": "74.67",
+   "fat_per_100g": "1.51",
+   "grams_per_ml": null,
+   "grams_per_each": null
+  },
+  {
+   "key": "potatoes",
+   "name": "Potatoes",
+   "fdc_id": 170026,
+   "fdc_description": "Potatoes, flesh and skin, raw",
+   "kcal_per_100g": "77.00",
+   "protein_per_100g": "2.05",
+   "carbs_per_100g": "17.49",
+   "fat_per_100g": "0.09",
+   "grams_per_ml": null,
+   "grams_per_each": "213.00"
+  }
+ ],
+ "recipes": [
+  {
+   "slug": "pb-banana-oats",
+   "course": "breakfast",
+   "title": "Peanut butter banana oats",
+   "ready_in_minutes": 10,
+   "lines": [
+    {
+     "text": "1/2 cup rolled oats",
+     "ingredient": "rolled-oats",
+     "grams": "40.5"
+    },
+    {
+     "text": "1 cup milk",
+     "ingredient": "whole-milk",
+     "grams": "244.0"
+    },
+    {
+     "text": "1 tbsp peanut butter",
+     "ingredient": "peanut-butter",
+     "grams": "16.0"
+    },
+    {
+     "text": "1/2 medium banana, sliced",
+     "ingredient": "bananas",
+     "grams": "59.0"
+    },
+    {
+     "text": "Pinch of cinnamon"
+    }
+   ],
+   "steps": [
+    "Simmer the oats in the milk for about 5 minutes, stirring.",
+    "Stir in the peanut butter and cinnamon.",
+    "Top with the sliced banana."
+   ]
+  },
+  {
+   "slug": "egg-toast",
+   "course": "breakfast",
+   "title": "Scrambled eggs on toast",
+   "ready_in_minutes": 10,
+   "lines": [
+    {
+     "text": "2 large eggs",
+     "ingredient": "eggs",
+     "grams": "100.0"
+    },
+    {
+     "text": "2 slices whole wheat bread",
+     "ingredient": "whole-wheat-bread",
+     "grams": "64.0"
+    },
+    {
+     "text": "1 tsp butter",
+     "ingredient": "butter",
+     "grams": "4.7"
+    },
+    {
+     "text": "Salt and pepper"
+    }
+   ],
+   "steps": [
+    "Toast the bread.",
+    "Whisk the eggs with a pinch of salt and pepper.",
+    "Cook the eggs in the butter over low heat, stirring gently, until just set.",
+    "Serve on the toast."
+   ]
+  },
+  {
+   "slug": "yogurt-oats-berries",
+   "course": "breakfast",
+   "title": "Greek yogurt with oats and blueberries",
+   "ready_in_minutes": 5,
+   "lines": [
+    {
+     "text": "1 container (6 oz) plain nonfat Greek yogurt",
+     "ingredient": "greek-yogurt",
+     "grams": "170.0"
+    },
+    {
+     "text": "1/3 cup rolled oats",
+     "ingredient": "rolled-oats",
+     "grams": "27.0"
+    },
+    {
+     "text": "1/2 cup frozen blueberries",
+     "ingredient": "frozen-blueberries",
+     "grams": "77.5"
+    },
+    {
+     "text": "1 tbsp honey",
+     "ingredient": "honey",
+     "grams": "21.0"
+    }
+   ],
+   "steps": [
+    "Spoon the yogurt into a bowl.",
+    "Top with the oats and blueberries.",
+    "Drizzle with honey."
+   ]
+  },
+  {
+   "slug": "breakfast-burrito",
+   "course": "breakfast",
+   "title": "Egg and bean breakfast burrito",
+   "ready_in_minutes": 15,
+   "lines": [
+    {
+     "text": "1 large (10\") flour tortilla",
+     "ingredient": "flour-tortillas",
+     "grams": "72.0"
+    },
+    {
+     "text": "2 large eggs",
+     "ingredient": "eggs",
+     "grams": "100.0"
+    },
+    {
+     "text": "1/4 cup canned black beans, drained",
+     "ingredient": "black-beans-canned",
+     "grams": "60.0"
+    },
+    {
+     "text": "2 tbsp salsa",
+     "ingredient": "salsa",
+     "grams": "36.0"
+    },
+    {
+     "text": "2 tbsp shredded cheddar",
+     "ingredient": "cheddar-cheese",
+     "grams": "14.1"
+    }
+   ],
+   "steps": [
+    "Warm the beans in a pan.",
+    "Scramble the eggs.",
+    "Fill the tortilla with eggs, beans, cheese, and salsa, then roll it up."
+   ]
+  },
+  {
+   "slug": "overnight-oats",
+   "course": "breakfast",
+   "title": "Overnight oats with chia",
+   "ready_in_minutes": 5,
+   "lines": [
+    {
+     "text": "1/2 cup rolled oats",
+     "ingredient": "rolled-oats",
+     "grams": "40.5"
+    },
+    {
+     "text": "1/2 cup milk",
+     "ingredient": "whole-milk",
+     "grams": "122.0"
+    },
+    {
+     "text": "1/4 cup plain low-fat yogurt",
+     "ingredient": "plain-yogurt",
+     "grams": "61.2"
+    },
+    {
+     "text": "1/3 oz chia seeds (about 1 tbsp)",
+     "ingredient": "chia-seeds",
+     "grams": "9.4"
+    },
+    {
+     "text": "1 tbsp maple syrup",
+     "ingredient": "maple-syrup",
+     "grams": "20.0"
+    }
+   ],
+   "steps": [
+    "Stir everything together in a jar.",
+    "Cover and refrigerate overnight.",
+    "Eat cold or warm it up."
+   ]
+  },
+  {
+   "slug": "banana-pancakes",
+   "course": "breakfast",
+   "title": "Banana egg pancakes",
+   "ready_in_minutes": 15,
+   "lines": [
+    {
+     "text": "1 medium banana",
+     "ingredient": "bananas",
+     "grams": "118.0"
+    },
+    {
+     "text": "2 large eggs",
+     "ingredient": "eggs",
+     "grams": "100.0"
+    },
+    {
+     "text": "1 tsp oil",
+     "ingredient": "vegetable-oil",
+     "grams": "4.5"
+    }
+   ],
+   "steps": [
+    "Mash the banana and whisk in the eggs.",
+    "Cook small pancakes in the oiled pan over medium heat, about 1 minute per side."
+   ]
+  },
+  {
+   "slug": "cottage-cheese-toast",
+   "course": "breakfast",
+   "title": "Cottage cheese and tomato toast",
+   "ready_in_minutes": 5,
+   "lines": [
+    {
+     "text": "2 slices whole wheat bread",
+     "ingredient": "whole-wheat-bread",
+     "grams": "64.0"
+    },
+    {
+     "text": "1/2 cup low-fat cottage cheese",
+     "ingredient": "cottage-cheese",
+     "grams": "113.0"
+    },
+    {
+     "text": "1 medium tomato, sliced",
+     "ingredient": "tomatoes",
+     "grams": "123.0"
+    },
+    {
+     "text": "Salt and pepper"
+    }
+   ],
+   "steps": [
+    "Toast the bread.",
+    "Spread with cottage cheese.",
+    "Top with tomato and season."
+   ]
+  },
+  {
+   "slug": "spinach-omelette",
+   "course": "breakfast",
+   "title": "Spinach and cheddar omelette",
+   "ready_in_minutes": 10,
+   "lines": [
+    {
+     "text": "2 large eggs",
+     "ingredient": "eggs",
+     "grams": "100.0"
+    },
+    {
+     "text": "1 cup spinach",
+     "ingredient": "spinach",
+     "grams": "30.0"
+    },
+    {
+     "text": "2 tbsp shredded cheddar",
+     "ingredient": "cheddar-cheese",
+     "grams": "14.1"
+    },
+    {
+     "text": "1 tsp oil",
+     "ingredient": "vegetable-oil",
+     "grams": "4.5"
+    },
+    {
+     "text": "1 slice whole wheat bread, toasted",
+     "ingredient": "whole-wheat-bread",
+     "grams": "32.0"
+    },
+    {
+     "text": "Salt and pepper"
+    }
+   ],
+   "steps": [
+    "Wilt the spinach in the oiled pan.",
+    "Pour in the whisked eggs and cook until almost set.",
+    "Add the cheese, fold, and serve with the toast."
+   ]
+  },
+  {
+   "slug": "pb-toast-milk",
+   "course": "breakfast",
+   "title": "Peanut butter toast and a glass of milk",
+   "ready_in_minutes": 5,
+   "lines": [
+    {
+     "text": "2 slices whole wheat bread",
+     "ingredient": "whole-wheat-bread",
+     "grams": "64.0"
+    },
+    {
+     "text": "2 tbsp peanut butter",
+     "ingredient": "peanut-butter",
+     "grams": "32.0"
+    },
+    {
+     "text": "1 cup milk",
+     "ingredient": "whole-milk",
+     "grams": "244.0"
+    }
+   ],
+   "steps": [
+    "Toast the bread.",
+    "Spread with peanut butter.",
+    "Serve with the milk."
+   ]
+  },
+  {
+   "slug": "lentil-curry",
+   "course": "main",
+   "title": "Red lentil curry with rice",
+   "ready_in_minutes": 35,
+   "lines": [
+    {
+     "text": "1/3 cup dry red lentils",
+     "ingredient": "red-lentils",
+     "grams": "64.0"
+    },
+    {
+     "text": "1/4 cup uncooked white rice",
+     "ingredient": "white-rice",
+     "grams": "46.2"
+    },
+    {
+     "text": "1/2 medium onion, diced",
+     "ingredient": "onions",
+     "grams": "55.0"
+    },
+    {
+     "text": "1 tsp curry powder"
+    },
+    {
+     "text": "1/2 cup canned diced tomatoes",
+     "ingredient": "canned-tomatoes",
+     "grams": "120.0"
+    },
+    {
+     "text": "1 tsp oil",
+     "ingredient": "vegetable-oil",
+     "grams": "4.5"
+    }
+   ],
+   "steps": [
+    "Cook the rice.",
+    "Soften the onion in the oil.",
+    "Add the curry powder, lentils, tomatoes, and 1 cup water.",
+    "Simmer for 20 minutes until the lentils are soft.",
+    "Serve over the rice."
+   ]
+  },
+  {
+   "slug": "bean-chili",
+   "course": "main",
+   "title": "Black bean and corn chili",
+   "ready_in_minutes": 30,
+   "lines": [
+    {
+     "text": "1 cup canned black beans, drained",
+     "ingredient": "black-beans-canned",
+     "grams": "240.0"
+    },
+    {
+     "text": "1/2 cup canned diced tomatoes",
+     "ingredient": "canned-tomatoes",
+     "grams": "120.0"
+    },
+    {
+     "text": "1/2 medium onion, diced",
+     "ingredient": "onions",
+     "grams": "55.0"
+    },
+    {
+     "text": "1 tsp chili powder"
+    },
+    {
+     "text": "1/2 cup frozen corn",
+     "ingredient": "frozen-corn",
+     "grams": "68.0"
+    },
+    {
+     "text": "2 tbsp shredded cheddar",
+     "ingredient": "cheddar-cheese",
+     "grams": "14.1"
+    }
+   ],
+   "steps": [
+    "Cook the onion until soft.",
+    "Add the beans, tomatoes, corn, and chili powder.",
+    "Simmer for 15 minutes.",
+    "Top with the cheese."
+   ]
+  },
+  {
+   "slug": "egg-fried-rice",
+   "course": "main",
+   "title": "Egg fried rice",
+   "ready_in_minutes": 25,
+   "lines": [
+    {
+     "text": "1/3 cup uncooked white rice",
+     "ingredient": "white-rice",
+     "grams": "61.7"
+    },
+    {
+     "text": "2 large eggs",
+     "ingredient": "eggs",
+     "grams": "100.0"
+    },
+    {
+     "text": "1/2 cup frozen peas and carrots",
+     "ingredient": "frozen-peas-carrots",
+     "grams": "70.0"
+    },
+    {
+     "text": "1 tbsp soy sauce",
+     "ingredient": "soy-sauce",
+     "grams": "16.0"
+    },
+    {
+     "text": "1 tsp oil",
+     "ingredient": "vegetable-oil",
+     "grams": "4.5"
+    }
+   ],
+   "steps": [
+    "Cook the rice and let it cool (day-old rice is best).",
+    "Stir-fry the vegetables in the oil for 2 minutes.",
+    "Push them aside and scramble the eggs.",
+    "Add the rice and soy sauce and stir-fry until hot."
+   ]
+  },
+  {
+   "slug": "chickpea-stew",
+   "course": "main",
+   "title": "Chickpea and spinach stew",
+   "ready_in_minutes": 25,
+   "lines": [
+    {
+     "text": "3/4 cup canned chickpeas, rinsed",
+     "ingredient": "chickpeas-canned",
+     "grams": "114.0"
+    },
+    {
+     "text": "1/2 cup canned diced tomatoes",
+     "ingredient": "canned-tomatoes",
+     "grams": "120.0"
+    },
+    {
+     "text": "2 cups spinach",
+     "ingredient": "spinach",
+     "grams": "60.0"
+    },
+    {
+     "text": "1 clove garlic",
+     "ingredient": "garlic",
+     "grams": "3.0"
+    },
+    {
+     "text": "1 tsp cumin"
+    },
+    {
+     "text": "1 tsp oil",
+     "ingredient": "vegetable-oil",
+     "grams": "4.5"
+    },
+    {
+     "text": "1 slice whole wheat bread, to serve",
+     "ingredient": "whole-wheat-bread",
+     "grams": "32.0"
+    }
+   ],
+   "steps": [
+    "Fry the garlic and cumin in the oil for 30 seconds.",
+    "Add the chickpeas and tomatoes and simmer for 10 minutes.",
+    "Stir in the spinach until wilted.",
+    "Serve with the bread."
+   ]
+  },
+  {
+   "slug": "chicken-rice-bowl",
+   "course": "main",
+   "title": "Chicken thigh rice bowl",
+   "ready_in_minutes": 30,
+   "lines": [
+    {
+     "text": "4 oz boneless chicken thigh",
+     "ingredient": "chicken-thighs",
+     "grams": "113.0"
+    },
+    {
+     "text": "1/3 cup uncooked white rice",
+     "ingredient": "white-rice",
+     "grams": "61.7"
+    },
+    {
+     "text": "1 cup frozen broccoli",
+     "ingredient": "frozen-broccoli",
+     "grams": "156.0"
+    },
+    {
+     "text": "1 tbsp soy sauce",
+     "ingredient": "soy-sauce",
+     "grams": "16.0"
+    },
+    {
+     "text": "1 tsp oil",
+     "ingredient": "vegetable-oil",
+     "grams": "4.5"
+    }
+   ],
+   "steps": [
+    "Cook the rice.",
+    "Cut the chicken into pieces and cook in the oil until done.",
+    "Steam or microwave the broccoli.",
+    "Serve the chicken and broccoli over rice with soy sauce."
+   ]
+  },
+  {
+   "slug": "turkey-pasta",
+   "course": "main",
+   "title": "Ground turkey pasta",
+   "ready_in_minutes": 25,
+   "lines": [
+    {
+     "text": "3 oz dry pasta",
+     "ingredient": "dry-pasta",
+     "grams": "85.5"
+    },
+    {
+     "text": "4 oz ground turkey",
+     "ingredient": "ground-turkey",
+     "grams": "113.0"
+    },
+    {
+     "text": "1/2 cup marinara sauce",
+     "ingredient": "marinara-sauce",
+     "grams": "132.0"
+    },
+    {
+     "text": "Italian seasoning"
+    }
+   ],
+   "steps": [
+    "Boil the pasta.",
+    "Brown the turkey with the seasoning.",
+    "Stir in the sauce and toss with the drained pasta."
+   ]
+  },
+  {
+   "slug": "tuna-pasta-salad",
+   "course": "main",
+   "title": "Tuna pasta salad",
+   "ready_in_minutes": 15,
+   "lines": [
+    {
+     "text": "2 oz dry pasta",
+     "ingredient": "dry-pasta",
+     "grams": "57.0"
+    },
+    {
+     "text": "1 can light tuna in water, drained",
+     "ingredient": "tuna-canned",
+     "grams": "165.0"
+    },
+    {
+     "text": "1/2 cup frozen peas",
+     "ingredient": "frozen-peas",
+     "grams": "67.0"
+    },
+    {
+     "text": "1 tbsp light mayonnaise",
+     "ingredient": "light-mayonnaise",
+     "grams": "15.0"
+    },
+    {
+     "text": "1 tsp lemon juice",
+     "ingredient": "lemon-juice",
+     "grams": "5.0"
+    }
+   ],
+   "steps": [
+    "Cook the pasta, adding the peas for the last minute.",
+    "Drain and cool.",
+    "Mix with the tuna, mayonnaise, and lemon juice."
+   ]
+  },
+  {
+   "slug": "chicken-burrito-bowl",
+   "course": "main",
+   "title": "Chicken burrito bowl",
+   "ready_in_minutes": 25,
+   "lines": [
+    {
+     "text": "4 oz chicken breast",
+     "ingredient": "chicken-breast",
+     "grams": "113.0"
+    },
+    {
+     "text": "1/4 cup uncooked white rice",
+     "ingredient": "white-rice",
+     "grams": "46.2"
+    },
+    {
+     "text": "1/2 cup canned black beans, drained",
+     "ingredient": "black-beans-canned",
+     "grams": "120.0"
+    },
+    {
+     "text": "2 tbsp salsa",
+     "ingredient": "salsa",
+     "grams": "36.0"
+    },
+    {
+     "text": "1 tsp taco seasoning"
+    }
+   ],
+   "steps": [
+    "Cook the rice.",
+    "Season and cook the chicken, then slice it.",
+    "Warm the beans.",
+    "Layer the rice, beans, chicken, and salsa in a bowl."
+   ]
+  },
+  {
+   "slug": "tofu-stir-fry",
+   "course": "main",
+   "title": "Tofu and broccoli stir-fry",
+   "ready_in_minutes": 25,
+   "lines": [
+    {
+     "text": "1/2 block firm tofu, cubed",
+     "ingredient": "firm-tofu",
+     "grams": "162.0"
+    },
+    {
+     "text": "1 cup frozen broccoli",
+     "ingredient": "frozen-broccoli",
+     "grams": "156.0"
+    },
+    {
+     "text": "1/4 cup uncooked white rice",
+     "ingredient": "white-rice",
+     "grams": "46.2"
+    },
+    {
+     "text": "1 tbsp soy sauce",
+     "ingredient": "soy-sauce",
+     "grams": "16.0"
+    },
+    {
+     "text": "1 tsp sesame oil",
+     "ingredient": "sesame-oil",
+     "grams": "4.5"
+    }
+   ],
+   "steps": [
+    "Cook the rice.",
+    "Brown the tofu in the oil.",
+    "Add the broccoli and stir-fry for 5 minutes.",
+    "Add the soy sauce and serve over rice."
+   ]
+  },
+  {
+   "slug": "sheet-pan-sausage",
+   "course": "main",
+   "title": "Sheet-pan sausage and potatoes",
+   "ready_in_minutes": 35,
+   "lines": [
+    {
+     "text": "1 smoked sausage link, sliced",
+     "ingredient": "smoked-sausage",
+     "grams": "68.0"
+    },
+    {
+     "text": "1 medium potato, cubed",
+     "ingredient": "potatoes",
+     "grams": "213.0"
+    },
+    {
+     "text": "1/2 medium red bell pepper, sliced",
+     "ingredient": "bell-peppers",
+     "grams": "59.5"
+    },
+    {
+     "text": "1 tsp oil",
+     "ingredient": "vegetable-oil",
+     "grams": "4.5"
+    },
+    {
+     "text": "Paprika"
+    }
+   ],
+   "steps": [
+    "Heat the oven to 425F.",
+    "Toss everything with the oil and paprika on a tray.",
+    "Roast for 25 minutes, turning once."
+   ]
+  },
+  {
+   "slug": "bean-quesadilla",
+   "course": "main",
+   "title": "Bean and cheese quesadilla",
+   "ready_in_minutes": 10,
+   "lines": [
+    {
+     "text": "1 large (10\") flour tortilla",
+     "ingredient": "flour-tortillas",
+     "grams": "72.0"
+    },
+    {
+     "text": "1/2 cup canned refried beans",
+     "ingredient": "refried-beans",
+     "grams": "119.0"
+    },
+    {
+     "text": "1/4 cup shredded cheddar",
+     "ingredient": "cheddar-cheese",
+     "grams": "28.2"
+    },
+    {
+     "text": "2 tbsp salsa",
+     "ingredient": "salsa",
+     "grams": "36.0"
+    }
+   ],
+   "steps": [
+    "Spread the beans over half the tortilla, top with cheese, and fold.",
+    "Cook in a dry pan until golden on both sides.",
+    "Cut into wedges and serve with salsa."
+   ]
+  },
+  {
+   "slug": "chicken-noodle-soup",
+   "course": "main",
+   "title": "Chicken noodle soup",
+   "ready_in_minutes": 30,
+   "lines": [
+    {
+     "text": "4 oz chicken breast, diced",
+     "ingredient": "chicken-breast",
+     "grams": "113.0"
+    },
+    {
+     "text": "2 oz egg noodles",
+     "ingredient": "egg-noodles",
+     "grams": "57.0"
+    },
+    {
+     "text": "1/3 of a 10 oz bag frozen mixed vegetables",
+     "ingredient": "frozen-mixed-vegetables",
+     "grams": "95.0"
+    },
+    {
+     "text": "2 cups chicken broth",
+     "ingredient": "chicken-broth",
+     "grams": "498.0"
+    }
+   ],
+   "steps": [
+    "Bring the broth to a simmer.",
+    "Add the chicken and vegetables and cook for 10 minutes.",
+    "Add the noodles and cook until tender."
+   ]
+  },
+  {
+   "slug": "baked-potato-chili",
+   "course": "main",
+   "title": "Baked potato with chili",
+   "ready_in_minutes": 15,
+   "lines": [
+    {
+     "text": "1 medium potato",
+     "ingredient": "potatoes",
+     "grams": "213.0"
+    },
+    {
+     "text": "1 cup canned chili with beans",
+     "ingredient": "canned-chili",
+     "grams": "256.0"
+    },
+    {
+     "text": "2 tbsp plain low-fat yogurt",
+     "ingredient": "plain-yogurt",
+     "grams": "30.6"
+    },
+    {
+     "text": "1 green onion, chopped",
+     "ingredient": "green-onions",
+     "grams": "15.0"
+    }
+   ],
+   "steps": [
+    "Prick the potato and microwave for 8 to 10 minutes until soft.",
+    "Warm the chili.",
+    "Split the potato and top with chili, yogurt, and green onion."
+   ]
+  },
+  {
+   "slug": "pasta-peas-egg",
+   "course": "main",
+   "title": "Pasta with peas, egg, and parmesan",
+   "ready_in_minutes": 15,
+   "lines": [
+    {
+     "text": "3 oz dry pasta",
+     "ingredient": "dry-pasta",
+     "grams": "85.5"
+    },
+    {
+     "text": "1/2 cup frozen peas",
+     "ingredient": "frozen-peas",
+     "grams": "67.0"
+    },
+    {
+     "text": "1 large egg",
+     "ingredient": "eggs",
+     "grams": "50.0"
+    },
+    {
+     "text": "2 tbsp grated parmesan",
+     "ingredient": "parmesan",
+     "grams": "10.0"
+    },
+    {
+     "text": "Black pepper"
+    }
+   ],
+   "steps": [
+    "Cook the pasta, adding the peas for the last 2 minutes.",
+    "Whisk the egg with the parmesan.",
+    "Toss with the hot drained pasta off the heat until creamy, then season."
+   ]
+  },
+  {
+   "slug": "salmon-rice",
+   "course": "main",
+   "title": "Canned salmon rice bowl",
+   "ready_in_minutes": 25,
+   "lines": [
+    {
+     "text": "3 oz canned pink salmon, drained",
+     "ingredient": "salmon-canned",
+     "grams": "85.0"
+    },
+    {
+     "text": "1/3 cup uncooked white rice",
+     "ingredient": "white-rice",
+     "grams": "61.7"
+    },
+    {
+     "text": "1/2 cup cucumber slices",
+     "ingredient": "cucumbers",
+     "grams": "52.0"
+    },
+    {
+     "text": "1 tbsp soy sauce",
+     "ingredient": "soy-sauce",
+     "grams": "16.0"
+    },
+    {
+     "text": "1 tsp sesame oil",
+     "ingredient": "sesame-oil",
+     "grams": "4.5"
+    }
+   ],
+   "steps": [
+    "Cook the rice.",
+    "Flake the salmon over it.",
+    "Add the cucumber and drizzle with soy sauce and sesame oil."
+   ]
+  },
+  {
+   "slug": "ramen-stir-fry",
+   "course": "main",
+   "title": "Vegetable ramen stir-fry",
+   "ready_in_minutes": 15,
+   "lines": [
+    {
+     "text": "1 package instant ramen (noodles only)",
+     "ingredient": "instant-ramen",
+     "grams": "81.0"
+    },
+    {
+     "text": "1 large egg",
+     "ingredient": "eggs",
+     "grams": "50.0"
+    },
+    {
+     "text": "1/3 of a 10 oz bag frozen mixed vegetables",
+     "ingredient": "frozen-mixed-vegetables",
+     "grams": "95.0"
+    },
+    {
+     "text": "1 tsp soy sauce",
+     "ingredient": "soy-sauce",
+     "grams": "5.3"
+    }
+   ],
+   "steps": [
+    "Boil the noodles for 2 minutes and drain.",
+    "Stir-fry the vegetables, then add the noodles, egg, and soy sauce.",
+    "Toss until the egg is cooked."
+   ]
+  }
+ ]
+}

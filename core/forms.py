@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import EQUIPMENT_CHOICES, UserProfile
+from .models import EQUIPMENT_CHOICES, MEAL_CHOICES, UserProfile
 
 
 class OnboardingForm(forms.ModelForm):
@@ -36,9 +36,25 @@ class OnboardingForm(forms.ModelForm):
         error_messages={'required': 'Select at least one option for available equipment.'},
     )
 
+    planned_meals = forms.MultipleChoiceField(
+        label='Which meals should your meal plan cover?',
+        choices=MEAL_CHOICES,
+        widget=forms.CheckboxSelectMultiple,
+        initial=[key for key, _ in MEAL_CHOICES],
+        error_messages={'required': 'Choose at least one meal to plan.'},
+    )
+
     class Meta:
         model = UserProfile
-        fields = ['goal', 'height_inches', 'weight', 'experience_level', 'weekly_food_budget', 'equipment']
+        fields = [
+            'goal',
+            'height_inches',
+            'weight',
+            'experience_level',
+            'weekly_food_budget',
+            'planned_meals',
+            'equipment',
+        ]
         labels = {
             'goal': 'Your goal',
             'experience_level': 'Experience level',
@@ -54,6 +70,9 @@ class OnboardingForm(forms.ModelForm):
         # the form treat them as optional, so require every question here.
         for field in self.fields.values():
             field.required = True
+        # Plan all three meals unless the user has already chosen.
+        if not self.instance.planned_meals:
+            self.initial['planned_meals'] = [key for key, _ in MEAL_CHOICES]
 
     def clean_equipment(self):
         equipment = self.cleaned_data['equipment']
