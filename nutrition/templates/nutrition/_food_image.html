@@ -1,7 +1,5 @@
 {% comment %}
-A recipe's photo over a course-tinted illustration. The illustration always renders underneath, so if
-there's no photo, or the photo fails to load (decorative images have alt="", which browsers then hide),
-the illustration shows instead. No JavaScript needed.
+A course-tinted illustration for a recipe (decorative): an egg for breakfast, a bowl for mains.
 Context: recipe; optional size ("hero" for the details panel).
 {% endcomment %}
 <span class="food-image food-image--{{ recipe.course }}{% if size %} food-image--{{ size }}{% endif %}">
@@ -19,8 +17,5 @@ Context: recipe; optional size ("hero" for the details panel).
       <rect class="food-image__rim" x="6" y="27" width="52" height="5" rx="2.5"/>
       <path class="food-image__garnish" d="M18 27c3-6 9-7 13-3 4-5 11-4 14 3z"/>
     </svg>
-  {% endif %}
-  {% if recipe.image_url %}
-    <img class="food-image__photo" src="{{ recipe.image_url }}" alt="" loading="lazy" decoding="async">
   {% endif %}
 </span>

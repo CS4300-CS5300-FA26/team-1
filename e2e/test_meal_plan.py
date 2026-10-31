@@ -2,24 +2,20 @@
 
 Skipped unless E2E=1, because they need a browser: `uv run playwright install chromium` once, then
     E2E=1 uv run python manage.py test e2e
-They run against Django's live test server with the starter recipe catalog (tests never call the
-recipe API; see TESTING in settings).
+They run against Django's live test server with FitPro's recipe catalog (loaded into the test database after
+migrations; see nutrition/apps.py). Nothing calls the network.
 """
 
 import os
-from dataclasses import replace
 from decimal import Decimal
 from unittest import skipUnless
 
 from django.contrib.auth import get_user_model
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.test import override_settings, tag
-from django.utils import timezone
 from playwright.sync_api import Browser, Playwright, sync_playwright
 
 from core.models import UserProfile
-from nutrition.planner import DAY_NAMES
-from nutrition.testing import FixedRecipeSource
 
 User = get_user_model()
 PASSWORD = 'Tr4ining-Plan-2026!'
@@ -55,13 +51,13 @@ class MealPlanBrowserTests(StaticLiveServerTestCase):
         self.page = self.context.new_page()
         self.addCleanup(self.context.close)
 
-    def log_in(self, budget='50.00', meal_pattern='three', onboarded=True):
+    def log_in(self, budget='50.00', meals=('breakfast', 'lunch', 'dinner'), onboarded=True):
         user = User.objects.create_user('e2e', 'e2e@example.com', PASSWORD)
         UserProfile.objects.create(
             user=user,
             onboarding_completed=onboarded,
             weekly_food_budget=Decimal(budget) if onboarded else None,
-            meal_pattern=meal_pattern if onboarded else '',
+            planned_meals=list(meals) if onboarded else [],
         )
         self.page.goto(f'{self.live_server_url}/accounts/login/')
         self.page.get_by_label('Email or username').fill('e2e@example.com')
@@ -73,152 +69,73 @@ class MealPlanBrowserTests(StaticLiveServerTestCase):
         self.page.get_by_role('navigation', name='Main').get_by_role('link', name='Meal plan').click()
         self.page.wait_for_url('**/meal-plan/**')
 
-    def visible_panel(self):
+    def visible_day(self):
         return self.page.locator('[data-day-panel]:visible')
 
-    def mark_page(self):
-        """Tag the window so we can tell whether a later step reloaded the page."""
-        self.page.evaluate('window.__noReload = true')
+    def visible_cards(self):
+        return self.visible_day().locator('.meal-card')
 
-    def assert_not_reloaded(self):
-        self.assertTrue(self.page.evaluate('window.__noReload === true'))
+    def scroll_y(self):
+        return self.page.evaluate('window.scrollY')
 
-    def test_onboarding_meal_choice_shapes_the_plan(self):
+    def test_onboarding_meal_checkboxes_shape_the_plan(self):
         self.log_in(onboarded=False)
+        for meal in ('Breakfast', 'Lunch', 'Dinner'):
+            self.assertTrue(self.page.get_by_label(meal, exact=True).is_checked())
         self.page.get_by_label('Your goal').select_option('build_muscle')
         self.page.get_by_label('Height (inches)').fill('70')
         self.page.get_by_label('Weight (lb)').fill('180')
         self.page.get_by_label('Experience level').select_option('beginner')
         self.page.get_by_label('Weekly food budget ($)').fill('40')
-        self.page.get_by_label('Breakfast and dinner').check()
+        self.page.get_by_label('Lunch', exact=True).uncheck()
         self.page.get_by_label('Dumbbells').check()
         self.page.get_by_role('button', name='Finish').click()
         self.page.wait_for_url('**/dashboard/')
         self.open_meal_plan()
-        eyebrows = self.visible_panel().locator('.media__eyebrow').all_inner_texts()
-        self.assertEqual([text.lower() for text in eyebrows], ['breakfast', 'dinner'])
+        eyebrows = self.visible_cards().locator('.eyebrow').evaluate_all('els => els.map(e => e.textContent)')
+        self.assertEqual([text.split()[0] for text in eyebrows], ['Breakfast', 'Dinner'])
 
-    def test_plan_within_budget_opens_on_today_with_three_meals(self):
-        self.log_in('50.00')
-        self.open_meal_plan()
-        today = DAY_NAMES[timezone.localdate().weekday()]
-        self.assertEqual(self.page.locator('[data-day-current]').inner_text(), today)
-        self.assertEqual(self.visible_panel().count(), 1)
-        self.assertEqual(self.visible_panel().get_by_role('heading', level=2).inner_text(), today)
-        self.assertEqual(self.visible_panel().locator('[data-meal-link]').count(), 3)
-        estimate = Decimal(self.page.locator('.stat__value').inner_text().removeprefix('Est. $'))
-        self.assertLessEqual(estimate, Decimal('50.00'))
-
-    def test_every_meal_in_the_week_is_different(self):
+    def test_one_day_at_a_time_with_the_fallback_note(self):
         self.log_in()
         self.open_meal_plan()
-        titles = self.page.locator('[data-day-panel] .media__title').all_text_contents()
-        self.assertEqual(len(titles), 21)
-        self.assertEqual(len(set(titles)), 21)
+        self.assertEqual(self.visible_day().count(), 1)
+        self.assertEqual(self.visible_cards().count(), 3)
+        note = self.page.get_by_role('note').inner_text()
+        self.assertIn('FDA Daily Values', note)
+        self.assertIn("Grocery prices aren't available yet", note)
 
-    def test_day_picker_switches_days_in_place(self):
+    def test_days_switch_in_place_without_reloading_or_scrolling(self):
         self.log_in()
         self.open_meal_plan()
-        self.mark_page()
+        self.page.evaluate('window.__noReload = true')
+        self.page.get_by_role('link', name='Friday').scroll_into_view_if_needed()
+        before = self.scroll_y()
         self.page.get_by_role('link', name='Friday').click()
+        self.assertEqual(self.visible_day().get_attribute('data-day-panel'), 'friday')
         self.assertEqual(self.page.locator('[data-day-current]').inner_text(), 'Friday')
-        self.assertEqual(self.visible_panel().get_attribute('data-day-panel'), 'friday')
-        self.assertEqual(self.page.get_by_role('link', name='Friday').get_attribute('aria-current'), 'true')
         self.assertIn('day=friday', self.page.url)
+        self.assertEqual(self.scroll_y(), before)
         self.page.get_by_role('link', name='Next day').click()
-        self.assertEqual(self.page.locator('[data-day-current]').inner_text(), 'Saturday')
-        self.page.get_by_role('link', name='Previous day').click()
-        self.page.get_by_role('link', name='Previous day').click()
-        self.assertEqual(self.page.locator('[data-day-current]').inner_text(), 'Thursday')
-        # The details panel follows the day: it shows that day's first meal.
-        self.page.wait_for_function("document.querySelector('[data-meal-details]').textContent.includes('Thursday')")
-        self.assert_not_reloaded()
+        self.assertEqual(self.visible_day().get_attribute('data-day-panel'), 'saturday')
+        self.assertTrue(self.page.evaluate('window.__noReload === true'))
 
-    def test_selecting_a_meal_shows_its_details_beside_the_list(self):
+    def test_a_recipe_opens_in_place_with_the_keyboard(self):
         self.log_in()
         self.open_meal_plan()
-        self.mark_page()
-        dinner = self.visible_panel().locator('[data-meal="dinner"]')
-        title = dinner.locator('.media__title').inner_text()
-        dinner.click()
-        details = self.page.get_by_role('complementary', name='Selected meal')
-        self.page.wait_for_function(
-            "title => document.querySelector('#meal-details-title').textContent === title", arg=title
-        )
-        self.assertGreater(details.locator('.ingredient-grid li').count(), 0)
-        self.assertEqual(details.get_by_role('tab', name='Ingredients').get_attribute('aria-selected'), 'true')
-        self.assertEqual(dinner.get_attribute('aria-current'), 'true')
-        self.assertEqual(self.page.evaluate('document.activeElement.id'), 'meal-details-title')
-        self.assertIn('meal=dinner', self.page.url)
-        self.assert_not_reloaded()
-
-    def test_recipe_tabs_work_with_the_keyboard(self):
-        self.log_in()
-        self.open_meal_plan()
-        details = self.page.get_by_role('complementary', name='Selected meal')
-        ingredients = details.get_by_role('tab', name='Ingredients')
-        steps = details.get_by_role('tab', name='Steps')
-        self.assertTrue(details.get_by_role('tabpanel').locator('.ingredient-grid').is_visible())
-        ingredients.focus()
-        self.page.keyboard.press('ArrowRight')
-        self.assertEqual(steps.get_attribute('aria-selected'), 'true')
-        self.assertEqual(self.page.evaluate('document.activeElement.id'), 'recipe-tab-steps')
-        self.assertTrue(details.locator('.steps').is_visible())
-        self.assertFalse(details.locator('.ingredient-grid').is_visible())
-        self.page.keyboard.press('Home')
-        self.assertEqual(ingredients.get_attribute('aria-selected'), 'true')
-
-    def test_save_generate_new_and_go_back_to_the_saved_plan(self):
-        self.log_in()
-        self.open_meal_plan()
-        self.assertEqual(self.page.locator('.status-badge').inner_text(), 'Not saved')
-        self.page.get_by_role('link', name='Friday').click()
-        self.page.get_by_role('button', name='Save meal plan').click()
-        self.page.wait_for_url('**day=friday**')
-        self.assertIn('Meal plan saved', self.page.get_by_role('status').first.inner_text())
-        self.assertTrue(self.page.locator('.status-badge').inner_text().startswith('Saved'))
-        saved_titles = self.page.locator('[data-day-panel] .media__title').all_text_contents()
-
-        self.page.get_by_role('button', name='Generate a new meal plan').click()
-        self.page.wait_for_load_state()
-        new_titles = self.page.locator('[data-day-panel] .media__title').all_text_contents()
-        self.assertNotEqual(new_titles, saved_titles)
-        self.assertEqual(self.page.locator('.status-badge').inner_text(), 'Not saved')
-
-        self.page.get_by_role('button', name='Back to saved plan').click()
-        self.page.wait_for_load_state()
-        self.assertEqual(self.page.locator('[data-day-panel] .media__title').all_text_contents(), saved_titles)
-
-    def test_report_and_ingredients_download(self):
-        self.log_in('50.00')
-        self.open_meal_plan()
-        self.page.get_by_role('link', name='View report').click()
-        self.page.wait_for_url('**/meal-plan/report/')
-        self.assertEqual(self.page.get_by_role('heading', level=1).inner_text(), 'Meal plan report')
-        self.assertIn('Within budget', self.page.locator('.meter__status').inner_text())
-        self.assertEqual(self.page.locator('.bar-list__row').count(), 7)
-        self.page.locator('summary', has_text='Monday').click()
-        self.assertTrue(self.page.locator('details[open] .ingredient-grid').first.is_visible())
-        with self.page.expect_download() as download_info:
-            self.page.get_by_role('link', name='Download ingredients (CSV)').click()
-        download = download_info.value
-        self.assertRegex(download.suggested_filename, r'^fitpro-ingredients-week-of-\d{4}-\d{2}-\d{2}\.csv$')
-        with open(download.path(), encoding='utf-8-sig') as file:
-            self.assertTrue(file.readline().startswith('Day,Meal,Recipe,Ingredient'))
-
-    @override_settings(NUTRITION_RECIPE_SOURCE='e2e.test_meal_plan.BrokenImageSource')
-    def test_placeholder_art_shows_when_a_photo_fails_to_load(self):
-        self.page.route('https://img.spoonacular.com/**', lambda route: route.abort())  # never leaves the browser
-        self.log_in()
-        self.open_meal_plan()
-        thumb = self.visible_panel().locator('.food-image').first
-        self.assertTrue(thumb.locator('.food-image__art').is_visible())
-        visible_photos = "[...document.querySelectorAll('[data-day-panel]:not([hidden]) .food-image__photo')]"
-        self.page.wait_for_function(f'() => {visible_photos}.every(img => img.complete)')
-        self.assertEqual(thumb.locator('.food-image__photo').evaluate('img => img.naturalWidth'), 0)
-        box = thumb.bounding_box()
-        assert box is not None
-        self.assertGreater(box['width'], 40)
+        card = self.visible_cards().nth(1)
+        summary = card.locator('summary')
+        summary.scroll_into_view_if_needed()
+        top = card.bounding_box()
+        before = self.scroll_y()
+        summary.focus()
+        self.page.keyboard.press('Enter')
+        self.assertTrue(card.locator('.ingredient-grid').is_visible())
+        self.assertTrue(card.locator('.steps').is_visible())
+        self.assertEqual(self.scroll_y(), before)  # the page doesn't move; the recipe opens under the meal
+        assert top is not None
+        after = card.bounding_box()
+        assert after is not None
+        self.assertEqual(round(after['y']), round(top['y']))
 
     def test_everything_works_without_javascript(self):
         self.new_page(java_script_enabled=False)
@@ -226,33 +143,27 @@ class MealPlanBrowserTests(StaticLiveServerTestCase):
         self.open_meal_plan()
         self.page.get_by_role('link', name='Sunday').click()
         self.page.wait_for_url('**day=sunday**')
-        self.assertEqual(self.visible_panel().get_attribute('data-day-panel'), 'sunday')
-        lunch = self.visible_panel().locator('[data-meal="lunch"]')
-        title = lunch.locator('.media__title').inner_text()
-        lunch.click()
-        self.page.wait_for_url('**meal=lunch**')
-        self.assertEqual(self.page.locator('#meal-details-title').inner_text(), title)
+        self.assertEqual(self.visible_day().get_attribute('data-day-panel'), 'sunday')
+        self.visible_cards().first.locator('summary').click()
+        self.assertTrue(self.visible_cards().first.locator('.steps').is_visible())
+        self.page.get_by_role('button', name='Generate a new meal plan').click()
+        self.page.wait_for_url('**day=sunday**')
+        self.assertTrue(self.page.get_by_text('Here is a new meal plan for this week.').is_visible())
 
+    @override_settings(NUTRITION_GROCERY_PRICE_SOURCE='nutrition.testing.FlatGroceryPrices')
     def test_budget_too_low_shows_the_over_budget_notice(self):
-        self.log_in('10.00')
+        self.log_in(budget='10.00')
         self.open_meal_plan()
-        self.assertIn('over your $10.00 budget', self.page.get_by_role('status').inner_text())
-        self.assertEqual(self.page.locator('[data-day-panel] [data-meal-link]').count(), 21)
-
-    def test_zero_budget_still_gets_a_plan_with_the_whole_cost_as_shortfall(self):
-        self.log_in('0.00')
-        self.open_meal_plan()
-        estimate = self.page.locator('.stat__value').inner_text().removeprefix('Est. ')
-        self.assertIn(f'{estimate} over your $0.00 budget', self.page.get_by_role('status').inner_text())
+        self.assertTrue(self.page.get_by_text('over your $10.00 budget.').is_visible())
+        self.assertTrue(self.page.locator('.stat__value', has_text='Est. $').is_visible())
 
     @override_settings(NUTRITION_RECIPE_SOURCE='nutrition.testing.UnavailableRecipeSource')
     def test_recipe_service_down_still_lets_you_get_back_to_workouts(self):
         self.log_in()
         self.open_meal_plan()
-        self.assertIn('temporarily unavailable', self.page.get_by_role('status').inner_text())
+        self.assertTrue(self.page.get_by_text('Meal suggestions are temporarily unavailable.').is_visible())
         self.page.get_by_role('link', name='Go to your dashboard').click()
         self.page.wait_for_url('**/dashboard/')
-        self.assertEqual(self.page.get_by_role('heading', level=1).inner_text(), 'Dashboard')
 
     def test_skip_link_is_the_first_tab_stop_and_moves_focus_to_main(self):
         self.log_in()
@@ -262,28 +173,22 @@ class MealPlanBrowserTests(StaticLiveServerTestCase):
         self.page.keyboard.press('Enter')
         self.assertEqual(self.page.evaluate('document.activeElement.id'), 'main')
 
-    def test_dark_mode_toggle_switches_and_persists(self):
-        self.log_in()
-        self.open_meal_plan()
-        toggle = self.page.get_by_role('button', name='Dark mode')
-        after = 'false' if toggle.get_attribute('aria-pressed') == 'true' else 'true'
-        toggle.click()
-        self.assertEqual(toggle.get_attribute('aria-pressed'), after)
-        self.page.reload()
-        self.assertEqual(self.page.get_by_role('button', name='Dark mode').get_attribute('aria-pressed'), after)
-
-    def test_phone_width_has_no_horizontal_scroll(self):
+    def test_phone_width_puts_totals_above_meals_without_horizontal_scroll(self):
         self.log_in()
         self.page.set_viewport_size({'width': 375, 'height': 800})
         self.open_meal_plan()
         overflow = self.page.evaluate('document.scrollingElement.scrollWidth - window.innerWidth')
         self.assertLessEqual(overflow, 0)
+        meals = self.visible_day().locator('.meal-stack').bounding_box()
+        totals = self.visible_day().locator('aside').bounding_box()
+        assert meals is not None and totals is not None
+        self.assertLess(totals['y'] + totals['height'], meals['y'] + 1)  # totals above the meals
 
-
-class BrokenImageSource(FixedRecipeSource):
-    """The fixed test recipes, each with a Spoonacular image URL that the test makes fail."""
-
-    def budget_recipes(self):
-        return [
-            replace(r, image_url=f'https://img.spoonacular.com/recipes/{r.id}.jpg') for r in super().budget_recipes()
-        ]
+    def test_wide_screens_put_the_totals_beside_the_meals(self):
+        self.log_in()
+        self.page.set_viewport_size({'width': 1440, 'height': 900})
+        self.open_meal_plan()
+        meals = self.visible_day().locator('.meal-stack').bounding_box()
+        totals = self.visible_day().locator('aside').bounding_box()
+        assert meals is not None and totals is not None
+        self.assertGreater(totals['x'], meals['x'] + meals['width'] - 1)

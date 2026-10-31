@@ -15,7 +15,6 @@ import sys
 from pathlib import Path
 
 import environ
-from django.core.exceptions import ImproperlyConfigured
 
 # Implementing django-environ to prevent secrets from getting committed in the settings file
 #  ref: https://django-environ.readthedocs.io/en/latest/quickstart.html
@@ -176,28 +175,15 @@ AUTH_THROTTLE = {
 }
 
 
-# Meal planning (story D-5, ADR-008). The planner talks to two plug-in points, chosen here by dotted path.
-# RECIPE_SOURCE: 'catalog' (built-in starter recipes, no network) or 'spoonacular' (needs SPOONACULAR_API_KEY).
-NUTRITION_RECIPE_SOURCES = {
-    'catalog': 'nutrition.recipe_sources.StarterCatalogSource',
-    'spoonacular': 'nutrition.recipe_sources.SpoonacularRecipeSource',
-}
-RECIPE_SOURCE = env('RECIPE_SOURCE', default='catalog')
-if RECIPE_SOURCE not in NUTRITION_RECIPE_SOURCES:
-    raise ImproperlyConfigured(f'RECIPE_SOURCE must be one of {sorted(NUTRITION_RECIPE_SOURCES)}.')
-NUTRITION_RECIPE_SOURCE = NUTRITION_RECIPE_SOURCES[RECIPE_SOURCE]
-# D-4 (macro generation) replaces this with its own provider; until then plans are optimised for cost.
-NUTRITION_MACRO_TARGETS_PROVIDER = 'nutrition.macros.NoMacroTargets'
-SPOONACULAR_API_KEY = read_secret('spoonacular-api-key', 'SPOONACULAR_API_KEY', default='')
-# Recipe API data is cached in the database (nutrition.RecipeCacheEntry), shared by every pod, to save quota.
-NUTRITION_RECIPE_CACHE_SECONDS = 24 * 60 * 60  # the cheap-recipe searches serve everyone for a day
-NUTRITION_RECIPE_DETAILS_CACHE_SECONDS = 30 * 24 * 60 * 60  # a recipe's ingredients and steps rarely change
-NUTRITION_RECIPE_FAILURE_CACHE_SECONDS = 2 * 60  # after a failure, wait before calling the API again
-NUTRITION_RECIPE_TIMEOUT_SECONDS = 5
-if TESTING:
-    # Tests never call the real recipe API or spend its quota, whatever .env says; they fake it instead.
-    NUTRITION_RECIPE_SOURCE = NUTRITION_RECIPE_SOURCES['catalog']
-    SPOONACULAR_API_KEY = ''
+# Meal planning (story D-5, ADR-008). The meal plan talks to the features built alongside it through connectors,
+# each named here by dotted path (see nutrition/ports.py). Point a setting at your implementation to plug it in.
+NUTRITION_RECIPE_SOURCE = 'nutrition.recipe_sources.CatalogRecipeSource'
+# D-4 Macro Generation. Until connected, plans use the FDA Daily Values (nutrition/targets.py).
+NUTRITION_MACRO_TARGETS_PROVIDER = 'nutrition.connectors.NoMacroTargets'
+# D-6 Grocery List Generation. Until connected, plans have no cost estimate and aren't limited by the budget.
+NUTRITION_GROCERY_PRICE_SOURCE = 'nutrition.connectors.NoGroceryPrices'
+# D-3 Workout Split Generation: where "This Week" lives. The dashboard until D-3 adds its page.
+NUTRITION_WORKOUTS_LINK = {'url_name': 'dashboard', 'text': 'Go to your dashboard'}
 
 
 # Internationalization
