@@ -31,15 +31,19 @@ conscious students. The application offers personalized workout splits, meal-pre
 * `cp .env.example .env`
 * `uv sync`
 * `uv run python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"` - Put value in .env
-* `uv run python manage.py migrate`
+* `uv run python manage.py migrate` (this also loads the recipe catalog, see [ADR-008](docs/adrs/adr-008.md))
 * `uv run python manage.py runserver`
+
+SQLite is the default. To develop against PostgreSQL like production, set the `DB_*` variables in `.env` (see
+[`docs/configurations/project_initial_setup.md`](docs/configurations/project_initial_setup.md)).
 > [!tip]
 > In DevEdu, port 8000 isn't available, so do this instead: `uv run python manage.py runserver 0.0.0.0:3000`
 
 ## Common Commands
 * `uv run python manage.py runserver` [Starts the Django development server]
 * `uv run python manage.py makemigrations` [Creates new database migrations]
-* `uv run python manage.py migrate` [Applies database migrations]
+* `uv run python manage.py migrate` [Applies database migrations, then reloads the recipe catalog]
+* `uv run python manage.py load_recipe_catalog` [Reloads recipes from `nutrition/data/recipe_catalog.json`; `--file` loads another file]
 * `uv run python manage.py test` [Runs Django tests]
 * `uv run python manage.py behave` [Runs the Gherkin acceptance scenarios in `features/`]
 * `E2E=1 uv run python manage.py test e2e` [Runs the Playwright browser tests in `e2e/`; run `uv run playwright install chromium` once first]
@@ -82,7 +86,7 @@ colours, so contrast and dark mode stay correct.
 | Buttons | `btn` plus `btn--primary`, `btn--secondary`, `btn--ghost`, or `btn--danger`; modifiers `btn--sm`, `btn--block`. Use `<button>` for actions and `<a class="btn">` for navigation |
 | Forms | `form`, `form-field`, `form-label`, `form-input`, `form-help`, `form-error`, `form-fieldset`, `choice-list`, `choice`. `{% include "core/_form_fields.html" %}` renders a whole Django form with these classes and keeps Django's `aria-describedby` / `aria-invalid` wiring |
 | Feedback | `alert` plus `alert--error`, `alert--success`, `alert--warning`, or `alert--info` (add `role="alert"` or `role="status"`) |
-| Content | `hero`, `hero__lede`, `data-list` (on a `<dl>`), `badge`, `media-list` with `media` / `media__thumb` / `media__body` / `media__eyebrow` / `media__title` / `media__meta` (rows of thumbnail + text; add `media--link` and `aria-current="true"` for a selectable row), `day-picker` (step through or jump to a day of the week), `split` (list beside details), `panel` / `panel--sticky` (a side panel that stays in view and scrolls on its own), `toolbar`, `food-image` (photo over course-tinted placeholder art), `chip-list` / `chip`, `macro-grid`, `tabs` (with `meal_plan.js`), `ingredient-grid`, `steps`, `status-badge`, `eyebrow` |
+| Content | `hero`, `hero__lede`, `data-list` (on a `<dl>`), `badge`, `media-list` with `media` / `media__thumb` / `media__body` / `media__eyebrow` / `media__title` / `media__meta` (rows of thumbnail + text; add `media--link` and `aria-current="true"` for a selectable row), `day-picker` (step through or jump to a day of the week; `day-picker__name` / `__date` / `__today` stack the weekday, date, and a "Today" label), `split` (list beside details), `panel` / `panel--sticky` (a side panel that stays in view and scrolls on its own), `toolbar`, `meal-stack` / `meal-card` with `meal-card__header` / `__heading` / `__title` / `__meta` / `__recipe` (a planned meal with its recipe in a `disclosure` underneath), `split--main-first` with `split__main` / `split__aside` (summary above the main content on phones, beside it on wide screens), `macro-list` / `macro-list__row` / `macro-list__meter` (grams against targets), `stat--start`, `alert__list` (bullets inside an alert), `food-image` (course-tinted placeholder art), `chip-list` / `chip`, `macro-grid`, `tabs` (with `meal_plan.js`), `ingredient-grid` (add `ingredient-grid--weighed` with an `ingredient-grid__amount` per item for a weight at the end of each line), `steps`, `status-badge`, `eyebrow` |
 | Report and charts | `report-section`, `hero-figure` (one per page), `meter` (one value against a limit), `bar` / `bar-list` (SVG bars; widths as SVG attributes), `stat-row` / `stat-tile`, `data-table` inside `table-scroll` (focusable, labelled region), `disclosure-list` / `disclosure`, `messages` (Django messages, rendered by `base.html`), `stat` / `stat__value` / `stat__label` (a headline number) |
 | Utilities | `text-muted`, `text-center`, `text-sm`, `h3` (h3 size on another heading level), `mt-0`, `mb-0`, `mt-3`, `mt-4`, `mt-5`, `visually-hidden` |
 
@@ -113,21 +117,19 @@ Auth lives in the `accounts` app and uses Django's built-in `User` model, sessio
 | `/onboarding/` | `onboarding` | Login required | Onboarding questionnaire (story D-2). Users who already finished it are sent to `/dashboard/` |
 | `/dashboard/` | `dashboard` | Login required | Profile summary. Users who haven't finished onboarding are sent to `/onboarding/` |
 | `/users/` | `user_profile` | Login required | The signed-in user's own profile only |
-| `/meal-plan/` | `meal_plan` | Login required (onboarded users) | This week's budget meal plan (story D-5, [ADR-008](docs/adrs/adr-008.md)): a day picker, a different recipe for each planned meal (breakfast/lunch/dinner as chosen in onboarding), the selected meal's ingredients and steps, estimated cost against the weekly budget, an over-budget notice, and a "temporarily unavailable" state when the recipe service is down. `?day=&meal=` select a day and meal |
-| `/meal-plan/save/`, `/meal-plan/new/`, `/meal-plan/discard/` | `meal_plan_save`, `meal_plan_new`, `meal_plan_discard` | Login required, `POST` only | Save this week's plan, generate a new plan (avoiding meals already shown), or go back to the saved plan |
-| `/meal-plan/report/` | `meal_plan_report` | Login required (onboarded users) | Report on the current plan: budget meter, daily spend, and ingredients by day |
-| `/meal-plan/report/ingredients.csv` | `meal_plan_ingredients_csv` | Login required (onboarded users) | Download the week's ingredients as CSV (the user's own plan only; formula-safe cells; `private, no-store`) |
-| `/meal-plan/details/` | `meal_plan_details` | Login required (onboarded users) | The details panel for one meal of the user's own plan (`?day=&meal=`), fetched by the page's script; 404 for anything not in the plan |
+| `/meal-plan/` | `meal_plan` | Login required (onboarded users) | This week's meal plan (story D-5, [ADR-008](docs/adrs/adr-008.md)): a week strip to pick a day, that day's meals (chosen in onboarding) as cards with portion, kcal, and macros, each recipe's weighed ingredients and steps opening in place, the day's totals against its targets, the estimated grocery cost and an over-budget notice once grocery prices are connected (D-6), a notice for each fallback in use, and a "temporarily unavailable" state. `?day=` selects a day; `meal_plan.js` switches days without a reload |
+| `/meal-plan/new/` | `meal_plan_new` | Login required, `POST` only | Replace this week's plan with a different one |
 
 ### Acceptance scenarios
 The Gherkin scenarios live in [`features/user_auth.feature`](features/user_auth.feature) (successful registration, email
 already registered, wrong password) and [`features/onboarding.feature`](features/onboarding.feature) (complete
 onboarding, missing required answer, returning user skips onboarding), and [`features/meal_plan.feature`](features/meal_plan.feature)
-(plan within budget, budget too low, recipe service unavailable). Step definitions are in `features/steps/`. Tests never call the
-recipe API: under `manage.py test`/`behave` the settings force the built-in recipe catalog whatever `.env` says.
+(plan within budget, budget too low, recipe service unavailable, plus the no-macro-targets and no-prices fallbacks). Step
+definitions are in `features/steps/`. Nothing calls the network: the connectors to D-4 and D-6 use the stand-ins in
+`nutrition/testing.py`, and the recipe catalog is loaded into the test database after migrations.
 Django tests are in `accounts/tests.py` (registration, login, logout), `core/test_onboarding.py` (onboarding, dashboard,
 and the login redirect), `core/tests.py` (models, health checks, and access control), and `nutrition/test_*.py` (meal
-planner, recipe sources, Meal Plan page). Browser tests for the Meal Plan page are in `e2e/` (see Common Commands).
+planner and pricing, recipe catalog and loader, connectors and fallbacks, Meal Plan page). Browser tests for the Meal Plan page are in `e2e/` (see Common Commands).
 
 ```shell
 uv run python manage.py test    # Django tests
@@ -152,7 +154,7 @@ uv run python manage.py behave  # Gherkin scenarios
   "email already exists" message required by the user story still reveals that an email has an account.
 * **Email format is validated, but ownership is not.** Email verification and password reset need a production email backend (`MAILERS` still uses the console backend).
 * **No admin site.** It was removed ([ADR-007](docs/adrs/adr-007.md)); manage data with `manage.py shell` or a one-off Job. Re-adding it needs network-level restriction first.
-* **Meal plan (D-5)**: the "temporarily unavailable" notice links to the dashboard until "This Week" and starting a workout ship with D-3. Plans are optimised for cost until D-4 provides macro targets. "Today", the week boundary, and "Saved" timestamps use the server's time zone (UTC). The report lists ingredients per meal; combining them into one shopping list is D-6. Spoonacular is off in production until `spoonacular-api-key` is added to Secret Manager and the SecretProviderClass and `RECIPE_SOURCE=spoonacular` is set; the built-in starter catalog is used meanwhile (see ADR-008).
+* **Meal plan (D-5)** ([ADR-008](docs/adrs/adr-008.md)): until D-4 is connected, plans use the FDA Daily Values (2,000 kcal) instead of personal macro targets. Until D-6 is connected, there's no cost estimate and the budget isn't applied. Until D-3 ships "This Week", the unavailable notice links to the dashboard. The catalog has 25 recipes with no dietary filters yet, nutrients come from USDA SR Legacy (2018), and pantry staples aren't counted. "Today" and the week boundary use the server's time zone (UTC).
 * **Password hashing** uses Django's default; Argon2 is a possible upgrade (needs the `argon2-cffi` dependency).
 
 ## Contributing
@@ -230,4 +232,4 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 | Claude | Nathan Galay | Implemented user story D-1 (user-auth) on the accounts app: generic login error, email login, password and session hardening, Gherkin feature and step definitions, extra Django tests, ADR-005, and this README section |
 | Claude | Caleb Harris | Claude Code added login/registration rate limiting, database-enforced email uniqueness, ruff/mypy/bandit/CodeQL CI gates and Dependabot config, disabled the admin site, wrote ADR-006 and ADR-007, and corrected this README against the Sprint 1 feedback |
 | Claude | Caleb Harris | Claude Code applied the PR #20/#27 review follow-ups (merged duplicate test modules, onboarding input bounds, shared base template, ADR-005) and moved the coverage report into `ci.yml` with the 80% gate and artifact on PRs only |
-| Claude | Caleb Harris | Claude Code implemented story D-5 (weekly budget meal plan): `nutrition` app with a pure planner behind recipe-source and macro-target ports, meal choice in onboarding, a different recipe for every meal, Spoonacular adapter with a shared Postgres cache and starter catalog, Meal Plan page with day picker, tabbed recipe details and placeholder art, saved weekly plans and plan regeneration, a report page with budget meter, daily spend chart and secure ingredients CSV, unit/Gherkin/Playwright tests, and ADR-008 |
+| Claude | Caleb Harris | Claude Code implemented story D-5 (weekly budget meal plan): `nutrition` app with connectors for D-3, D-4, and D-6 and their fallbacks (FDA Daily Values, no-price planning), a USDA FoodData Central recipe catalog and loader, a whole-package, ingredient-sharing planner, stored weekly plans for D-6, the Meal Plan page (week strip, day view with in-place recipes), meal checkboxes in onboarding, unit/Gherkin/Playwright tests, and ADR-008 |
