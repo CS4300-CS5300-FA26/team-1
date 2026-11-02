@@ -20,6 +20,7 @@
       <dt>Weekly food budget</dt><dd>${{ profile.weekly_food_budget|floatformat:2 }}</dd>
       <dt>Available equipment</dt><dd>{{ profile.equipment_labels|join:", " }}</dd>
     </dl>
+    <p><a href="{% url 'this_week' %}">This Week</a> &middot; <a href="{% url 'nutrition' %}">Nutrition</a></p>
   </main>
   <form method="post" action="{% url 'logout' %}" style="text-align:center">
     {% csrf_token %}

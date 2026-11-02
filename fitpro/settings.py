@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'core',
     'accounts',
+    'plans',
 ]
 
 # behave-django runs the Gherkin scenarios in features/ (`manage.py behave`). It is a dev
