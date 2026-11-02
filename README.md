@@ -19,7 +19,8 @@ conscious students. The application offers personalized workout splits, meal-pre
 * **DB:** PostgreSQL 16 (Cloud SQL for PostgreSQL in production, see [ADR-002](docs/adrs/adr-002.md))
 * **Production Host:** GKE Autopilot on Google Cloud, `us-central1` (see [ADR-003](docs/adrs/adr-003.md))
 * **Infrastructure as Code:** Terraform (`terraform_scripts/`), state in a versioned GCS bucket
-* **Base Docker Image:** TBD (planned: `python:3.12-slim`, multi-stage, non-root)
+* **Docker Image:** multi-stage build on `python:3.12-slim` with uv, running Gunicorn as a non-root user (UID 10001) with a read-only code tree (see `Dockerfile`)
+* **Code quality:** ruff (lint and format), mypy with django-stubs (types), bandit and CodeQL (security scans), all enforced in CI
 
 ## Getting Started
 > [!Note]
@@ -54,10 +55,23 @@ uv run coverage report   # fails under 80%
 uv run coverage html     # writes htmlcov/index.html
 ```
 
+### Code quality and security scans
+CI fails on any of these (settings in `pyproject.toml`). Run them locally before pushing:
+
+```shell
+uv run ruff check .          # lint (use --fix for safe auto-fixes)
+uv run ruff format .         # format (CI runs it with --check)
+uv run mypy .                # types, with django-stubs
+uv run bandit -c pyproject.toml -r .   # SAST for Python
+```
+
+CodeQL (`.github/workflows/codeql.yml`) also scans pull requests, `main`, and weekly, with results in the repository's Security tab.
+Dependabot (`.github/dependabot.yml`) opens weekly PRs for uv dependencies, GitHub Actions, and the Docker base image.
+
 ## Authentication
 User story **D-1 (user-auth)**: *as a new user, I want to create an account and log in, so that my plan and history are private to me.*
 Auth lives in the `accounts` app and uses Django's built-in `User` model, sessions, and password hashing
-(decision recorded in [ADR-005](docs/adrs/adr-005.md)).
+(decisions recorded in [ADR-005](docs/adrs/adr-005.md) and [ADR-006](docs/adrs/adr-006.md)).
 
 | Route | Name | Access | Purpose |
 | --- | --- | --- | --- |
@@ -86,7 +100,7 @@ uv run python manage.py behave  # Gherkin scenarios
 | Password storage | Hashed with Django's default PBKDF2-SHA256 hasher; never stored or logged in plain text. Password fields are marked sensitive so they are scrubbed from error reports |
 | Password rules | Minimum 10 characters, not a commonly used password, not entirely numeric, not too similar to the username or email (`AUTH_PASSWORD_VALIDATORS`) |
 | Login errors | One generic message, "Invalid email or password", for an unknown user, a wrong password, and an inactive account, so the login form cannot be used to discover accounts |
-| Emails and usernames | Emails are trimmed, lowercased, and checked for duplicates case-insensitively; usernames cannot contain `@`, so a username can never be mistaken for an email |
+| Emails and usernames | Emails are trimmed, lowercased, and checked for duplicates case-insensitively (the form check is backed by a unique database index on `LOWER(email)`); usernames cannot contain `@`, so a username can never be mistaken for an email |
 | Sessions | The session key is rotated on login and registration (prevents session fixation); cookies are `HttpOnly`, `SameSite=Lax`, and `Secure` behind the HTTPS proxy; sessions expire after 7 days |
 | CSRF | Every form posts a CSRF token; Django rejects POSTs without one |
 | Logout | `POST` only, so a third-party page cannot log a user out with a link or image |
@@ -94,23 +108,34 @@ uv run python manage.py behave  # Gherkin scenarios
 | Access control | `/onboarding/`, `/dashboard/`, and `/users/` require login; `/users/` previously listed every user's profile and now shows only the signed-in user's own |
 
 ### Known gaps (planned follow-ups)
-* **No rate limiting or lockout on login or registration yet.** The "email already exists" message required by the user story
-  also reveals that an email has an account. Add [`django-axes`](https://django-axes.readthedocs.io/) (or similar) with `uv add`.
-* **Email uniqueness is checked in the form, not enforced by the database**, so two simultaneous sign-ups with the same email could both succeed.
+* **Rate limiting is in place for login and registration** ([ADR-006](docs/adrs/adr-006.md)), but the
+  "email already exists" message required by the user story still reveals that an email has an account.
 * **Email format is validated, but ownership is not.** Email verification and password reset need a production email backend (`MAILERS` still uses the console backend).
-* **Admin site** (`/admin/`) is reachable on the public hostname; consider restricting it before launch.
+* **No admin site.** It was removed ([ADR-007](docs/adrs/adr-007.md)); manage data with `manage.py shell` or a one-off Job. Re-adding it needs network-level restriction first.
 * **Password hashing** uses Django's default; Argon2 is a possible upgrade (needs the `argon2-cffi` dependency).
 
 ## Contributing
 * Branch naming: `feature/<short-description>`, `fix/<short-description>`
 * Changes to **main** must come through a PR and must be approved by at least one other team member.
-* [TBD linting tool maybe?]
+* **Author:** opens the PR, keeps CI green, and answers review comments. Don't approve your own PR.
+* **Reviewer:** reads the diff and the Codex review comment (`pr-review.yml`), checks that new behavior has tests, and approves or requests changes. The AI review does not replace a human approval.
+* **Before pushing:** run `uv run ruff check .`, `uv run ruff format .`, `uv run mypy .`, `uv run bandit -c pyproject.toml -r .`, and the tests (see [Code quality and security scans](#code-quality-and-security-scans)). CI runs the same checks and fails the PR if any of them fail.
+* **Dependency updates:** Dependabot PRs follow the same review rules. Merge them only when CI passes.
+* **Decisions:** a change that alters the architecture, security posture, or a tradeoff gets an ADR in `docs/adrs/`.
 
 ## Deployment
 Production runs on Google Cloud. Architecture and workflow diagrams are in `docs/diagrams/`, the decisions behind them
 are in `docs/adrs/`, and the one-time GCP setup steps are in
 [deployment_gcp_config.md](docs/configurations/deployment_gcp_config.md). 
 Settings read secrets from `/var/secrets/<name>` in Kubernetes and fall back to environment variables / `.env` locally; set `BEHIND_HTTPS_PROXY=False` to run the production image over plain HTTP.
+
+### Monitoring and incident response
+What exists today:
+* `/livez/` returns 200 while the process is serving requests (no database access). `/healthz/` returns 200 only if the database answers, otherwise 503. The Kubernetes probes and the load balancer health check use them.
+* Application logs, including tracebacks and `accounts.security` throttling warnings, go to stdout and are collected by Cloud Logging.
+* Deploys are gated by CI, a container smoke test, and a migration Job; `scripts/rollback.sh` reverts a bad release.
+
+Alerting and response: monitoring and alerts are currently handled through Google Cloud Monitoring and the Google Cloud mobile app. Caleb Harris owns the infrastructure and is the responsible party for responding to and fixing incidents.
 
 ### Implemented (Terraform, `terraform_scripts/`)
 | Area | Resources |
@@ -161,4 +186,5 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 | Codex | Caleb Harris | Automatic PR review: `pr-review.yml` runs `openai/codex-action` when a PR is opened and posts the feedback as a PR comment | n/a |
 | Claude | Caleb Harris | Reviewed `pr-review.yml` against the other CI workflows and pinned its actions to commit SHAs | n/a |
 | Claude | Nathan Galay | Implemented user story D-1 (user-auth) on the accounts app: generic login error, email login, password and session hardening, Gherkin feature and step definitions, extra Django tests, ADR-005, and this README section | n/a |
+| Claude | Caleb Harris | Claude Code added login/registration rate limiting, database-enforced email uniqueness, ruff/mypy/bandit/CodeQL CI gates and Dependabot config, disabled the admin site, wrote ADR-006 and ADR-007, and corrected this README against the Sprint 1 feedback | n/a |
 | Claude | Caleb Harris | Claude Code applied the PR #20/#27 review follow-ups (merged duplicate test modules, onboarding input bounds, shared base template, ADR-005) and moved the coverage report into `ci.yml` with the 80% gate and artifact on PRs only | n/a |

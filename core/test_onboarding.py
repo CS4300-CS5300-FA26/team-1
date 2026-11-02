@@ -2,6 +2,7 @@
 
 The Gherkin scenarios for this story are in features/onboarding.feature.
 """
+
 from decimal import Decimal
 from io import StringIO
 
@@ -48,7 +49,9 @@ COMPLETED_ANSWERS = {
 class OnboardingTestBase(TestCase):
     def make_user(self, username='alice', completed=False, with_profile=True, **profile_fields):
         user = User.objects.create_user(
-            username=username, email=f'{username}@example.com', password=PASSWORD,
+            username=username,
+            email=f'{username}@example.com',
+            password=PASSWORD,
         )
         if with_profile:
             UserProfile.objects.create(user=user, onboarding_completed=completed, **profile_fields)
@@ -106,7 +109,8 @@ class CompleteOnboardingTests(OnboardingTestBase):
         self.log_in_as(user)
 
         response = self.client.post(
-            reverse('onboarding'), {**VALID_ANSWERS, 'weekly_food_budget': '0'},
+            reverse('onboarding'),
+            {**VALID_ANSWERS, 'weekly_food_budget': '0'},
         )
 
         self.assertRedirects(response, reverse('dashboard'), fetch_redirect_response=False)
@@ -117,7 +121,8 @@ class CompleteOnboardingTests(OnboardingTestBase):
         self.log_in_as(user)
 
         response = self.client.post(
-            reverse('onboarding'), {**VALID_ANSWERS, 'height_inches': '96', 'weight': '50'},
+            reverse('onboarding'),
+            {**VALID_ANSWERS, 'height_inches': '96', 'weight': '50'},
         )
 
         self.assertRedirects(response, reverse('dashboard'), fetch_redirect_response=False)
@@ -143,7 +148,8 @@ class MissingAnswerTests(OnboardingTestBase):
         self.log_in_as(user)
 
         response = self.client.post(
-            reverse('onboarding'), {**VALID_ANSWERS, 'weekly_food_budget': ''},
+            reverse('onboarding'),
+            {**VALID_ANSWERS, 'weekly_food_budget': ''},
         )
 
         self.assertEqual(response.status_code, 200)  # re-rendered, not redirected
@@ -214,7 +220,9 @@ class AccessGuardTests(OnboardingTestBase):
                 url = reverse(name)
                 response = self.client.get(url)
                 self.assertRedirects(
-                    response, f"{reverse('login')}?next={url}", fetch_redirect_response=False,
+                    response,
+                    f'{reverse("login")}?next={url}',
+                    fetch_redirect_response=False,
                 )
 
     def test_anonymous_post_to_onboarding_is_rejected_and_saves_nothing(self):
@@ -277,7 +285,9 @@ class AccessGuardTests(OnboardingTestBase):
         self.client.post(reverse('logout'))
         response = self.client.get(reverse('dashboard'))
         self.assertRedirects(
-            response, f"{reverse('login')}?next={reverse('dashboard')}", fetch_redirect_response=False,
+            response,
+            f'{reverse("login")}?next={reverse("dashboard")}',
+            fetch_redirect_response=False,
         )
 
 
@@ -337,18 +347,23 @@ class LoginRedirectTests(OnboardingTestBase):
                 self.client.force_login(user)
                 response = self.client.get(reverse('login'))
                 self.assertRedirects(
-                    response, reverse(destination), fetch_redirect_response=False,
+                    response,
+                    reverse(destination),
+                    fetch_redirect_response=False,
                 )
 
 
 class RegistrationTests(OnboardingTestBase):
     def test_new_user_gets_a_profile_and_lands_on_onboarding(self):
-        response = self.client.post(reverse('register'), {
-            'username': 'newuser',
-            'email': 'new@example.com',
-            'password1': PASSWORD,
-            'password2': PASSWORD,
-        })
+        response = self.client.post(
+            reverse('register'),
+            {
+                'username': 'newuser',
+                'email': 'new@example.com',
+                'password1': PASSWORD,
+                'password2': PASSWORD,
+            },
+        )
 
         self.assertRedirects(response, reverse('onboarding'), fetch_redirect_response=False)
         profile = UserProfile.objects.get(user__username='newuser')

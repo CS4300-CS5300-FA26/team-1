@@ -40,7 +40,5 @@ def user_profile_view(request):
     # Only ever the signed-in user's own profile: plans and history are private.
     user_profile = UserProfile.objects.filter(user=request.user)
 
-    context = {
-        "users": user_profile
-    }
-    return render(request, "core/display_user_info.html", context)
+    context = {'users': user_profile}
+    return render(request, 'core/display_user_info.html', context)

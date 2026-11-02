@@ -15,9 +15,14 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "bandit>=1.9.4",
     "behave>=1.3.3",
     "behave-django>=2.0.0",
     "coverage>=7.16.2",
+    "django-stubs>=6.1.2",
+    "djangorestframework-stubs>=3.18.1",
+    "mypy>=2.4.1",
+    "ruff>=0.17.3",
 ]
 
 [tool.coverage.run]
@@ -34,3 +39,41 @@ exclude_lines = [
     "raise NotImplementedError",
     "if TYPE_CHECKING:",
 ]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["staticfiles", "**/migrations/*"]
+
+[tool.ruff.lint]
+# E/W pycodestyle, F pyflakes, I isort, B bugbear, UP pyupgrade, DJ flake8-django,
+# S flake8-bandit (security), SIM simplify, C4 comprehensions.
+select = ["E", "W", "F", "I", "B", "UP", "DJ", "S", "SIM", "C4"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests use asserts and hard-coded throwaway passwords.
+"**/tests.py" = ["S101", "S105", "S106", "S107"]
+"**/test_*.py" = ["S101", "S105", "S106", "S107"]
+"features/**" = ["S101", "S105", "S106", "S107"]
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
+exclude = ['^features/', '^\.venv/', '/migrations/']
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+[[tool.mypy.overrides]]
+module = ["environ"]
+ignore_missing_imports = true
+
+[tool.django-stubs]
+django_settings_module = "fitpro.settings"
+
+[tool.bandit]
+exclude_dirs = [".venv", "features", "staticfiles", "tests.py", "test_onboarding.py"]
+skips = ["B101"]  # assert is used in tests only

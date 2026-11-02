@@ -38,8 +38,7 @@ class OnboardingForm(forms.ModelForm):
 
     class Meta:
         model = UserProfile
-        fields = ['goal', 'height_inches', 'weight', 'experience_level',
-                  'weekly_food_budget', 'equipment']
+        fields = ['goal', 'height_inches', 'weight', 'experience_level', 'weekly_food_budget', 'equipment']
         labels = {
             'goal': 'Your goal',
             'experience_level': 'Experience level',
@@ -59,7 +58,5 @@ class OnboardingForm(forms.ModelForm):
     def clean_equipment(self):
         equipment = self.cleaned_data['equipment']
         if 'none' in equipment and len(equipment) > 1:
-            raise forms.ValidationError(
-                '"No equipment" can\'t be combined with other equipment.'
-            )
+            raise forms.ValidationError('"No equipment" can\'t be combined with other equipment.')
         return equipment
