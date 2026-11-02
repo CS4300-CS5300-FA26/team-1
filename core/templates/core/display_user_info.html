@@ -1,19 +1,17 @@
 {% extends "core/base.html" %}
 {% block title %}Profile | FitPro{% endblock %}
-{% block content %}
-  <h1>User Profiles</h1>
-
-  <!-- Loop through the 'users' -->
-  {% for profile in users %}
-    <div class="user-card">
-      <p><small>Username: {{ profile.user.username }}</small></p>
-      <p><small>Age: {{ profile.age }}</small></p>
-      <p><small>Weight: {{ profile.weight }}</small></p>
-      <p><small>Date Created: {{ profile.created_at }}</small></p>
-    </div>
-    <hr>
-  {% empty %}
-    <!-- This displays if the database table is completely empty -->
-    <p>No users found yet.</p>
-  {% endfor %}
+{% block body %}
+  <div class="card">
+    <h1 class="card__title">Your profile</h1>
+    {% for profile in users %}
+      <dl class="data-list mt-5">
+        <dt>Username</dt><dd>{{ profile.user.username }}</dd>
+        <dt>Age</dt><dd>{{ profile.age|default:"Not set" }}</dd>
+        <dt>Weight</dt><dd>{% if profile.weight %}{{ profile.weight|floatformat:"-2" }} lb{% else %}Not set{% endif %}</dd>
+        <dt>Member since</dt><dd>{{ profile.created_at|date:"F j, Y" }}</dd>
+      </dl>
+    {% empty %}
+      <p class="text-muted">No profile found yet.</p>
+    {% endfor %}
+  </div>
 {% endblock %}
