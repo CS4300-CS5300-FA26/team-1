@@ -22,6 +22,7 @@ VALID_ANSWERS = {
     'weight': '180.5',
     'experience_level': 'intermediate',
     'weekly_food_budget': '85.50',
+    'planned_meals': ['breakfast', 'dinner'],
     'equipment': ['dumbbells', 'bands'],
 }
 
@@ -32,6 +33,7 @@ REQUIRED_MESSAGES = {
     'weight': 'Your weight is required.',
     'experience_level': 'Your experience level is required.',
     'weekly_food_budget': 'Weekly food budget is required.',
+    'planned_meals': 'Choose at least one meal to plan.',
     'equipment': 'Select at least one option for available equipment.',
 }
 
@@ -42,6 +44,7 @@ COMPLETED_ANSWERS = {
     'weight': Decimal('180.50'),
     'experience_level': 'intermediate',
     'weekly_food_budget': Decimal('85.50'),
+    'planned_meals': ['breakfast', 'lunch', 'dinner'],
     'equipment': ['dumbbells'],
 }
 
@@ -88,6 +91,7 @@ class CompleteOnboardingTests(OnboardingTestBase):
         self.assertEqual(profile.experience_level, 'intermediate')
         self.assertEqual(profile.weekly_food_budget, Decimal('85.50'))
         self.assertCountEqual(profile.equipment, ['dumbbells', 'bands'])
+        self.assertEqual(profile.planned_meals, ['breakfast', 'dinner'])
 
     def test_user_ends_up_on_dashboard_showing_their_values(self):
         self.log_in_as(self.make_user())
@@ -103,6 +107,7 @@ class CompleteOnboardingTests(OnboardingTestBase):
         self.assertContains(response, '$85.50')
         self.assertContains(response, 'Dumbbells')
         self.assertContains(response, 'Resistance bands')
+        self.assertContains(response, 'Breakfast, Dinner')
 
     def test_zero_budget_is_accepted(self):
         user = self.make_user()
@@ -174,7 +179,7 @@ class MissingAnswerTests(OnboardingTestBase):
 
         for field, message in REQUIRED_MESSAGES.items():
             with self.subTest(field=field):
-                blank = [] if field == 'equipment' else ''
+                blank = [] if field in ('equipment', 'planned_meals') else ''
                 response = self.client.post(reverse('onboarding'), {**VALID_ANSWERS, field: blank})
 
                 self.assertEqual(response.status_code, 200)
@@ -200,6 +205,7 @@ class MissingAnswerTests(OnboardingTestBase):
             ('weight', '700.01'),
             ('weekly_food_budget', 'lots'),
             ('weekly_food_budget', '-1'),
+            ('planned_meals', ['brunch']),
             ('equipment', ['jetpack']),
             ('equipment', ['none', 'dumbbells']),
         ]
@@ -399,3 +405,21 @@ class MigrationTests(TestCase):
             call_command('makemigrations', '--check', '--dry-run', stdout=out)
         except SystemExit:
             self.fail(f'Model changes are missing a migration:\n{out.getvalue()}')
+
+
+class MealChoiceTests(TestCase):
+    """The meal plan question is a group of checkboxes (story D-5)."""
+
+    def test_meals_are_checkboxes_all_ticked_by_default(self):
+        user = User.objects.create_user('meals', 'meals@example.com', PASSWORD)
+        UserProfile.objects.create(user=user)
+        self.client.force_login(user)
+        response = self.client.get(reverse('onboarding'))
+        for key in ('breakfast', 'lunch', 'dinner'):
+            self.assertContains(response, f'type="checkbox" name="planned_meals" value="{key}"')
+        self.assertContains(response, 'checked', count=3)
+
+    def test_meal_keys_are_in_day_order_and_default_to_all_three(self):
+        self.assertEqual(UserProfile(planned_meals=['dinner', 'breakfast']).meal_keys(), ['breakfast', 'dinner'])
+        self.assertEqual(UserProfile(planned_meals=[]).meal_keys(), ['breakfast', 'lunch', 'dinner'])
+        self.assertEqual(UserProfile(planned_meals=['lunch']).meal_labels(), ['Lunch'])

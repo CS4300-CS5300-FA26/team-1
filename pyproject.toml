@@ -22,11 +22,12 @@ dev = [
     "django-stubs>=6.1.2",
     "djangorestframework-stubs>=3.18.1",
     "mypy>=2.4.1",
+    "playwright>=1.64.1",
     "ruff>=0.17.3",
 ]
 
 [tool.coverage.run]
-source = ["core", "fitpro", "accounts"]
+source = ["core", "fitpro", "accounts", "nutrition"]
 omit = ["*/asgi.py", "*/wsgi.py", "*/migrations/*", "*/tests.py", "*/test_*.py"]
 
 [tool.coverage.report]
@@ -52,9 +53,9 @@ select = ["E", "W", "F", "I", "B", "UP", "DJ", "S", "SIM", "C4"]
 
 [tool.ruff.lint.per-file-ignores]
 # Tests use asserts and hard-coded throwaway passwords.
-"**/tests.py" = ["S101", "S105", "S106", "S107"]
-"**/test_*.py" = ["S101", "S105", "S106", "S107"]
-"features/**" = ["S101", "S105", "S106", "S107"]
+"**/tests.py" = ["S101", "S105", "S106", "S107", "S311"]
+"**/test_*.py" = ["S101", "S105", "S106", "S107", "S311"]
+"features/**" = ["S101", "S105", "S106", "S107", "S311"]
 
 [tool.ruff.format]
 quote-style = "single"
@@ -75,5 +76,5 @@ ignore_missing_imports = true
 django_settings_module = "fitpro.settings"
 
 [tool.bandit]
-exclude_dirs = [".venv", "features", "staticfiles", "tests.py", "test_onboarding.py"]
+exclude_dirs = [".venv", "features", "staticfiles", "tests.py", "test_"]
 skips = ["B101"]  # assert is used in tests only
