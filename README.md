@@ -242,22 +242,6 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 
 # AI Usage
 
-| LLM | Contributor | Usage | Transcript |
-| --- | --- | --- | --- |
-| Pardot | Caleb Harris | Validated issues created in GitHub against Sprint 0-2 Requirements | n/a |
-| Claude | Caleb Harris | Generated Lo-Fi wireframe given spec | Used `agents` tab in Figma |
-| Pardot | Caleb Harris | PR Review | [Link](https://github.com/CS4300-CS5300-FA26/team-1/pull/16) |
-| Claude | Caleb Harris | Security review of the Terraform GKE infrastructure setup, with fixes and README deployment docs | n/a |
-| Claude | Caleb Harris | Generated draft Dockerfile and dockerignore file | n/a |
-| Claude | Caleb Harris | Generated k8s manifests | n/a |
-| Claude | Caleb Harris | Generated deployment script | n/a |
-| Claude | Caleb Harris | Claude Code implemented the CD portion of the GitHub Actions pipeline (Workload Identity Federation auth, image build/push, deploy via scripts/deploy.sh) | n/a |
-| Claude | Nathan Galay | Generated register/login pages (accounts app) | n/a |
-| Codex | Caleb Harris | Automatic PR review: `pr-review.yml` runs `openai/codex-action` when a PR is opened and posts the feedback as a PR comment | n/a |
-| Claude | Caleb Harris | Reviewed `pr-review.yml` against the other CI workflows and pinned its actions to commit SHAs | n/a |
-| Claude | Nathan Galay | Implemented user story D-1 (user-auth) on the accounts app: generic login error, email login, password and session hardening, Gherkin feature and step definitions, extra Django tests, ADR-005, and this README section | n/a |
-| Claude | Caleb Harris | Claude Code applied the PR #20/#27 review follow-ups (merged duplicate test modules, onboarding input bounds, shared base template, ADR-005) and moved the coverage report into `ci.yml` with the 80% gate and artifact on PRs only | n/a |
-| Claude | Nathan Galay | Implemented the weekly workout plan and macro targets (plans app: generator, starter-plan fallback, This Week and Nutrition pages, tests, Gherkin feature) | n/a |
 | LLM | Contributor | Usage |
 | --- | --- | --- |
 | Pardot | Caleb Harris | Validated issues created in GitHub against Sprint 0-2 Requirements |
@@ -275,3 +259,4 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 | Claude | Caleb Harris | Claude Code added login/registration rate limiting, database-enforced email uniqueness, ruff/mypy/bandit/CodeQL CI gates and Dependabot config, disabled the admin site, wrote ADR-006 and ADR-007, and corrected this README against the Sprint 1 feedback |
 | Claude | Caleb Harris | Claude Code applied the PR #20/#27 review follow-ups (merged duplicate test modules, onboarding input bounds, shared base template, ADR-005) and moved the coverage report into `ci.yml` with the 80% gate and artifact on PRs only |
 | Claude | Caleb Harris | Claude Code implemented story D-5 (weekly budget meal plan): `nutrition` app with connectors for D-3, D-4, and D-6 and their fallbacks (FDA Daily Values, no-price planning), a USDA FoodData Central recipe catalog and loader, a whole-package, ingredient-sharing planner, stored weekly plans for D-6, the Meal Plan page (week strip, day view with in-place recipes), meal checkboxes in onboarding, unit/Gherkin/Playwright tests, ADR-008, and a temporary AGENTS.md note on wiring the connectors |
+| Claude | Nathan Galay | Implemented the weekly workout plan and macro targets (plans app: generator, starter-plan fallback, This Week and Nutrition pages, tests, Gherkin feature) |
