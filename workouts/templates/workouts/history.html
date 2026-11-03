@@ -1,0 +1,59 @@
+{% extends "core/base.html" %}
+{% block title %}Progress | FitPro{% endblock %}
+{% block body %}
+  <div class="card card--wide">
+    <h1 class="card__title">Progress</h1>
+    <p class="card__subtitle">Consistency and total weight lifted, week by week.</p>
+
+    <h2 class="h3">Last 8 weeks</h2>
+    <div class="table-scroll">
+      <table class="data-table">
+        <caption class="visually-hidden">Workouts completed and volume lifted for each of the last eight weeks</caption>
+        <thead>
+          <tr>
+            <th scope="col">Week of</th>
+            <th scope="col" class="data-table__num">Workouts done</th>
+            <th scope="col" class="data-table__num">Planned</th>
+            <th scope="col" class="data-table__num">Volume (lb)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for week in weeks %}
+            <tr>
+              <th scope="row">{{ week.week_start|date:"M j" }}</th>
+              <td class="data-table__num">{{ week.completed }}</td>
+              <td class="data-table__num">{{ week.planned }}</td>
+              <td class="data-table__num">{{ week.volume_lb|floatformat:"0g" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="text-muted text-sm">Volume is reps times weight, added up over the week's finished workouts. Bodyweight sets add no volume.</p>
+
+    <h2 class="h3 mt-5">Finished workouts</h2>
+    {% if sessions %}
+      <ul class="stack stack--sm">
+        {% for item in sessions %}
+          <li class="panel">
+            <div class="cluster cluster--between">
+              <div>
+                <p class="eyebrow mb-0">{{ item.session.performed_on|date:"l, F j" }}</p>
+                <p class="h3 mb-0">{{ item.session.title }}</p>
+                <p class="text-muted text-sm mb-0">{{ item.sets }} set{{ item.sets|pluralize }}{% if item.volume %} &middot; {{ item.volume|floatformat:"0g" }} lb lifted{% endif %}</p>
+              </div>
+              {% if item.session.planned_workout_id %}
+                <a class="btn btn--secondary btn--sm" href="{% url 'workouts_session' item.session.pk %}">View<span class="visually-hidden"> {{ item.session.title }}</span></a>
+              {% endif %}
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No finished workouts yet. Start one from This Week and it will show up here.</p>
+    {% endif %}
+    <div class="cluster mt-5">
+      <a class="btn btn--primary" href="{% url 'workouts_this_week' %}">Back to this week</a>
+    </div>
+  </div>
+{% endblock %}

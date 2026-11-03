@@ -1,0 +1,92 @@
+{% extends "core/base.html" %}
+{% block title %}This week's workouts | FitPro{% endblock %}
+{% block body %}
+  <div class="card card--wide">
+    <div class="cluster cluster--between">
+      <div>
+        <h1 class="card__title mb-0">This week</h1>
+        <p class="text-muted text-sm mb-0">Week of {{ plan.week_start|date:"F j" }} to {{ week_end|date:"F j" }}</p>
+      </div>
+      <p class="stat">
+        <span class="stat__value">{{ done_count }} of {{ planned_count }}</span>
+        <span class="stat__label">workouts done</span>
+      </p>
+    </div>
+
+    <div class="alert alert--info mt-4" role="note">
+      <p class="mb-0"><strong>How this plan was made</strong></p>
+      <ul class="alert__list">
+        <li>It uses your goal ({{ goal_label }}), your experience level, and only the equipment you chose: {{ equipment|join:", " }}. Bodyweight moves fill in where your equipment has no option.</li>
+        <li>Movements with no option for your equipment are left out rather than swapped for a poor substitute.</li>
+        <li>This is general fitness guidance, not medical advice. Stop if something hurts, and check with a doctor before starting if you have a health condition.</li>
+      </ul>
+    </div>
+
+    <div class="cluster cluster--between mt-5">
+      <form method="post" action="{% url 'workouts_preferences' %}" class="cluster">
+        {% csrf_token %}
+        <div class="form-field">
+          {{ preferences_form.days_per_week.label_tag }}
+          {{ preferences_form.days_per_week }}
+        </div>
+        <button type="submit" class="btn btn--secondary btn--sm">Update plan</button>
+      </form>
+      <form method="post" action="{% url 'workouts_new' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn--secondary btn--sm">Generate a new workout plan</button>
+      </form>
+    </div>
+
+    <h2 class="h3 mt-5">Your week</h2>
+    <ol class="stack stack--sm">
+      {% for day in days %}
+        <li class="panel">
+          <div class="cluster cluster--between">
+            <div>
+              <p class="eyebrow mb-0">{{ day.name }}, {{ day.date|date:"F j" }}{% if day.is_today %} &middot; Today{% endif %}</p>
+              {% if day.workout %}
+                <h3 class="h3 mb-0">{{ day.workout.title }}</h3>
+                <p class="text-muted text-sm mb-0">{{ day.workout.exercises.all|length }} exercises</p>
+              {% else %}
+                <h3 class="h3 mb-0">Rest day</h3>
+                <p class="text-muted text-sm mb-0">Recovery is part of the plan.</p>
+              {% endif %}
+            </div>
+            {% if day.workout %}
+              <div class="cluster">
+                {% if day.status == 'done' %}<span class="status-badge status-badge--saved">Done</span>
+                {% elif day.status == 'in_progress' %}<span class="status-badge">In progress</span>{% endif %}
+                {% if day.session %}
+                  <a class="btn btn--secondary btn--sm" href="{% url 'workouts_session' day.session.pk %}">{% if day.status == 'done' %}View workout{% else %}Continue workout{% endif %}<span class="visually-hidden"> on {{ day.name }}</span></a>
+                {% else %}
+                  <form method="post" action="{% url 'workouts_start' day.workout.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn--primary btn--sm">Start workout<span class="visually-hidden"> on {{ day.name }}</span></button>
+                  </form>
+                {% endif %}
+              </div>
+            {% endif %}
+          </div>
+          {% if day.workout %}
+            <details class="disclosure mt-3">
+              <summary class="disclosure__summary">Exercises <span class="text-muted text-sm">{{ day.workout.exercises.all|length }}</span></summary>
+              <div class="disclosure__body">
+                <ol class="stack stack--sm">
+                  {% for item in day.workout.exercises.all %}
+                    <li><strong>{{ item.exercise.name|capfirst }}</strong>
+                      <span class="text-muted text-sm">&middot;
+                        {% if item.is_timed %}{{ item.minutes }} min{% else %}{{ item.sets }} sets of {{ item.rep_range }}{% endif %}</span></li>
+                  {% endfor %}
+                </ol>
+              </div>
+            </details>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ol>
+
+    <div class="cluster mt-5">
+      <a class="btn btn--ghost" href="{% url 'workouts_history' %}">Progress and history</a>
+    </div>
+  </div>
+{% endblock %}
