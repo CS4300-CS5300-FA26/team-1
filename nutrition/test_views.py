@@ -159,7 +159,7 @@ class UnavailableTests(TestCase):
         self.client.force_login(make_user())
         response = self.client.get(reverse('meal_plan'))
         self.assertContains(response, 'Meal suggestions are temporarily unavailable.')
-        self.assertContains(response, f'href="{reverse("dashboard")}"')
+        self.assertContains(response, f'href="{reverse("workouts_this_week")}"')
         self.assertNotContains(response, 'week-calendar')
 
     @override_settings(NUTRITION_WORKOUTS_LINK={'url_name': 'user_profile', 'text': 'Open This Week'})

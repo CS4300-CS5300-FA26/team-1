@@ -1356,6 +1356,16 @@ input[type="radio"] {
 .mt-4 { margin-top: var(--space-4); }
 .mt-5 { margin-top: var(--space-5); }
 
+/* A set to log on the workout page: its label, then reps and weight (or minutes) side by side. */
+.set-row {
+  display: grid;
+  grid-template-columns: 4.5rem repeat(auto-fit, minmax(7rem, 1fr));
+  gap: var(--space-3);
+  align-items: end;
+}
+
+.set-row__label { font-weight: 700; align-self: center; }
+
 /* Hidden visually but still read by screen readers. */
 .visually-hidden {
   position: absolute !important;

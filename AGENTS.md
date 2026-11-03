@@ -22,7 +22,7 @@ skipping validation, disabling a CI gate, or loosening a security header. Don't 
 | --- | --- | --- |
 | Language | Python 3.12 | `.python-version`, `requires-python` in `pyproject.toml` |
 | Packages | uv (`pyproject.toml` + `uv.lock`) | Add deps with `uv add` / `uv add --dev`; never edit `uv.lock` by hand |
-| Web framework | Django 6.1 (server-rendered templates), Django REST framework installed | Apps: `core`, `accounts` |
+| Web framework | Django 6.1 (server-rendered templates), Django REST framework installed | Apps: `core`, `accounts`, `nutrition`, `workouts` |
 | Auth | Django built-in `User`, DB sessions, PBKDF2 | ADR-005, ADR-006 (rate limiting), ADR-007 (admin disabled) |
 | Database | PostgreSQL 16 (Cloud SQL, private IP, via Cloud SQL Auth Proxy sidecar); SQLite only for local dev | ADR-002 |
 | Static files | WhiteNoise, `CompressedManifestStaticFilesStorage` | `collectstatic` runs in the Docker build |
@@ -328,7 +328,7 @@ edit the planner or the meal plan views.
   * `nutrition/test_services.py`: `PriceFallbackTests.test_without_d6_there_is_no_cost_and_no_budget_limit`;
   * `e2e/test_meal_plan.py`: `test_one_day_at_a_time_with_the_fallback_note`.
 
-### D-3 Workout Split Generation -> `NUTRITION_WORKOUTS_LINK`
+### D-3 Workout Split Generation -> `NUTRITION_WORKOUTS_LINK` (wired: the `workouts` app, ADR-009)
 * **Wire:** `NUTRITION_WORKOUTS_LINK = {'url_name': '<your This Week url name>', 'text': 'Open This Week'}`. It's the
   link on the "Meal suggestions are temporarily unavailable" page (D-5's "Recipe service unavailable" scenario).
 * **Test:**

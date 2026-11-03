@@ -42,8 +42,10 @@ SQLite is the default. To develop against PostgreSQL like production, set the `D
 ## Common Commands
 * `uv run python manage.py runserver` [Starts the Django development server]
 * `uv run python manage.py makemigrations` [Creates new database migrations]
-* `uv run python manage.py migrate` [Applies database migrations, then reloads the recipe catalog]
+* `uv run python manage.py migrate` [Applies database migrations, then reloads the recipe and exercise catalogs]
 * `uv run python manage.py load_recipe_catalog` [Reloads recipes from `nutrition/data/recipe_catalog.json`; `--file` loads another file]
+* `uv run python manage.py load_exercise_catalog` [Reloads exercises from `workouts/data/exercise_catalog.json`; `--file` loads another file]
+* `uv run python manage.py build_exercise_catalog path/to/exercises.json` [Rebuilds that catalog from the upstream dataset: English text only, no images or video ([ADR-009](docs/adrs/adr-009.md))]
 * `uv run python manage.py test` [Runs Django tests]
 * `uv run python manage.py behave` [Runs the Gherkin acceptance scenarios in `features/`]
 * `E2E=1 uv run python manage.py test e2e` [Runs the Playwright browser tests in `e2e/`; run `uv run playwright install chromium` once first]
@@ -86,7 +88,7 @@ colours, so contrast and dark mode stay correct.
 | Buttons | `btn` plus `btn--primary`, `btn--secondary`, `btn--ghost`, or `btn--danger`; modifiers `btn--sm`, `btn--block`. Use `<button>` for actions and `<a class="btn">` for navigation |
 | Forms | `form`, `form-field`, `form-label`, `form-input`, `form-help`, `form-error`, `form-fieldset`, `choice-list`, `choice`. `{% include "core/_form_fields.html" %}` renders a whole Django form with these classes and keeps Django's `aria-describedby` / `aria-invalid` wiring |
 | Feedback | `alert` plus `alert--error`, `alert--success`, `alert--warning`, or `alert--info` (add `role="alert"` or `role="status"`) |
-| Content | `hero`, `hero__lede`, `data-list` (on a `<dl>`), `badge`, `media-list` with `media` / `media__thumb` / `media__body` / `media__eyebrow` / `media__title` / `media__meta` (rows of thumbnail + text; add `media--link` and `aria-current="true"` for a selectable row), `day-picker` (step through or jump to a day of the week; `day-picker__name` / `__date` / `__today` stack the weekday, date, and a "Today" label), `split` (list beside details), `panel` / `panel--sticky` (a side panel that stays in view and scrolls on its own), `toolbar`, `meal-stack` / `meal-card` with `meal-card__header` / `__heading` / `__title` / `__meta` / `__recipe` (a planned meal with its recipe in a `disclosure` underneath), `split--main-first` with `split__main` / `split__aside` (summary above the main content on phones, beside it on wide screens), `macro-list` / `macro-list__row` / `macro-list__meter` (grams against targets), `stat--start`, `alert__list` (bullets inside an alert), `food-image` (course-tinted placeholder art), `chip-list` / `chip`, `macro-grid`, `tabs` (with `meal_plan.js`), `ingredient-grid` (add `ingredient-grid--weighed` with an `ingredient-grid__amount` per item for a weight at the end of each line), `steps`, `status-badge`, `eyebrow` |
+| Content | `hero`, `hero__lede`, `data-list` (on a `<dl>`), `badge`, `media-list` with `media` / `media__thumb` / `media__body` / `media__eyebrow` / `media__title` / `media__meta` (rows of thumbnail + text; add `media--link` and `aria-current="true"` for a selectable row), `day-picker` (step through or jump to a day of the week; `day-picker__name` / `__date` / `__today` stack the weekday, date, and a "Today" label), `split` (list beside details), `panel` / `panel--sticky` (a side panel that stays in view and scrolls on its own), `toolbar`, `meal-stack` / `meal-card` with `meal-card__header` / `__heading` / `__title` / `__meta` / `__recipe` (a planned meal with its recipe in a `disclosure` underneath), `split--main-first` with `split__main` / `split__aside` (summary above the main content on phones, beside it on wide screens), `macro-list` / `macro-list__row` / `macro-list__meter` (grams against targets), `stat--start`, `alert__list` (bullets inside an alert), `food-image` (course-tinted placeholder art), `chip-list` / `chip`, `macro-grid`, `tabs` (with `meal_plan.js`), `set-row` / `set-row__label` (one set to log: label, then reps and weight fields in a row), `ingredient-grid` (add `ingredient-grid--weighed` with an `ingredient-grid__amount` per item for a weight at the end of each line), `steps`, `status-badge`, `eyebrow` |
 | Report and charts | `report-section`, `hero-figure` (one per page), `meter` (one value against a limit), `bar` / `bar-list` (SVG bars; widths as SVG attributes), `stat-row` / `stat-tile`, `data-table` inside `table-scroll` (focusable, labelled region), `disclosure-list` / `disclosure`, `messages` (Django messages, rendered by `base.html`), `stat` / `stat__value` / `stat__label` (a headline number) |
 | Utilities | `text-muted`, `text-center`, `text-sm`, `h3` (h3 size on another heading level), `mt-0`, `mb-0`, `mt-3`, `mt-4`, `mt-5`, `visually-hidden` |
 
@@ -119,17 +121,23 @@ Auth lives in the `accounts` app and uses Django's built-in `User` model, sessio
 | `/users/` | `user_profile` | Login required | The signed-in user's own profile only |
 | `/meal-plan/` | `meal_plan` | Login required (onboarded users) | This week's meal plan (story D-5, [ADR-008](docs/adrs/adr-008.md)): a week strip to pick a day, that day's meals (chosen in onboarding) as cards with portion, kcal, and macros, each recipe's weighed ingredients and steps opening in place, the day's totals against its targets, the estimated grocery cost and an over-budget notice once grocery prices are connected (D-6), a notice for each fallback in use, and a "temporarily unavailable" state. `?day=` selects a day; `meal_plan.js` switches days without a reload |
 | `/meal-plan/new/` | `meal_plan_new` | Login required, `POST` only | Replace this week's plan with a different one |
+| `/workouts/` | `workouts_this_week` | Login required (onboarded users) | This Week (story D-3, [ADR-009](docs/adrs/adr-009.md)): the weekly split built from the user's goal, experience, and equipment, with rest days, each day's exercises, a Start or Continue button, and a form for 3, 4, or 5 training days |
+| `/workouts/new/` | `workouts_new` | Login required, `POST` only | Replace this week's workout plan with a different selection of exercises |
+| `/workouts/preferences/` | `workouts_preferences` | Login required, `POST` only | Save the number of training days a week and remake the plan |
+| `/workouts/start/<id>/` | `workouts_start` | Login required, `POST` only, own workouts of the current week | Start (or go back to) the session for a planned workout |
+| `/workouts/session/<id>/` | `workouts_session` | Login required, own sessions only (others get 404) | Log a workout: how-to steps, reps and weight per set (minutes for cardio), a rest timer, save or finish |
+| `/workouts/history/` | `workouts_history` | Login required | Progress: workouts done against planned and total volume for the last 8 weeks, and recently finished workouts |
 
 ### Acceptance scenarios
 The Gherkin scenarios live in [`features/user_auth.feature`](features/user_auth.feature) (successful registration, email
 already registered, wrong password) and [`features/onboarding.feature`](features/onboarding.feature) (complete
 onboarding, missing required answer, returning user skips onboarding), and [`features/meal_plan.feature`](features/meal_plan.feature)
-(plan within budget, budget too low, recipe service unavailable, plus the no-macro-targets and no-prices fallbacks). Step
+(plan within budget, budget too low, recipe service unavailable, plus the no-macro-targets and no-prices fallbacks), and [`features/workouts.feature`](features/workouts.feature) (a split that fits the equipment, no equipment, choosing training days, logging and finishing a workout, finishing empty, privacy). Step
 definitions are in `features/steps/`. Nothing calls the network: the connectors to D-4 and D-6 use the stand-ins in
 `nutrition/testing.py`, and the recipe catalog is loaded into the test database after migrations.
 Django tests are in `accounts/tests.py` (registration, login, logout), `core/test_onboarding.py` (onboarding, dashboard,
 and the login redirect), `core/tests.py` (models, health checks, and access control), and `nutrition/test_*.py` (meal
-planner and pricing, recipe catalog and loader, connectors and fallbacks, Meal Plan page). Browser tests for the Meal Plan page are in `e2e/` (see Common Commands).
+planner and pricing, recipe catalog and loader, connectors and fallbacks, Meal Plan page), and `workouts/test_*.py` (exercise catalog and loader, planner, plans and sessions, progress, pages and access control). Browser tests for the Meal Plan page are in `e2e/` (see Common Commands).
 
 ```shell
 uv run python manage.py test    # Django tests
@@ -148,14 +156,20 @@ uv run python manage.py behave  # Gherkin scenarios
 | Logout | `POST` only, so a third-party page cannot log a user out with a link or image |
 | Redirects | The `next` parameter is only followed if it points at this site (no open redirects) |
 | Access control | `/onboarding/`, `/dashboard/`, and `/users/` require login; `/users/` previously listed every user's profile and now shows only the signed-in user's own |
+| Workout data | Every `/workouts/` page requires login and finds plans and sessions through the signed-in user, so another member's workout is a 404; starting, saving, regenerating, and changing days are `POST` with CSRF. Posted set values are accepted only for the rows the workout has, and reps, weight, and minutes are bounded in the form and by database `CHECK` constraints ([ADR-009](docs/adrs/adr-009.md)) |
 
 ### Known gaps (planned follow-ups)
 * **Rate limiting is in place for login and registration** ([ADR-006](docs/adrs/adr-006.md)), but the
   "email already exists" message required by the user story still reveals that an email has an account.
 * **Email format is validated, but ownership is not.** Email verification and password reset need a production email backend (`MAILERS` still uses the console backend).
 * **No admin site.** It was removed ([ADR-007](docs/adrs/adr-007.md)); manage data with `manage.py shell` or a one-off Job. Re-adding it needs network-level restriction first.
-* **Meal plan (D-5)** ([ADR-008](docs/adrs/adr-008.md)): until D-4 is connected, plans use the FDA Daily Values (2,000 kcal) instead of personal macro targets. Until D-6 is connected, there's no cost estimate and the budget isn't applied. Until D-3 ships "This Week", the unavailable notice links to the dashboard. The catalog has 25 recipes with no dietary filters yet, nutrients come from USDA SR Legacy (2018), and pantry staples aren't counted. "Today" and the week boundary use the server's time zone (UTC).
+* **Meal plan (D-5)** ([ADR-008](docs/adrs/adr-008.md)): until D-4 is connected, plans use the FDA Daily Values (2,000 kcal) instead of personal macro targets. Until D-6 is connected, there's no cost estimate and the budget isn't applied. The catalog has 25 recipes with no dietary filters yet, nutrients come from USDA SR Legacy (2018), and pantry staples aren't counted. "Today" and the week boundary use the server's time zone (UTC).
+* **Workouts (D-3 and tracking)** ([ADR-009](docs/adrs/adr-009.md)): the plan is rule-based, with no AI agent, and it doesn't yet adjust from logged results beyond prefilling the last weight. Exercises are hand-picked from the catalog and the sets, reps, and rest rules haven't been reviewed by a trainer. There is no exercise swapping or catalog browsing, no images or video (the dataset's Gym visual media isn't licensed to us), and "today" and the week boundary use the server's time zone (UTC). D-4 can read the training days with `workouts.services.training_days`; nothing does yet.
 * **Password hashing** uses Django's default; Argon2 is a possible upgrade (needs the `argon2-cffi` dependency).
+
+## Third-party data
+* **Exercise catalog** (`workouts/data/exercise_catalog.json`): exercise names, muscles, and instruction text from the exercises dataset, MIT License, Copyright (c) 2026 Hasan Emir Yıldırım ([licence text](workouts/data/LICENSE-exercise-data.txt)). The dataset's images and videos belong to [Gym visual](https://gymvisual.com/) and are not covered by that licence. They are not in this repository, and the catalog leaves them out ([ADR-009](docs/adrs/adr-009.md)).
+* **Recipe catalog** (`nutrition/data/recipe_catalog.json`): nutrients from USDA FoodData Central ([ADR-008](docs/adrs/adr-008.md)).
 
 ## Contributing
 * Read [AGENTS.md](AGENTS.md) first: it is the team's working agreement (security rules, code standards, ADRs, frontend theme and accessibility, workflow) for humans and AI coding tools alike.
@@ -233,3 +247,4 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 | Claude | Caleb Harris | Claude Code added login/registration rate limiting, database-enforced email uniqueness, ruff/mypy/bandit/CodeQL CI gates and Dependabot config, disabled the admin site, wrote ADR-006 and ADR-007, and corrected this README against the Sprint 1 feedback |
 | Claude | Caleb Harris | Claude Code applied the PR #20/#27 review follow-ups (merged duplicate test modules, onboarding input bounds, shared base template, ADR-005) and moved the coverage report into `ci.yml` with the 80% gate and artifact on PRs only |
 | Claude | Caleb Harris | Claude Code implemented story D-5 (weekly budget meal plan): `nutrition` app with connectors for D-3, D-4, and D-6 and their fallbacks (FDA Daily Values, no-price planning), a USDA FoodData Central recipe catalog and loader, a whole-package, ingredient-sharing planner, stored weekly plans for D-6, the Meal Plan page (week strip, day view with in-place recipes), meal checkboxes in onboarding, unit/Gherkin/Playwright tests, ADR-008, and a temporary AGENTS.md note on wiring the connectors |
+| Claude | [contributor name] | Claude built the `workouts` app for story D-3 and exercise tracking: a text-only exercise catalog from the exercises dataset with a loader and build command, a rule-based weekly split planner with hand-picked exercise pools, stored plans, the This Week page, workout logging with a rest timer, and progress pages, wired `NUTRITION_WORKOUTS_LINK` to This Week, unit/Gherkin tests, and ADR-009 |

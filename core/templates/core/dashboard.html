@@ -15,7 +15,8 @@
       <dt>Available equipment</dt><dd>{{ profile.equipment_labels|join:", " }}</dd>
     </dl>
     <div class="cluster mt-5">
-      <a class="btn btn--primary" href="{% url 'meal_plan' %}">View meal plan</a>
+      <a class="btn btn--primary" href="{% url 'workouts_this_week' %}">This week's workouts</a>
+      <a class="btn btn--secondary" href="{% url 'meal_plan' %}">View meal plan</a>
     </div>
   </div>
 {% endblock %}
