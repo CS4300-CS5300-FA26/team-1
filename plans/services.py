@@ -37,6 +37,8 @@ def get_weekly_plan(profile, today=None):
 
     # get_or_create so two simultaneous first visits don't create two rows.
     saved, _ = WeeklyPlan.objects.get_or_create(
-        user=profile.user, week_start=week_start, defaults={'data': plan},
+        user=profile.user,
+        week_start=week_start,
+        defaults={'data': plan},
     )
     return saved.data, False

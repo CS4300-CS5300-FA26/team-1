@@ -11,15 +11,14 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import importlib.util
+import sys
 from pathlib import Path
 
 import environ
 
 # Implementing django-environ to prevent secrets from getting committed in the settings file
 #  ref: https://django-environ.readthedocs.io/en/latest/quickstart.html
-env = environ.Env(
-    DEBUG=(bool, False)
-)
+env = environ.Env(DEBUG=(bool, False))
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -49,13 +48,16 @@ SECRET_KEY = read_secret('django-secret-key', 'SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env('DEBUG')
 
+# Running the Django tests or Gherkin scenarios (`manage.py test` / `manage.py behave`).
+TESTING = sys.argv[1:2] in (['test'], ['behave'])
+
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['testserver'])
 
 CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
 
 # Application definition
 INSTALLED_APPS = [
-    'django.contrib.admin',
+    # 'django.contrib.admin',  # admin disabled, see ADR-007
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -65,6 +67,7 @@ INSTALLED_APPS = [
     'core',
     'accounts',
     'plans',
+    'nutrition',
 ]
 
 # behave-django runs the Gherkin scenarios in features/ (`manage.py behave`). It is a dev
@@ -155,6 +158,33 @@ LOGOUT_REDIRECT_URL = 'home'
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 7  # one week, then log in again
+CSRF_COOKIE_SAMESITE = 'Lax'
+
+# Browser-facing security headers set by SecurityMiddleware / XFrameOptionsMiddleware. These
+# are Django's defaults, pinned so a future edit can't loosen them unnoticed.
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'same-origin'
+SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'
+X_FRAME_OPTIONS = 'DENY'
+
+# Rate limits (ADR-006): (allowed attempts, window in seconds). Once the count inside the
+# window is reached, further attempts get HTTP 429 until old ones age out.
+AUTH_THROTTLE = {
+    'login': (5, 15 * 60),  # failed logins per identifier + IP
+    'login_ip': (20, 15 * 60),  # failed logins per IP, any identifier
+    'register': (10, 60 * 60),  # registration attempts per IP
+}
+
+
+# Meal planning (story D-5, ADR-008). The meal plan talks to the features built alongside it through connectors,
+# each named here by dotted path (see nutrition/ports.py). Point a setting at your implementation to plug it in.
+NUTRITION_RECIPE_SOURCE = 'nutrition.recipe_sources.CatalogRecipeSource'
+# D-4 Macro Generation. Until connected, plans use the FDA Daily Values (nutrition/targets.py).
+NUTRITION_MACRO_TARGETS_PROVIDER = 'nutrition.connectors.NoMacroTargets'
+# D-6 Grocery List Generation. Until connected, plans have no cost estimate and aren't limited by the budget.
+NUTRITION_GROCERY_PRICE_SOURCE = 'nutrition.connectors.NoGroceryPrices'
+# D-3 Workout Split Generation: where "This Week" lives. The dashboard until D-3 adds its page.
+NUTRITION_WORKOUTS_LINK = {'url_name': 'dashboard', 'text': 'Go to your dashboard'}
 
 
 # Internationalization
@@ -181,6 +211,11 @@ STORAGES = {
         'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
     },
 }
+
+if TESTING:
+    # The manifest storage needs `collectstatic` to have run (the Docker build does that); tests render
+    # templates that use {% static %} without it, so they use plain storage.
+    STORAGES['staticfiles']['BACKEND'] = 'django.contrib.staticfiles.storage.StaticFilesStorage'
 
 
 # HTTPS behind the GKE load balancer

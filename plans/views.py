@@ -24,11 +24,15 @@ def this_week(request):
         return redirect('onboarding')
     plan, is_starter = loaded
     days = [{**day, 'is_today': index == today.weekday()} for index, day in enumerate(plan['days'])]
-    return render(request, 'plans/this_week.html', {
-        'days': days,
-        'macros': plan['macros'],
-        'is_starter': is_starter,
-    })
+    return render(
+        request,
+        'plans/this_week.html',
+        {
+            'days': days,
+            'macros': plan['macros'],
+            'is_starter': is_starter,
+        },
+    )
 
 
 @login_required
@@ -38,7 +42,11 @@ def nutrition(request):
     if loaded is None:
         return redirect('onboarding')
     plan, is_starter = loaded
-    return render(request, 'plans/nutrition.html', {
-        'macros': plan['macros'],
-        'is_starter': is_starter,
-    })
+    return render(
+        request,
+        'plans/nutrition.html',
+        {
+            'macros': plan['macros'],
+            'is_starter': is_starter,
+        },
+    )

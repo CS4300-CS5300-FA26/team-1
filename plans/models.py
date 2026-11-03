@@ -21,4 +21,4 @@ class WeeklyPlan(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.user.username}: week of {self.week_start}"
+        return f'{self.user.username}: week of {self.week_start}'

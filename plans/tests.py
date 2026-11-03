@@ -2,6 +2,7 @@
 
 The Gherkin scenarios for this story are in features/weekly_plan.feature.
 """
+
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
@@ -25,8 +26,12 @@ PASSWORD = 'Correct-Horse-9'
 def make_profile(**overrides):
     """A stand-in for UserProfile (the generator only reads attributes)."""
     fields = {
-        'goal': 'build_muscle', 'experience_level': 'beginner', 'weight': Decimal('180'),
-        'height_inches': 70, 'age': None, 'equipment': ['dumbbells'],
+        'goal': 'build_muscle',
+        'experience_level': 'beginner',
+        'weight': Decimal('180'),
+        'height_inches': 70,
+        'age': None,
+        'equipment': ['dumbbells'],
     }
     fields.update(overrides)
     return SimpleNamespace(**fields)
@@ -43,8 +48,9 @@ def exercise_names(plan):
 class GeneratorStructureTests(SimpleTestCase):
     def test_plan_covers_seven_days_monday_first(self):
         days = generate_plan(make_profile())['days']
-        self.assertEqual([d['day'] for d in days],
-                         ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
+        self.assertEqual(
+            [d['day'] for d in days], ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        )
 
     def test_training_days_follow_experience_level(self):
         for level, expected in (('beginner', 3), ('intermediate', 4), ('advanced', 5)):
@@ -78,8 +84,12 @@ class GeneratorStructureTests(SimpleTestCase):
         self.assertEqual(training_days(muscle)[0]['exercises'][0]['reps'], '8-12')
 
     def test_cardio_added_for_weight_loss_and_endurance_only(self):
-        for goal, has_cardio in (('lose_weight', True), ('endurance', True),
-                                 ('build_muscle', False), ('maintain', False)):
+        for goal, has_cardio in (
+            ('lose_weight', True),
+            ('endurance', True),
+            ('build_muscle', False),
+            ('maintain', False),
+        ):
             plan = generate_plan(make_profile(goal=goal, equipment=['cardio']))
             names = exercise_names(plan)
             self.assertEqual('Treadmill or Bike Intervals' in names, has_cardio, goal)
@@ -122,7 +132,7 @@ class GeneratorEquipmentTests(SimpleTestCase):
 
 class MacroTests(SimpleTestCase):
     def macros(self, goal, **kw):
-        args = dict(weight_lb=180, height_in=70, age=25, training_days=4)
+        args = {'weight_lb': 180, 'height_in': 70, 'age': 25, 'training_days': 4}
         args.update(kw)
         return calculate_macros(goal, **args)
 
@@ -140,8 +150,9 @@ class MacroTests(SimpleTestCase):
             self.assertAlmostEqual(total, m['calories'], delta=20, msg=goal)
 
     def test_more_training_days_means_more_calories(self):
-        self.assertLess(self.macros('maintain', training_days=3)['calories'],
-                        self.macros('maintain', training_days=5)['calories'])
+        self.assertLess(
+            self.macros('maintain', training_days=3)['calories'], self.macros('maintain', training_days=5)['calories']
+        )
 
     def test_calories_never_drop_below_the_floor(self):
         m = self.macros('lose_weight', weight_lb=50, height_in=36, training_days=3)
@@ -194,11 +205,18 @@ class WeekStartTests(SimpleTestCase):
 class PlanTestBase(TestCase):
     def make_user(self, username='alice', completed=True, **profile_fields):
         user = User.objects.create_user(username, f'{username}@example.com', PASSWORD)
-        fields = {
-            'goal': 'build_muscle', 'height_inches': 70, 'weight': Decimal('180.50'),
-            'experience_level': 'intermediate', 'weekly_food_budget': Decimal('85.50'),
-            'equipment': ['dumbbells'],
-        } if completed else {}
+        fields = (
+            {
+                'goal': 'build_muscle',
+                'height_inches': 70,
+                'weight': Decimal('180.50'),
+                'experience_level': 'intermediate',
+                'weekly_food_budget': Decimal('85.50'),
+                'equipment': ['dumbbells'],
+            }
+            if completed
+            else {}
+        )
         fields.update(profile_fields)
         UserProfile.objects.create(user=user, onboarding_completed=completed, **fields)
         return user
@@ -226,9 +244,11 @@ class WeeklyPlanServiceTests(PlanTestBase):
 
     def test_generator_failure_returns_starter_and_saves_nothing(self):
         user = self.make_user()
-        with mock.patch('plans.services.generate_plan', side_effect=RuntimeError('down')):
-            with self.assertLogs('plans.services', level='ERROR'):
-                plan, is_starter = get_weekly_plan(user.userprofile, date(2026, 10, 27))
+        with (
+            mock.patch('plans.services.generate_plan', side_effect=RuntimeError('down')),
+            self.assertLogs('plans.services', level='ERROR'),
+        ):
+            plan, is_starter = get_weekly_plan(user.userprofile, date(2026, 10, 27))
         self.assertTrue(is_starter)
         self.assertEqual(plan, starter_plan())
         self.assertEqual(WeeklyPlan.objects.count(), 0)
@@ -244,8 +264,7 @@ class ThisWeekViewTests(PlanTestBase):
     def test_login_required(self):
         for name in ('this_week', 'nutrition'):
             response = self.client.get(reverse(name))
-            self.assertRedirects(response, f"{reverse('login')}?next={reverse(name)}",
-                                 fetch_redirect_response=False)
+            self.assertRedirects(response, f'{reverse("login")}?next={reverse(name)}', fetch_redirect_response=False)
 
     def test_user_who_has_not_onboarded_is_sent_to_onboarding(self):
         self.log_in(self.make_user(completed=False))
@@ -261,8 +280,8 @@ class ThisWeekViewTests(PlanTestBase):
         self.assertEqual(len(days), 7)
         self.assertEqual(len([d for d in days if d['exercises']]), 4)  # intermediate
         self.assertContains(response, 'Dumbbell Bench Press')
-        self.assertContains(response, '<th>Sets</th>')
-        self.assertContains(response, '<th>Reps</th>')
+        self.assertContains(response, 'Sets</th>')
+        self.assertContains(response, 'Reps</th>')
         self.assertContains(response, 'Rest day')
         self.assertNotContains(response, 'starter plan')
 
@@ -276,8 +295,8 @@ class ThisWeekViewTests(PlanTestBase):
         response = self.client.get(reverse('this_week'))
         macros = response.context['macros']
         self.assertContains(response, "Today's macro targets")
-        self.assertContains(response, f"{macros['calories']}")
-        self.assertContains(response, f"{macros['protein']} g")
+        self.assertContains(response, f'{macros["calories"]}')
+        self.assertContains(response, f'{macros["protein"]} g')
 
     def test_plan_is_saved_and_reused_across_visits(self):
         user = self.make_user()
@@ -301,9 +320,11 @@ class ThisWeekViewTests(PlanTestBase):
 
     def test_generator_down_shows_starter_plan_and_macros(self):
         self.log_in(self.make_user())
-        with mock.patch('plans.services.generate_plan', side_effect=RuntimeError('down')):
-            with self.assertLogs('plans.services', level='ERROR'):
-                response = self.client.get(reverse('this_week'))
+        with (
+            mock.patch('plans.services.generate_plan', side_effect=RuntimeError('down')),
+            self.assertLogs('plans.services', level='ERROR'),
+        ):
+            response = self.client.get(reverse('this_week'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'starter plan')
         self.assertContains(response, 'Starter Full Body')
@@ -313,9 +334,11 @@ class ThisWeekViewTests(PlanTestBase):
 
     def test_generator_recovers_on_the_next_visit(self):
         self.log_in(self.make_user())
-        with mock.patch('plans.services.generate_plan', side_effect=RuntimeError('down')):
-            with self.assertLogs('plans.services', level='ERROR'):
-                self.client.get(reverse('this_week'))
+        with (
+            mock.patch('plans.services.generate_plan', side_effect=RuntimeError('down')),
+            self.assertLogs('plans.services', level='ERROR'),
+        ):
+            self.client.get(reverse('this_week'))
         response = self.client.get(reverse('this_week'))
         self.assertNotContains(response, 'starter plan')
         self.assertContains(response, 'Dumbbell Bench Press')
@@ -333,9 +356,11 @@ class NutritionViewTests(PlanTestBase):
 
     def test_generator_down_shows_starter_targets(self):
         self.log_in(self.make_user())
-        with mock.patch('plans.services.generate_plan', side_effect=RuntimeError('down')):
-            with self.assertLogs('plans.services', level='ERROR'):
-                response = self.client.get(reverse('nutrition'))
+        with (
+            mock.patch('plans.services.generate_plan', side_effect=RuntimeError('down')),
+            self.assertLogs('plans.services', level='ERROR'),
+        ):
+            response = self.client.get(reverse('nutrition'))
         self.assertContains(response, 'starter targets')
         self.assertEqual(response.context['macros'], starter_plan()['macros'])
 

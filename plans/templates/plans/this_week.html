@@ -1,49 +1,40 @@
 {% extends "core/base.html" %}
 {% block title %}This Week | FitPro{% endblock %}
-{% block extra_head %}
-  <style>
-    .card.wide { max-width: 720px; }
-    h2 { font-size: 1.1rem; margin: 0 0 .5rem; }
-    .notice { padding: .75rem 1rem; background: #fff8e1; border: 1px solid #f0d78c; border-radius: 4px; }
-    .macro-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .5rem; list-style: none; margin: 0 0 1.5rem; padding: 0; text-align: center; }
-    .macro-grid li { padding: .75rem .25rem; background: #f5f7fa; border-radius: 4px; }
-    .macro-grid strong { display: block; font-size: 1.15rem; }
-    .macro-grid span { color: #52606d; font-size: .8rem; }
-    .day { margin-bottom: 1rem; padding: 1rem; border: 1px solid #e4e7eb; border-radius: 6px; }
-    .day.today { border-color: #1f6feb; box-shadow: 0 0 0 1px #1f6feb; }
-    .day h2 small { font-weight: normal; color: #52606d; margin-left: .5rem; }
-    .badge { margin-left: .25rem; padding: .1rem .5rem; font-size: .75rem; color: #fff; background: #1f6feb; border-radius: 999px; }
-    .rest { margin: 0; color: #52606d; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: .35rem .25rem; text-align: left; border-bottom: 1px solid #e4e7eb; }
-    th { font-size: .8rem; color: #52606d; }
-    .links { text-align: center; color: #52606d; }
-  </style>
-{% endblock %}
 {% block body %}
-  <main class="card wide">
-    <h1>This Week</h1>
+  <div class="card card--wide">
+    <h1 class="card__title">This Week</h1>
+    <p class="card__subtitle">Your workouts and daily macro targets for the week.</p>
     {% if is_starter %}
-      <p class="notice">Our plan generator is unavailable right now, so this is a general starter plan. Check back soon for a plan built from your profile.</p>
+      <div class="alert alert--warning" role="status">Our plan generator is unavailable right now, so this is a general starter plan. Check back soon for a plan built from your profile.</div>
     {% endif %}
     {% include "plans/_macros.html" %}
-    {% for day in days %}
-      <section class="day{% if day.is_today %} today{% endif %}">
-        <h2>{{ day.day }}{% if day.is_today %}<span class="badge">Today</span>{% endif %}<small>{{ day.name }}</small></h2>
-        {% if day.exercises %}
-          <table>
-            <thead><tr><th>Exercise</th><th>Sets</th><th>Reps</th></tr></thead>
-            <tbody>
-              {% for exercise in day.exercises %}
-                <tr><td>{{ exercise.name }}</td><td>{{ exercise.sets }}</td><td>{{ exercise.reps }}</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        {% else %}
-          <p class="rest">Rest day</p>
-        {% endif %}
-      </section>
-    {% endfor %}
-    <p class="links"><a href="{% url 'nutrition' %}">Nutrition</a> &middot; <a href="{% url 'dashboard' %}">Dashboard</a></p>
-  </main>
+    <div class="stack mt-5">
+      {% for day in days %}
+        <section aria-labelledby="day-{{ forloop.counter }}">
+          <h2 class="h3" id="day-{{ forloop.counter }}">{{ day.day }}{% if day.is_today %} <span class="badge">Today</span>{% endif %}</h2>
+          <p class="eyebrow">{{ day.name }}</p>
+          {% if day.exercises %}
+            <div class="table-scroll">
+              <table class="data-table" aria-labelledby="day-{{ forloop.counter }}">
+                <thead>
+                  <tr><th scope="col">Exercise</th><th scope="col" class="data-table__num">Sets</th><th scope="col" class="data-table__num">Reps</th></tr>
+                </thead>
+                <tbody>
+                  {% for exercise in day.exercises %}
+                    <tr><td>{{ exercise.name }}</td><td class="data-table__num">{{ exercise.sets }}</td><td class="data-table__num">{{ exercise.reps }}</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p>Rest day</p>
+          {% endif %}
+        </section>
+      {% endfor %}
+    </div>
+    <div class="cluster mt-5">
+      <a class="btn btn--secondary" href="{% url 'nutrition' %}">Nutrition</a>
+      <a class="btn btn--secondary" href="{% url 'dashboard' %}">Dashboard</a>
+    </div>
+  </div>
 {% endblock %}

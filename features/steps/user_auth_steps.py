@@ -3,6 +3,7 @@
 behave-django gives every scenario a fresh database and exposes `context.test`, a Django
 TestCase instance. We use its test client (`context.test.client`) and its assertions.
 """
+
 from behave import given, then, when
 from django.contrib.auth import get_user_model
 from django.urls import reverse
@@ -20,15 +21,19 @@ def create_account(email, username):
 
 
 def post_registration(context, email, username):
-    context.response = context.test.client.post(reverse('register'), {
-        'username': username,
-        'email': email,
-        'password1': VALID_PASSWORD,
-        'password2': VALID_PASSWORD,
-    })
+    context.response = context.test.client.post(
+        reverse('register'),
+        {
+            'username': username,
+            'email': email,
+            'password1': VALID_PASSWORD,
+            'password2': VALID_PASSWORD,
+        },
+    )
 
 
 # --- Scenario: Successful registration -------------------------------------------------
+
 
 @given('I am on the sign-up page')
 def step_on_signup_page(context):
@@ -49,6 +54,7 @@ def step_logged_in_and_onboarding(context):
 
 
 # --- Scenario: Email already registered ------------------------------------------------
+
 
 @given('an account exists for "{email}"')
 def step_account_exists_for(context, email):
@@ -74,6 +80,7 @@ def step_remain_on_signup(context):
 
 # --- Scenario: Wrong password ----------------------------------------------------------
 
+
 @given('I have an account')
 def step_have_an_account(context):
     create_account(EXISTING_EMAIL, username='member')
@@ -81,10 +88,13 @@ def step_have_an_account(context):
 
 @when('I log in with an incorrect password')
 def step_login_wrong_password(context):
-    context.response = context.test.client.post(reverse('login'), {
-        'username': EXISTING_EMAIL,
-        'password': WRONG_PASSWORD,
-    })
+    context.response = context.test.client.post(
+        reverse('login'),
+        {
+            'username': EXISTING_EMAIL,
+            'password': WRONG_PASSWORD,
+        },
+    )
 
 
 @then('I see "{message}"')

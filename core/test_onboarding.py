@@ -2,6 +2,7 @@
 
 The Gherkin scenarios for this story are in features/onboarding.feature.
 """
+
 from decimal import Decimal
 from io import StringIO
 
@@ -21,6 +22,7 @@ VALID_ANSWERS = {
     'weight': '180.5',
     'experience_level': 'intermediate',
     'weekly_food_budget': '85.50',
+    'planned_meals': ['breakfast', 'dinner'],
     'equipment': ['dumbbells', 'bands'],
 }
 
@@ -31,6 +33,7 @@ REQUIRED_MESSAGES = {
     'weight': 'Your weight is required.',
     'experience_level': 'Your experience level is required.',
     'weekly_food_budget': 'Weekly food budget is required.',
+    'planned_meals': 'Choose at least one meal to plan.',
     'equipment': 'Select at least one option for available equipment.',
 }
 
@@ -41,6 +44,7 @@ COMPLETED_ANSWERS = {
     'weight': Decimal('180.50'),
     'experience_level': 'intermediate',
     'weekly_food_budget': Decimal('85.50'),
+    'planned_meals': ['breakfast', 'lunch', 'dinner'],
     'equipment': ['dumbbells'],
 }
 
@@ -48,7 +52,9 @@ COMPLETED_ANSWERS = {
 class OnboardingTestBase(TestCase):
     def make_user(self, username='alice', completed=False, with_profile=True, **profile_fields):
         user = User.objects.create_user(
-            username=username, email=f'{username}@example.com', password=PASSWORD,
+            username=username,
+            email=f'{username}@example.com',
+            password=PASSWORD,
         )
         if with_profile:
             UserProfile.objects.create(user=user, onboarding_completed=completed, **profile_fields)
@@ -85,6 +91,7 @@ class CompleteOnboardingTests(OnboardingTestBase):
         self.assertEqual(profile.experience_level, 'intermediate')
         self.assertEqual(profile.weekly_food_budget, Decimal('85.50'))
         self.assertCountEqual(profile.equipment, ['dumbbells', 'bands'])
+        self.assertEqual(profile.planned_meals, ['breakfast', 'dinner'])
 
     def test_user_ends_up_on_dashboard_showing_their_values(self):
         self.log_in_as(self.make_user())
@@ -100,13 +107,15 @@ class CompleteOnboardingTests(OnboardingTestBase):
         self.assertContains(response, '$85.50')
         self.assertContains(response, 'Dumbbells')
         self.assertContains(response, 'Resistance bands')
+        self.assertContains(response, 'Breakfast, Dinner')
 
     def test_zero_budget_is_accepted(self):
         user = self.make_user()
         self.log_in_as(user)
 
         response = self.client.post(
-            reverse('onboarding'), {**VALID_ANSWERS, 'weekly_food_budget': '0'},
+            reverse('onboarding'),
+            {**VALID_ANSWERS, 'weekly_food_budget': '0'},
         )
 
         self.assertRedirects(response, reverse('dashboard'), fetch_redirect_response=False)
@@ -117,7 +126,8 @@ class CompleteOnboardingTests(OnboardingTestBase):
         self.log_in_as(user)
 
         response = self.client.post(
-            reverse('onboarding'), {**VALID_ANSWERS, 'height_inches': '96', 'weight': '50'},
+            reverse('onboarding'),
+            {**VALID_ANSWERS, 'height_inches': '96', 'weight': '50'},
         )
 
         self.assertRedirects(response, reverse('dashboard'), fetch_redirect_response=False)
@@ -143,7 +153,8 @@ class MissingAnswerTests(OnboardingTestBase):
         self.log_in_as(user)
 
         response = self.client.post(
-            reverse('onboarding'), {**VALID_ANSWERS, 'weekly_food_budget': ''},
+            reverse('onboarding'),
+            {**VALID_ANSWERS, 'weekly_food_budget': ''},
         )
 
         self.assertEqual(response.status_code, 200)  # re-rendered, not redirected
@@ -168,7 +179,7 @@ class MissingAnswerTests(OnboardingTestBase):
 
         for field, message in REQUIRED_MESSAGES.items():
             with self.subTest(field=field):
-                blank = [] if field == 'equipment' else ''
+                blank = [] if field in ('equipment', 'planned_meals') else ''
                 response = self.client.post(reverse('onboarding'), {**VALID_ANSWERS, field: blank})
 
                 self.assertEqual(response.status_code, 200)
@@ -194,6 +205,7 @@ class MissingAnswerTests(OnboardingTestBase):
             ('weight', '700.01'),
             ('weekly_food_budget', 'lots'),
             ('weekly_food_budget', '-1'),
+            ('planned_meals', ['brunch']),
             ('equipment', ['jetpack']),
             ('equipment', ['none', 'dumbbells']),
         ]
@@ -214,7 +226,9 @@ class AccessGuardTests(OnboardingTestBase):
                 url = reverse(name)
                 response = self.client.get(url)
                 self.assertRedirects(
-                    response, f"{reverse('login')}?next={url}", fetch_redirect_response=False,
+                    response,
+                    f'{reverse("login")}?next={url}',
+                    fetch_redirect_response=False,
                 )
 
     def test_anonymous_post_to_onboarding_is_rejected_and_saves_nothing(self):
@@ -277,7 +291,9 @@ class AccessGuardTests(OnboardingTestBase):
         self.client.post(reverse('logout'))
         response = self.client.get(reverse('dashboard'))
         self.assertRedirects(
-            response, f"{reverse('login')}?next={reverse('dashboard')}", fetch_redirect_response=False,
+            response,
+            f'{reverse("login")}?next={reverse("dashboard")}',
+            fetch_redirect_response=False,
         )
 
 
@@ -337,18 +353,23 @@ class LoginRedirectTests(OnboardingTestBase):
                 self.client.force_login(user)
                 response = self.client.get(reverse('login'))
                 self.assertRedirects(
-                    response, reverse(destination), fetch_redirect_response=False,
+                    response,
+                    reverse(destination),
+                    fetch_redirect_response=False,
                 )
 
 
 class RegistrationTests(OnboardingTestBase):
     def test_new_user_gets_a_profile_and_lands_on_onboarding(self):
-        response = self.client.post(reverse('register'), {
-            'username': 'newuser',
-            'email': 'new@example.com',
-            'password1': PASSWORD,
-            'password2': PASSWORD,
-        })
+        response = self.client.post(
+            reverse('register'),
+            {
+                'username': 'newuser',
+                'email': 'new@example.com',
+                'password1': PASSWORD,
+                'password2': PASSWORD,
+            },
+        )
 
         self.assertRedirects(response, reverse('onboarding'), fetch_redirect_response=False)
         profile = UserProfile.objects.get(user__username='newuser')
@@ -384,3 +405,21 @@ class MigrationTests(TestCase):
             call_command('makemigrations', '--check', '--dry-run', stdout=out)
         except SystemExit:
             self.fail(f'Model changes are missing a migration:\n{out.getvalue()}')
+
+
+class MealChoiceTests(TestCase):
+    """The meal plan question is a group of checkboxes (story D-5)."""
+
+    def test_meals_are_checkboxes_all_ticked_by_default(self):
+        user = User.objects.create_user('meals', 'meals@example.com', PASSWORD)
+        UserProfile.objects.create(user=user)
+        self.client.force_login(user)
+        response = self.client.get(reverse('onboarding'))
+        for key in ('breakfast', 'lunch', 'dinner'):
+            self.assertContains(response, f'type="checkbox" name="planned_meals" value="{key}"')
+        self.assertContains(response, 'checked', count=3)
+
+    def test_meal_keys_are_in_day_order_and_default_to_all_three(self):
+        self.assertEqual(UserProfile(planned_meals=['dinner', 'breakfast']).meal_keys(), ['breakfast', 'dinner'])
+        self.assertEqual(UserProfile(planned_meals=[]).meal_keys(), ['breakfast', 'lunch', 'dinner'])
+        self.assertEqual(UserProfile(planned_meals=['lunch']).meal_labels(), ['Lunch'])

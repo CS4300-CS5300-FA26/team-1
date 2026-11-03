@@ -3,13 +3,24 @@
 The Gherkin scenarios for this story are in features/user_auth.feature. The redirect to
 the onboarding questionnaire after login is tested in core/test_onboarding.py.
 """
+
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
+from unittest import mock, skipUnless
+
+from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase
+from django.db import IntegrityError, connection, transaction
+from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from core.models import UserProfile
 
-from .forms import LoginForm
+from .forms import LoginForm, RegisterForm
+from .models import ThrottleCounter
+from .throttle import acquire
 
 User = get_user_model()
 PASSWORD = 'Tr4ining-Plan-2026!'
@@ -17,12 +28,15 @@ PASSWORD = 'Tr4ining-Plan-2026!'
 
 class RegisterTests(TestCase):
     def register(self, username='sam', email='sam@example.com', password=PASSWORD, confirm=None):
-        return self.client.post(reverse('register'), {
-            'username': username,
-            'email': email,
-            'password1': password,
-            'password2': password if confirm is None else confirm,
-        })
+        return self.client.post(
+            reverse('register'),
+            {
+                'username': username,
+                'email': email,
+                'password1': password,
+                'password2': password if confirm is None else confirm,
+            },
+        )
 
     def test_register_page_renders(self):
         response = self.client.get(reverse('register'))
@@ -66,9 +80,45 @@ class RegisterTests(TestCase):
         self.assertFalse(User.objects.filter(username='second').exists())
         self.assertNotIn('_auth_user_id', self.client.session)
 
+    def test_database_rejects_duplicate_email_if_form_check_is_bypassed(self):
+        # Two sign-ups racing past clean_email(): the unique index must stop the second one.
+        User.objects.create_user('first', 'sam@example.com', PASSWORD)
+        with mock.patch.object(RegisterForm, 'clean_email', lambda self: self.cleaned_data['email'].lower()):
+            response = self.register(username='second', email='SAM@example.com')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'already exists')
+        self.assertFalse(User.objects.filter(username='second').exists())
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_username_race_is_reported_as_a_username_conflict_not_an_email_one(self):
+        # Same username, different email, racing past the form's uniqueness check.
+        User.objects.create_user('sam', 'first@example.com', PASSWORD)
+        with mock.patch.object(RegisterForm, 'validate_unique', lambda self: None):
+            response = self.register(username='sam', email='second@example.com')
+        self.assertEqual(response.status_code, 200)
+        self.assertFormError(response.context['form'], 'username', 'A user with that username already exists.')
+        self.assertEqual(response.context['form'].errors.get('email'), None)
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_database_enforces_unique_email_case_insensitively(self):
+        User.objects.create_user('first', 'sam@example.com', PASSWORD)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            User.objects.create_user('second', 'SAM@Example.com', PASSWORD)
+
+    def test_blank_emails_do_not_collide(self):
+        User.objects.create_user('a', '', PASSWORD)
+        User.objects.create_user('b', '', PASSWORD)
+
     # Email format (format only: we do not verify that the address is real)
     def test_invalid_email_rejected(self):
-        bad_emails = ['not-an-email', 'missing-at.example.com', '@example.com', 'sam@', 'sam@@example.com', 'sam example@x.com']
+        bad_emails = [
+            'not-an-email',
+            'missing-at.example.com',
+            '@example.com',
+            'sam@',
+            'sam@@example.com',
+            'sam example@x.com',
+        ]
         for email in bad_emails:
             with self.subTest(email=email):
                 response = self.register(email=email)
@@ -112,9 +162,15 @@ class RegisterTests(TestCase):
 
     def test_register_post_requires_csrf_token(self):
         strict_client = Client(enforce_csrf_checks=True)
-        response = strict_client.post(reverse('register'), {
-            'username': 'sam', 'email': 'sam@example.com', 'password1': PASSWORD, 'password2': PASSWORD,
-        })
+        response = strict_client.post(
+            reverse('register'),
+            {
+                'username': 'sam',
+                'email': 'sam@example.com',
+                'password1': PASSWORD,
+                'password2': PASSWORD,
+            },
+        )
         self.assertEqual(response.status_code, 403)
         self.assertFalse(User.objects.exists())
 
@@ -145,7 +201,7 @@ class LoginTests(TestCase):
 
     def test_login_with_email_longer_than_a_username(self):
         # User.username allows 150 characters, User.email allows 254.
-        long_email = f"{'a' * 200}@example.com"
+        long_email = f'{"a" * 200}@example.com'
         user = User.objects.create_user('longmail', long_email, PASSWORD)
         UserProfile.objects.create(user=user, onboarding_completed=True)
         self.assertRedirects(self.log_in(long_email), reverse('dashboard'))
@@ -154,12 +210,12 @@ class LoginTests(TestCase):
     def test_login_field_allows_an_email_length_value(self):
         # The browser enforces maxlength, so a 150 here would block long emails client-side.
         field = LoginForm().fields['username']
-        self.assertEqual(field.max_length, 254)
+        self.assertEqual(getattr(field, 'max_length', None), 254)
         self.assertEqual(field.widget.attrs['maxlength'], 254)
 
     def test_login_honours_safe_next(self):
-        response = self.log_in(next='/admin/')
-        self.assertRedirects(response, '/admin/', fetch_redirect_response=False)
+        response = self.log_in(next='/users/')
+        self.assertRedirects(response, '/users/', fetch_redirect_response=False)
 
     def test_login_ignores_external_next(self):
         self.assertRedirects(self.log_in(next='https://evil.example.com/'), reverse('dashboard'))
@@ -210,3 +266,135 @@ class LogoutTests(TestCase):
         response = self.client.post(reverse('logout'))
         self.assertRedirects(response, reverse('home'), fetch_redirect_response=False)
         self.assertNotIn('_auth_user_id', self.client.session)
+
+
+class LoginThrottleTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user('sam', 'sam@example.com', PASSWORD)
+        UserProfile.objects.create(user=self.user, onboarding_completed=True)
+
+    def log_in(self, identifier='sam@example.com', password='wrong-password-123', **extra):
+        return self.client.post(reverse('login'), {'username': identifier, 'password': password}, **extra)
+
+    def fail_times(self, count, **kwargs):
+        for _ in range(count):
+            self.assertEqual(self.log_in(**kwargs).status_code, 200)
+
+    def test_locks_out_after_too_many_failures_even_with_the_right_password(self):
+        self.fail_times(5)
+        response = self.log_in(password=PASSWORD)
+        self.assertEqual(response.status_code, 429)
+        self.assertContains(response, 'Too many attempts', status_code=429)
+        self.assertIn('Retry-After', response)
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_lockout_is_case_and_whitespace_insensitive(self):
+        self.fail_times(5)
+        self.assertEqual(self.log_in(' SAM@example.com ', PASSWORD).status_code, 429)
+
+    def test_lockout_expires_after_the_window(self):
+        self.fail_times(5)
+        ThrottleCounter.objects.update(window_started=timezone.now() - timedelta(minutes=16))
+        self.assertEqual(self.log_in(password=PASSWORD).status_code, 302)
+
+    def test_lockout_does_not_apply_to_other_ips(self):
+        self.fail_times(5, REMOTE_ADDR='10.0.0.1')
+        self.assertEqual(self.log_in(password=PASSWORD, REMOTE_ADDR='10.0.0.2').status_code, 302)
+
+    def test_successful_login_resets_the_counter(self):
+        self.fail_times(4)
+        self.assertEqual(self.log_in(password=PASSWORD).status_code, 302)
+        self.client.post(reverse('logout'))
+        self.fail_times(4)
+
+    def test_one_ip_is_blocked_after_spraying_many_identifiers(self):
+        for i in range(20):
+            self.log_in(f'user{i}@example.com')
+        self.assertEqual(self.log_in('another@example.com').status_code, 429)
+
+    def test_throttle_table_stores_hashes_not_identifiers(self):
+        self.log_in()
+        self.assertTrue(ThrottleCounter.objects.exists())
+        for counter in ThrottleCounter.objects.all():
+            self.assertEqual(len(counter.key), 64)
+            self.assertNotIn('sam', counter.key)
+
+    def test_retry_after_is_the_time_left_in_the_window(self):
+        self.fail_times(5)
+        ThrottleCounter.objects.update(window_started=timezone.now() - timedelta(minutes=10))
+        retry_after = int(self.log_in(password=PASSWORD)['Retry-After'])
+        self.assertTrue(5 * 60 - 5 <= retry_after <= 5 * 60 + 1, retry_after)
+
+    def test_blocked_attempts_do_not_extend_the_lockout(self):
+        self.fail_times(5)
+        started = ThrottleCounter.objects.get(scope='login-id').window_started
+        self.log_in()
+        self.assertEqual(ThrottleCounter.objects.get(scope='login-id').window_started, started)
+        self.assertEqual(ThrottleCounter.objects.get(scope='login-id').count, 5)
+
+    def test_successful_logins_do_not_use_up_the_ip_limit(self):
+        for _ in range(25):
+            self.assertEqual(self.log_in(password=PASSWORD).status_code, 302)
+            self.client.post(reverse('logout'))
+
+    def test_expired_counters_are_pruned(self):
+        self.log_in('old@example.com')
+        ThrottleCounter.objects.update(window_started=timezone.now() - timedelta(hours=2))
+        self.log_in('new@example.com')
+        self.assertFalse(
+            ThrottleCounter.objects.filter(window_started__lt=timezone.now() - timedelta(hours=1)).exists()
+        )
+
+    def test_forged_forwarded_for_entries_cannot_dodge_the_limit(self):
+        # Only the second-to-last X-Forwarded-For entry (added by the load balancer) is trusted.
+        with override_settings(BEHIND_HTTPS_PROXY=True):
+            for i in range(5):
+                self.log_in(HTTP_X_FORWARDED_FOR=f'6.6.6.{i}, 9.9.9.9, 130.211.0.1')
+            self.assertEqual(
+                self.log_in(password=PASSWORD, HTTP_X_FORWARDED_FOR='1.2.3.4, 9.9.9.9, 130.211.0.1').status_code, 429
+            )
+
+
+class RegisterThrottleTests(TestCase):
+    def register(self, n, **extra):
+        return self.client.post(
+            reverse('register'),
+            {
+                'username': f'user{n}',
+                'email': f'user{n}@example.com',
+                'password1': 'x',
+                'password2': 'x',
+            },
+            **extra,
+        )
+
+    def test_registration_attempts_are_limited_per_ip(self):
+        for n in range(10):
+            self.assertEqual(self.register(n).status_code, 200)
+        response = self.register(11)
+        self.assertEqual(response.status_code, 429)
+        self.assertIn('Retry-After', response)
+        self.assertEqual(self.register(12, REMOTE_ADDR='10.0.0.9').status_code, 200)
+
+    def test_viewing_the_form_is_not_counted(self):
+        for _ in range(15):
+            self.assertEqual(self.client.get(reverse('register')).status_code, 200)
+
+
+@skipUnless(connection.vendor == 'postgresql', 'row locking needs PostgreSQL; SQLite serializes writes itself')
+class ThrottleConcurrencyTests(TransactionTestCase):
+    def test_parallel_attempts_share_one_limit(self):
+        limit = settings.AUTH_THROTTLE['login'][0]
+        barrier = threading.Barrier(20)
+
+        def attempt():
+            try:
+                barrier.wait()
+                return acquire(('login-id', 'k', 'login'))
+            finally:
+                connection.close()
+
+        with ThreadPoolExecutor(max_workers=20) as pool:
+            results = list(pool.map(lambda _: attempt(), range(20)))
+        self.assertEqual(results.count(0), limit)
+        self.assertEqual(ThrottleCounter.objects.get(scope='login-id', key='k').count, limit)

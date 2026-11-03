@@ -16,6 +16,8 @@ It raises PlanGenerationError if the profile is incomplete or invalid; the calle
 falls back to the starter plan.
 """
 
+from typing import Any
+
 DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 # --- Exercise library -------------------------------------------------------------------
@@ -23,24 +25,52 @@ DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
 # user can do wins. The last entry of every movement is bodyweight ('none'), so there is always
 # a fallback. Keys match core.models.EQUIPMENT_CHOICES.
 EXERCISES = {
-    'squat': [('barbell', 'Barbell Back Squat'), ('machines', 'Leg Press'),
-              ('dumbbells', 'Goblet Squat'), ('bands', 'Banded Squat'),
-              ('none', 'Bodyweight Squat')],
-    'hinge': [('barbell', 'Romanian Deadlift'), ('dumbbells', 'Dumbbell Romanian Deadlift'),
-              ('bands', 'Banded Good Morning'), ('none', 'Glute Bridge')],
-    'push': [('barbell', 'Barbell Bench Press'), ('machines', 'Machine Chest Press'),
-             ('dumbbells', 'Dumbbell Bench Press'), ('bands', 'Banded Chest Press'),
-             ('none', 'Push-Up')],
-    'overhead': [('barbell', 'Barbell Overhead Press'), ('machines', 'Machine Shoulder Press'),
-                 ('dumbbells', 'Dumbbell Shoulder Press'), ('bands', 'Banded Overhead Press'),
-                 ('none', 'Pike Push-Up')],
-    'row': [('barbell', 'Barbell Bent-Over Row'), ('machines', 'Seated Cable Row'),
-            ('dumbbells', 'One-Arm Dumbbell Row'), ('bands', 'Banded Row'),
-            ('none', 'Prone Y-T Raise')],
-    'pulldown': [('machines', 'Lat Pulldown'), ('bands', 'Banded Lat Pulldown'),
-                 ('dumbbells', 'Dumbbell Pullover'), ('none', 'Superman Hold')],
-    'lunge': [('dumbbells', 'Dumbbell Walking Lunge'), ('barbell', 'Barbell Reverse Lunge'),
-              ('bands', 'Banded Split Squat'), ('none', 'Reverse Lunge')],
+    'squat': [
+        ('barbell', 'Barbell Back Squat'),
+        ('machines', 'Leg Press'),
+        ('dumbbells', 'Goblet Squat'),
+        ('bands', 'Banded Squat'),
+        ('none', 'Bodyweight Squat'),
+    ],
+    'hinge': [
+        ('barbell', 'Romanian Deadlift'),
+        ('dumbbells', 'Dumbbell Romanian Deadlift'),
+        ('bands', 'Banded Good Morning'),
+        ('none', 'Glute Bridge'),
+    ],
+    'push': [
+        ('barbell', 'Barbell Bench Press'),
+        ('machines', 'Machine Chest Press'),
+        ('dumbbells', 'Dumbbell Bench Press'),
+        ('bands', 'Banded Chest Press'),
+        ('none', 'Push-Up'),
+    ],
+    'overhead': [
+        ('barbell', 'Barbell Overhead Press'),
+        ('machines', 'Machine Shoulder Press'),
+        ('dumbbells', 'Dumbbell Shoulder Press'),
+        ('bands', 'Banded Overhead Press'),
+        ('none', 'Pike Push-Up'),
+    ],
+    'row': [
+        ('barbell', 'Barbell Bent-Over Row'),
+        ('machines', 'Seated Cable Row'),
+        ('dumbbells', 'One-Arm Dumbbell Row'),
+        ('bands', 'Banded Row'),
+        ('none', 'Prone Y-T Raise'),
+    ],
+    'pulldown': [
+        ('machines', 'Lat Pulldown'),
+        ('bands', 'Banded Lat Pulldown'),
+        ('dumbbells', 'Dumbbell Pullover'),
+        ('none', 'Superman Hold'),
+    ],
+    'lunge': [
+        ('dumbbells', 'Dumbbell Walking Lunge'),
+        ('barbell', 'Barbell Reverse Lunge'),
+        ('bands', 'Banded Split Squat'),
+        ('none', 'Reverse Lunge'),
+    ],
     'core': [('none', 'Plank')],
     'cardio': [('cardio', 'Treadmill or Bike Intervals'), ('none', 'Brisk Walk or Jog')],
 }
@@ -84,14 +114,14 @@ CORE_REPS = '30-45 sec'
 # --- Macro targets ----------------------------------------------------------------------
 LB_TO_KG = 0.45359237
 IN_TO_CM = 2.54
-DEFAULT_AGE = 25            # onboarding does not ask for age yet
-SEX_NEUTRAL_OFFSET = -78    # Mifflin-St Jeor uses +5 (male) / -161 (female); onboarding doesn't ask sex
-ACTIVITY = {3: 1.375, 4: 1.45, 5: 1.55}    # multiplier on resting calories, by training days
+DEFAULT_AGE = 25  # onboarding does not ask for age yet
+SEX_NEUTRAL_OFFSET = -78  # Mifflin-St Jeor uses +5 (male) / -161 (female); onboarding doesn't ask sex
+ACTIVITY = {3: 1.375, 4: 1.45, 5: 1.55}  # multiplier on resting calories, by training days
 GOAL_CALORIE_ADJUST = {'lose_weight': -500, 'build_muscle': 250, 'maintain': 0, 'endurance': 100}
 PROTEIN_G_PER_LB = {'lose_weight': 1.0, 'build_muscle': 0.9, 'maintain': 0.7, 'endurance': 0.7}
-FAT_SHARE = 0.25            # share of calories from fat
+FAT_SHARE = 0.25  # share of calories from fat
 MIN_CALORIES = 1200
-MAX_PROTEIN_SHARE = 0.35    # keeps very heavy users from getting an absurd protein target
+MAX_PROTEIN_SHARE = 0.35  # keeps very heavy users from getting an absurd protein target
 
 
 class PlanGenerationError(Exception):
@@ -147,7 +177,7 @@ def generate_plan(profile):
     split = SPLITS[training_days]
     weekdays = TRAINING_WEEKDAYS[training_days]
 
-    days = []
+    days: list[dict[str, Any]] = []
     for index, day_name in enumerate(DAY_NAMES):
         if index not in weekdays:
             days.append({'day': day_name, 'name': 'Rest', 'exercises': []})
@@ -158,8 +188,7 @@ def generate_plan(profile):
             reps = CORE_REPS if movement == 'core' else GOAL_REPS[goal]
             exercises.append({'name': pick_exercise(movement, equipment), 'sets': sets, 'reps': reps})
         if goal in GOAL_CARDIO:
-            exercises.append({'name': pick_exercise('cardio', equipment), 'sets': 1,
-                              'reps': GOAL_CARDIO[goal]})
+            exercises.append({'name': pick_exercise('cardio', equipment), 'sets': 1, 'reps': GOAL_CARDIO[goal]})
         days.append({'day': day_name, 'name': workout_name, 'exercises': exercises})
 
     macros = calculate_macros(goal, weight, height, age, training_days)

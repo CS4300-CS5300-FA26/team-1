@@ -2,6 +2,7 @@
 
 Step wording is unique to this feature (behave shares step text across all step files).
 """
+
 from decimal import Decimal
 from unittest import mock
 
@@ -21,9 +22,14 @@ USERNAME = 'planner'
 def step_logged_in_completed_profile(context):
     user = User.objects.create_user(USERNAME, 'planner@example.com', VALID_PASSWORD)
     UserProfile.objects.create(
-        user=user, onboarding_completed=True, goal='build_muscle', height_inches=70,
-        weight=Decimal('180.50'), experience_level='intermediate',
-        weekly_food_budget=Decimal('85.50'), equipment=['dumbbells'],
+        user=user,
+        onboarding_completed=True,
+        goal='build_muscle',
+        height_inches=70,
+        weight=Decimal('180.50'),
+        experience_level='intermediate',
+        weekly_food_budget=Decimal('85.50'),
+        equipment=['dumbbells'],
     )
     context.test.assertTrue(context.test.client.login(username=USERNAME, password=VALID_PASSWORD))
 

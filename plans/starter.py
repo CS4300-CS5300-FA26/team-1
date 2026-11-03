@@ -3,6 +3,7 @@
 Deliberately static (no calculation, no database), so it still works when the generator fails.
 It is a 3-day bodyweight full-body plan with general-purpose macro targets.
 """
+
 from copy import deepcopy
 
 _WORKOUT = [

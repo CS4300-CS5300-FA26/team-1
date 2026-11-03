@@ -13,7 +13,12 @@ concurrency:
 
 jobs:
   codex:
-    if: github.event.pull_request.draft == false
+    # Dependabot PRs are skipped: codex-action requires an actor with write access, and
+    # Dependabot-triggered runs can't read the repository's Actions secrets (OPENAI_API_KEY) anyway.
+    if: >-
+      github.event.pull_request.draft == false
+      && github.event.pull_request.user.login != 'dependabot[bot]'
+      && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -70,7 +75,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Report Codex feedback
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           CODEX_FINAL_MESSAGE: ${{ needs.codex.outputs.final_message }}
         with:

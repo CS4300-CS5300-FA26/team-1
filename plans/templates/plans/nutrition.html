@@ -1,23 +1,17 @@
 {% extends "core/base.html" %}
 {% block title %}Nutrition | FitPro{% endblock %}
-{% block extra_head %}
-  <style>
-    h2 { font-size: 1.1rem; margin: 0 0 .5rem; }
-    .notice { padding: .75rem 1rem; background: #fff8e1; border: 1px solid #f0d78c; border-radius: 4px; }
-    .macro-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .5rem; list-style: none; margin: 0 0 1rem; padding: 0; text-align: center; }
-    .macro-grid li { padding: .75rem .25rem; background: #f5f7fa; border-radius: 4px; }
-    .macro-grid strong { display: block; font-size: 1.15rem; }
-    .macro-grid span { color: #52606d; font-size: .8rem; }
-    .help { margin-bottom: 1rem; }
-    .links { text-align: center; color: #52606d; }
-  </style>
-{% endblock %}
-{% block content %}
-  <h1>Nutrition</h1>
-  {% if is_starter %}
-    <p class="notice">Our plan generator is unavailable right now, so these are general starter targets, not ones built from your profile.</p>
-  {% endif %}
-  {% include "plans/_macros.html" %}
-  <p class="help">These daily targets match your plan for this week and stay the same on training and rest days. They are estimates, not medical advice.</p>
-  <p class="links"><a href="{% url 'this_week' %}">This Week</a> &middot; <a href="{% url 'dashboard' %}">Dashboard</a></p>
+{% block body %}
+  <div class="card">
+    <h1 class="card__title">Nutrition</h1>
+    <p class="card__subtitle">Daily macro targets that match your plan for this week.</p>
+    {% if is_starter %}
+      <div class="alert alert--warning" role="status">Our plan generator is unavailable right now, so these are general starter targets, not ones built from your profile.</div>
+    {% endif %}
+    {% include "plans/_macros.html" %}
+    <p class="mt-5">These targets stay the same on training and rest days. They are estimates, not medical advice.</p>
+    <div class="cluster mt-5">
+      <a class="btn btn--secondary" href="{% url 'this_week' %}">This Week</a>
+      <a class="btn btn--secondary" href="{% url 'dashboard' %}">Dashboard</a>
+    </div>
+  </div>
 {% endblock %}

@@ -1,9 +1,9 @@
-<section class="macros">
-  <h2>Today's macro targets</h2>
-  <ul class="macro-grid">
-    <li><strong>{{ macros.calories }}</strong><span>calories</span></li>
-    <li><strong>{{ macros.protein }} g</strong><span>protein</span></li>
-    <li><strong>{{ macros.carbs }} g</strong><span>carbs</span></li>
-    <li><strong>{{ macros.fat }} g</strong><span>fat</span></li>
-  </ul>
+<section aria-labelledby="macros-heading">
+  <h2 class="h3" id="macros-heading">Today's macro targets</h2>
+  <dl class="stat-row">
+    <div class="stat-tile"><dt>calories</dt><dd>{{ macros.calories }}</dd></div>
+    <div class="stat-tile"><dt>protein</dt><dd>{{ macros.protein }} g</dd></div>
+    <div class="stat-tile"><dt>carbs</dt><dd>{{ macros.carbs }} g</dd></div>
+    <div class="stat-tile"><dt>fat</dt><dd>{{ macros.fat }} g</dd></div>
+  </dl>
 </section>
