@@ -1,6 +1,10 @@
+# CS 4300/5300 Fall 2026 — Team 1 group project - FitPro
+[![CI](https://github.com/CS4300-CS5300-FA26/team-1/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/CS4300-CS5300-FA26/team-1/actions/workflows/ci.yml)
+
 ## Project Overview
 This is the semester project for CS 4300/5300 Fall 2026. FitPro is a fitness application aimed at beginners and budget
 conscious students. The application offers personalized workout splits, meal-prep guidance, and dynamic playlist creation.
+
 
 ## Authors
 * Caleb Harris
