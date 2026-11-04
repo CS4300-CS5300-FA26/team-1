@@ -118,6 +118,7 @@ class DayViewTests(TestCase):
         self.assertIn("Your personal macro targets aren't ready yet", text)
         self.assertIn('2,000-calorie FDA Daily Values: 50 g protein, 275 g carbohydrate, and 78 g fat', text)
 
+    @override_settings(NUTRITION_GROCERY_PRICE_SOURCE='nutrition.connectors.NoGroceryPrices')
     def test_no_prices_notice_until_d6(self):
         response = self.client.get(reverse('meal_plan'))
         self.assertContains(response, "Grocery prices aren't available yet")

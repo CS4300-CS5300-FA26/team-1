@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     'core',
     'accounts',
     'nutrition',
+    'grocery',
 ]
 
 # behave-django runs the Gherkin scenarios in features/ (`manage.py behave`). It is a dev
@@ -181,7 +182,7 @@ NUTRITION_RECIPE_SOURCE = 'nutrition.recipe_sources.CatalogRecipeSource'
 # D-4 Macro Generation. Until connected, plans use the FDA Daily Values (nutrition/targets.py).
 NUTRITION_MACRO_TARGETS_PROVIDER = 'nutrition.connectors.NoMacroTargets'
 # D-6 Grocery List Generation. Until connected, plans have no cost estimate and aren't limited by the budget.
-NUTRITION_GROCERY_PRICE_SOURCE = 'nutrition.connectors.NoGroceryPrices'
+NUTRITION_GROCERY_PRICE_SOURCE = 'grocery.prices.StoredGroceryPrices'
 # D-3 Workout Split Generation: where "This Week" lives. The dashboard until D-3 adds its page.
 NUTRITION_WORKOUTS_LINK = {'url_name': 'dashboard', 'text': 'Go to your dashboard'}
 

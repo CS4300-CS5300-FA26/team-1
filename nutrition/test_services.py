@@ -80,6 +80,7 @@ class PriceFallbackTests(TestCase):
     def setUp(self):
         self.user = make_user()
 
+    @override_settings(NUTRITION_GROCERY_PRICE_SOURCE='nutrition.connectors.NoGroceryPrices')
     def test_without_d6_there_is_no_cost_and_no_budget_limit(self):
         result = current_meal_plan(self.user, ALL_MEALS, Decimal('5'), A_THURSDAY)
         self.assertEqual(result.prices, PRICES_NOT_CONNECTED)
