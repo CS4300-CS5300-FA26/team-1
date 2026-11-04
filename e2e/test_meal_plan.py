@@ -95,6 +95,7 @@ class MealPlanBrowserTests(StaticLiveServerTestCase):
         eyebrows = self.visible_cards().locator('.eyebrow').evaluate_all('els => els.map(e => e.textContent)')
         self.assertEqual([text.split()[0] for text in eyebrows], ['Breakfast', 'Dinner'])
 
+    @override_settings(NUTRITION_GROCERY_PRICE_SOURCE='nutrition.connectors.NoGroceryPrices')
     def test_one_day_at_a_time_with_the_fallback_note(self):
         self.log_in()
         self.open_meal_plan()
