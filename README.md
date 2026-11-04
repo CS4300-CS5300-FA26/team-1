@@ -5,6 +5,7 @@
 This is the semester project for CS 4300/5300 Fall 2026. FitPro is a fitness application aimed at beginners and budget
 conscious students. The application offers personalized workout splits, meal-prep guidance, and dynamic playlist creation.
 
+
 ## Authors
 * Caleb Harris
 * Fletcher McMeans
@@ -119,17 +120,20 @@ Auth lives in the `accounts` app and uses Django's built-in `User` model, sessio
 | `/users/` | `user_profile` | Login required | The signed-in user's own profile only |
 | `/meal-plan/` | `meal_plan` | Login required (onboarded users) | This week's meal plan (story D-5, [ADR-008](docs/adrs/adr-008.md)): a week strip to pick a day, that day's meals (chosen in onboarding) as cards with portion, kcal, and macros, each recipe's weighed ingredients and steps opening in place, the day's totals against its targets, the estimated grocery cost and an over-budget notice once grocery prices are connected (D-6), a notice for each fallback in use, and a "temporarily unavailable" state. `?day=` selects a day; `meal_plan.js` switches days without a reload |
 | `/meal-plan/new/` | `meal_plan_new` | Login required, `POST` only | Replace this week's plan with a different one |
+| `/grocery-list/` | `grocery_list` | Login required (onboarded users) | This week's grocery list (story D-6, [ADR-009](docs/adrs/adr-009.md)): the meal plan's ingredients combined (rice on Monday and Wednesday is listed once, in cups), with the amount to buy, an estimated cost per item and for the week, an over-budget notice, a note on how the list was made, and the unmeasured pantry items. With no meal plan this week, it asks the user to create one first. It reads only the signed-in user's own plan and never creates one |
 
 ### Acceptance scenarios
 The Gherkin scenarios live in [`features/user_auth.feature`](features/user_auth.feature) (successful registration, email
 already registered, wrong password) and [`features/onboarding.feature`](features/onboarding.feature) (complete
 onboarding, missing required answer, returning user skips onboarding), and [`features/meal_plan.feature`](features/meal_plan.feature)
-(plan within budget, budget too low, recipe service unavailable, plus the no-macro-targets and no-prices fallbacks). Step
+(plan within budget, budget too low, recipe service unavailable, plus the no-macro-targets and no-prices fallbacks), and
+[`features/grocery_list.feature`](features/grocery_list.feature) (ingredients combined, empty week, plus a missing-prices fallback). Step
 definitions are in `features/steps/`. Nothing calls the network: the connectors to D-4 and D-6 use the stand-ins in
 `nutrition/testing.py`, and the recipe catalog is loaded into the test database after migrations.
 Django tests are in `accounts/tests.py` (registration, login, logout), `core/test_onboarding.py` (onboarding, dashboard,
 and the login redirect), `core/tests.py` (models, health checks, and access control), and `nutrition/test_*.py` (meal
-planner and pricing, recipe catalog and loader, connectors and fallbacks, Meal Plan page). Browser tests for the Meal Plan page are in `e2e/` (see Common Commands).
+planner and pricing, recipe catalog and loader, connectors and fallbacks, Meal Plan page) and `grocery/test_*.py` (combining
+and amounts, costs, the Grocery List page, and the price file). Browser tests for the Meal Plan page are in `e2e/` (see Common Commands).
 
 ```shell
 uv run python manage.py test    # Django tests
@@ -154,7 +158,9 @@ uv run python manage.py behave  # Gherkin scenarios
   "email already exists" message required by the user story still reveals that an email has an account.
 * **Email format is validated, but ownership is not.** Email verification and password reset need a production email backend (`MAILERS` still uses the console backend).
 * **No admin site.** It was removed ([ADR-007](docs/adrs/adr-007.md)); manage data with `manage.py shell` or a one-off Job. Re-adding it needs network-level restriction first.
-* **Meal plan (D-5)** ([ADR-008](docs/adrs/adr-008.md)): until D-4 is connected, plans use the FDA Daily Values (2,000 kcal) instead of personal macro targets. Until D-6 is connected, there's no cost estimate and the budget isn't applied. Until D-3 ships "This Week", the unavailable notice links to the dashboard. The catalog has 25 recipes with no dietary filters yet, nutrients come from USDA SR Legacy (2018), and pantry staples aren't counted. "Today" and the week boundary use the server's time zone (UTC).
+* **Meal plan (D-5)** ([ADR-008](docs/adrs/adr-008.md)): until D-4 is connected, plans use the FDA Daily Values (2,000 kcal) instead of personal macro targets. D-6's price source is connected but prices only 54 of the 55 ingredients. Until D-3 ships "This Week", the unavailable notice links to the dashboard. The catalog has 25 recipes with no dietary filters yet, nutrients come from USDA SR Legacy (2018), and pantry staples aren't counted. "Today" and the week boundary use the server's time zone (UTC).
+* **Grocery list (D-6)** ([ADR-009](docs/adrs/adr-009.md)): prices come from `grocery/data/price_quotes.json`, which has real, cited U.S. average prices for 54 of the 55 ingredients, so the list shows those costs. BLS quotes 9 and Walmart quotes the rest. Green-onions is the one thats not priced and is unpriced because it is sold by the bunch with no weight. Amounts are rounded for shopping, pantry staples aren't measured or priced, and there are no "got it" checkboxes yet. Baked potato chili recipe isn't fully priced because it uses green onions.
+
 * **Password hashing** uses Django's default; Argon2 is a possible upgrade (needs the `argon2-cffi` dependency).
 
 ## Contributing
@@ -233,3 +239,4 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 | Claude | Caleb Harris | Claude Code added login/registration rate limiting, database-enforced email uniqueness, ruff/mypy/bandit/CodeQL CI gates and Dependabot config, disabled the admin site, wrote ADR-006 and ADR-007, and corrected this README against the Sprint 1 feedback |
 | Claude | Caleb Harris | Claude Code applied the PR #20/#27 review follow-ups (merged duplicate test modules, onboarding input bounds, shared base template, ADR-005) and moved the coverage report into `ci.yml` with the 80% gate and artifact on PRs only |
 | Claude | Caleb Harris | Claude Code implemented story D-5 (weekly budget meal plan): `nutrition` app with connectors for D-3, D-4, and D-6 and their fallbacks (FDA Daily Values, no-price planning), a USDA FoodData Central recipe catalog and loader, a whole-package, ingredient-sharing planner, stored weekly plans for D-6, the Meal Plan page (week strip, day view with in-place recipes), meal checkboxes in onboarding, unit/Gherkin/Playwright tests, ADR-008, and a temporary AGENTS.md note on wiring the connectors |
+| Claude | Savannah Harmony Swan | Claude Code implemented story D-6 (grocery list): the `grocery` app with the Grocery List page, ingredient combining and cup/count/pound amounts, whole-package costing that matches the meal plan, the price source and its validated file of cited BLS and Walmart price quotes, unit/page/Gherkin tests, ADR-009, and pinned three D-5 tests to the not-connected prices |
