@@ -96,7 +96,7 @@ def build_grocery_list(plan: WeekPlan, prices: Mapping[str, PriceEstimate]) -> G
                 pantry.setdefault(line.text)
                 continue
             key = line.ingredient.key
-            grams[key] = grams.get(key, 0.0) + line_grams   # <- this is where rice gets combined
+            grams[key] = grams.get(key, 0.0) + line_grams  # <- this is where rice gets combined
             ingredients[key] = line.ingredient
 
     items = []
