@@ -66,6 +66,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'core',
     'accounts',
+    'plans',
     'nutrition',
     'grocery',
 ]

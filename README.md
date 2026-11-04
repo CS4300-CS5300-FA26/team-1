@@ -163,6 +163,31 @@ uv run python manage.py behave  # Gherkin scenarios
 
 * **Password hashing** uses Django's default; Argon2 is a possible upgrade (needs the `argon2-cffi` dependency).
 
+## Weekly plan and macro targets
+User story: *as a budget-conscious gym-goer, I want a weekly workout plan with matching daily macro targets generated for me, so that I get structured training and nutrition guidance without paying for a personal trainer.*
+
+The `plans` app builds a Monday-to-Sunday plan from the user's onboarding profile and saves it, so the user sees the same plan all week. A new plan is generated the first time they visit in a new week.
+
+| Route | Name | Access | Purpose |
+| --- | --- | --- | --- |
+| `/plans/this-week/` | `this_week` | Login required | Seven days of workouts (exercises, sets, reps) plus today's macro targets. Users who haven't finished onboarding are sent to `/onboarding/` |
+| `/plans/nutrition/` | `nutrition` | Login required | Daily macro targets that match this week's plan |
+
+**How the plan is built** (`plans/generator.py`, rule-based):
+* **Split:** experience level sets the training days: beginner 3 (full body), intermediate 4 (upper/lower), advanced 5.
+* **Exercises:** chosen from the user's equipment, falling back to bodyweight movements.
+* **Sets and reps:** reps follow the goal. Weight loss and endurance also add cardio to each training day.
+* **Macros:** a Mifflin-St Jeor calorie estimate with an activity multiplier from training days, adjusted by goal. Protein is set per pound of body weight and fat is 25% of calories. Carbs make up the rest.
+
+**Fallback:** if the generator fails for any reason, the pages show a fixed 3-day bodyweight starter plan (`plans/starter.py`) with general macro targets and a notice. The starter plan is not saved, so the next visit tries the generator again.
+
+**Known gaps:**
+* Onboarding does not ask for age or sex, so the macro estimate assumes age 25 and a sex-neutral formula. Add those fields to the profile and onboarding form to improve accuracy.
+* Macro targets are estimates, not medical advice.
+* The weekly food budget is collected but not yet used in the plan.
+
+Acceptance scenarios are in [`features/weekly_plan.feature`](features/weekly_plan.feature) (generated plan, Nutrition page, generator down). Django tests are in `plans/tests.py`.
+
 ## Contributing
 * Read [AGENTS.md](AGENTS.md) first: it is the team's working agreement (security rules, code standards, ADRs, frontend theme and accessibility, workflow) for humans and AI coding tools alike.
 * Branch naming: `feat/<short-description>`, `fix/<short-description>`, `chore/<short-description>`, or `<issue-number>-<short-description>`
@@ -197,6 +222,7 @@ Alerting and response: monitoring and alerts are currently handled through Googl
 | Identity | Runtime service account `fitpro-app` (`cloudsql.client` + per-secret `secretAccessor`), bound by Workload Identity to Kubernetes service account `app/django-app`. No service account keys exist |
 | Images | Artifact Registry `fitpro` (Docker, `us-central1`) with immutable tags, keeping the 15 most recent images and deleting anything older than 30 days |
 | Ingress / TLS | Reserved global static IP `fitpro-lb-ip`, Google-managed certificate through Certificate Manager (DNS authorization) and certificate map `fitpro-certmap` for `fitpro.rockymountaintechlab.com` (DNS only in Cloudflare, see [ADR-004](docs/adrs/adr-004.md)), SSL policy `fitpro-ssl-policy` (TLS 1.2+, MODERN profile) |
+
 
 Terraform runs locally as the GCP project owner through `gcloud auth application-default login`, so no Terraform
 service account or key exists. `terraform.tfvars` (gitignored) needs `project_id` and `app_hostnames`. See

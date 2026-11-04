@@ -1,0 +1,40 @@
+{% extends "core/base.html" %}
+{% block title %}This Week | FitPro{% endblock %}
+{% block body %}
+  <div class="card card--wide">
+    <h1 class="card__title">This Week</h1>
+    <p class="card__subtitle">Your workouts and daily macro targets for the week.</p>
+    {% if is_starter %}
+      <div class="alert alert--warning" role="status">Our plan generator is unavailable right now, so this is a general starter plan. Check back soon for a plan built from your profile.</div>
+    {% endif %}
+    {% include "plans/_macros.html" %}
+    <div class="stack mt-5">
+      {% for day in days %}
+        <section aria-labelledby="day-{{ forloop.counter }}">
+          <h2 class="h3" id="day-{{ forloop.counter }}">{{ day.day }}{% if day.is_today %} <span class="badge">Today</span>{% endif %}</h2>
+          <p class="eyebrow">{{ day.name }}</p>
+          {% if day.exercises %}
+            <div class="table-scroll">
+              <table class="data-table" aria-labelledby="day-{{ forloop.counter }}">
+                <thead>
+                  <tr><th scope="col">Exercise</th><th scope="col" class="data-table__num">Sets</th><th scope="col" class="data-table__num">Reps</th></tr>
+                </thead>
+                <tbody>
+                  {% for exercise in day.exercises %}
+                    <tr><td>{{ exercise.name }}</td><td class="data-table__num">{{ exercise.sets }}</td><td class="data-table__num">{{ exercise.reps }}</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p>Rest day</p>
+          {% endif %}
+        </section>
+      {% endfor %}
+    </div>
+    <div class="cluster mt-5">
+      <a class="btn btn--secondary" href="{% url 'nutrition' %}">Nutrition</a>
+      <a class="btn btn--secondary" href="{% url 'dashboard' %}">Dashboard</a>
+    </div>
+  </div>
+{% endblock %}

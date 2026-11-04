@@ -1,0 +1,17 @@
+{% extends "core/base.html" %}
+{% block title %}Nutrition | FitPro{% endblock %}
+{% block body %}
+  <div class="card">
+    <h1 class="card__title">Nutrition</h1>
+    <p class="card__subtitle">Daily macro targets that match your plan for this week.</p>
+    {% if is_starter %}
+      <div class="alert alert--warning" role="status">Our plan generator is unavailable right now, so these are general starter targets, not ones built from your profile.</div>
+    {% endif %}
+    {% include "plans/_macros.html" %}
+    <p class="mt-5">These targets stay the same on training and rest days. They are estimates, not medical advice.</p>
+    <div class="cluster mt-5">
+      <a class="btn btn--secondary" href="{% url 'this_week' %}">This Week</a>
+      <a class="btn btn--secondary" href="{% url 'dashboard' %}">Dashboard</a>
+    </div>
+  </div>
+{% endblock %}
