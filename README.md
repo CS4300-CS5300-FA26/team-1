@@ -177,9 +177,10 @@ uv run python manage.py behave  # Gherkin scenarios
 
 * **Spotify (D-7)** ([ADR-010](docs/adrs/adr-010.md)): while the Spotify app is in **Development Mode, only 5 Spotify
   users can authorize it**, and each must be added to the app's allowlist in the Spotify developer dashboard; anyone else
-  gets an error from Spotify. The production secrets (`spotify-client-id`, `spotify-client-secret`,
-  `spotify-token-encryption-key`), `SPOTIFY_REDIRECT_URI`, and the production redirect URI in the Spotify dashboard are
-  not set up yet, so the feature is off in production until they are.
+  gets an error from Spotify. Terraform now creates the production Spotify secrets, but the client secret's value,
+  the k8s mounts and ConfigMap values (`SPOTIFY_CLIENT_ID`, `SPOTIFY_REDIRECT_URI`), and the production redirect URI in
+  the Spotify dashboard are not in place yet, so the feature is off in production until they are (see
+  [Spotify secrets in production](#spotify-secrets-in-production)).
 
 * **Password hashing** uses Django's default; Argon2 is a possible upgrade (needs the `argon2-cffi` dependency).
 
@@ -228,7 +229,7 @@ Alerting and response: monitoring and alerts are currently handled through Googl
 | Networking | Custom VPC `fitpro-vpc`, subnet `fitpro-gke` (10.10.0.0/20, pods 10.20.0.0/16, services 10.30.0.0/20), Private Google Access, private services peering for Cloud SQL |
 | Compute | GKE Autopilot cluster `fitpro` (REGULAR release channel, Gateway API enabled, Workload Identity, deletion protection) running as a dedicated least-privilege node service account |
 | Database | Cloud SQL `fitpro-pg` (PostgreSQL 16, `db-f1-micro`, zonal): private IP only, encrypted connections only, Cloud SQL Auth Proxy/connector required, daily backups (7 retained) + point-in-time recovery, Sunday 09:00 UTC maintenance window, deletion protection. Database `fitpro`, user `fitpro_app` |
-| Secrets | Secret Manager `fitpro-db-password` and `fitpro-django-secret-key` (randomly generated). Only the app service account can read them (per-secret binding), and secret reads are written to Data Access audit logs |
+| Secrets | Secret Manager `fitpro-db-password`, `fitpro-django-secret-key`, and `fitpro-spotify-token-encryption-key` (randomly generated), and `fitpro-spotify-client-secret` (created empty; its value is added with `gcloud` so it never enters Terraform state, see below). Only the app service account can read them (per-secret binding), and secret reads are written to Data Access audit logs |
 | Identity | Runtime service account `fitpro-app` (`cloudsql.client` + per-secret `secretAccessor`), bound by Workload Identity to Kubernetes service account `app/django-app`. No service account keys exist |
 | Images | Artifact Registry `fitpro` (Docker, `us-central1`) with immutable tags, keeping the 15 most recent images and deleting anything older than 30 days |
 | Ingress / TLS | Reserved global static IP `fitpro-lb-ip`, Google-managed certificate through Certificate Manager (DNS authorization) and certificate map `fitpro-certmap` for `fitpro.rockymountaintechlab.com` (DNS only in Cloudflare, see [ADR-004](docs/adrs/adr-004.md)), SSL policy `fitpro-ssl-policy` (TLS 1.2+, MODERN profile) |
@@ -246,6 +247,22 @@ terraform apply tfplan
 rm tfplan
 terraform output  # values needed by the k8s manifests and Cloudflare DNS
 ```
+
+### Spotify secrets in production
+`secrets.tf` generates the token encryption key and creates an **empty** `fitpro-spotify-client-secret`, because the
+value is issued by Spotify and putting it in `terraform.tfvars` would also put it in the state file. After
+`terraform apply`, add it once (paste the secret from the Spotify dashboard, then end the input with Ctrl-D, or
+Ctrl-Z and Enter on Windows):
+
+```shell
+gcloud secrets versions add fitpro-spotify-client-secret --data-file=-
+gcloud secrets versions list fitpro-spotify-client-secret   # one ENABLED version
+```
+
+Only then mount the two secrets in `k8s/app/base/secretproviderclass.yaml` (paths `spotify-client-secret` and
+`spotify-token-encryption-key`) and add `SPOTIFY_CLIENT_ID` and `SPOTIFY_REDIRECT_URI` to the prod ConfigMap, in the
+same rollout. A mounted secret with no version stops pods (and the migrate Job) from starting, and the app refuses to
+start with only some Spotify settings. Register `https://<host>/auth-callback/spotify` in the Spotify dashboard too.
 
 After the first apply, add the `dns_authorization_records` CNAME and an A record pointing at `lb_ip_address` in
 Cloudflare (DNS only / gray cloud). The Kubernetes Gateway uses `lb_ip_name` as its address, `certificate_map_name` in the
