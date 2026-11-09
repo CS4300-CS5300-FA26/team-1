@@ -164,5 +164,11 @@ class SpotifyBrowserTests(StaticLiveServerTestCase):
         self.spotify_answers(code='approved')
         self.page.goto(f'{self.live_server_url}/accounts/register/')
         self.page.get_by_role('button', name='Sign up with Spotify').click()
-        self.page.wait_for_url('**/onboarding/')
+        self.page.wait_for_url('**/accounts/password/set/')
         self.assertFalse(SpotifyAccount.objects.get(spotify_id=self.spotify.user_id).user.has_usable_password())
+
+        self.page.get_by_label('New password:', exact=True).fill(PASSWORD)
+        self.page.get_by_label('New password confirmation').fill(PASSWORD)
+        self.page.get_by_role('button', name='Set password and continue').click()
+        self.page.wait_for_url('**/onboarding/')
+        self.assertTrue(SpotifyAccount.objects.get(spotify_id=self.spotify.user_id).user.check_password(PASSWORD))

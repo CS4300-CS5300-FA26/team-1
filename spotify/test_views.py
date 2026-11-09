@@ -262,6 +262,20 @@ class LoginTests(SpotifyViewTestCase):
         approve(self.client, 'login')
         self.assert_logged_out()
 
+    def test_a_user_without_a_password_is_asked_for_one_at_every_spotify_sign_in(self):
+        user = self.make_user()
+        user.set_unusable_password()
+        user.save()
+        self.link_to(user)
+        for _ in range(2):  # skipping the prompt doesn't make it go away
+            self.assertRedirects(approve(self.client, 'login'), reverse('set_password'))
+            self.client.logout()
+
+        approve(self.client, 'login')
+        self.client.post(reverse('set_password'), {'new_password1': PASSWORD, 'new_password2': PASSWORD})
+        self.client.logout()
+        self.assertRedirects(approve(self.client, 'login'), reverse('dashboard'))
+
     def test_the_session_key_is_rotated(self):
         self.link_to(self.make_user())
         state = state_from(start(self.client, 'login'))
@@ -274,13 +288,31 @@ class SignupTests(SpotifyViewTestCase):
     def test_sign_up_creates_a_passwordless_user_and_links_spotify(self):
         response = approve(self.client, 'signup')
 
-        self.assertRedirects(response, reverse('onboarding'))
+        self.assertRedirects(response, reverse('set_password'))
         account = SpotifyAccount.objects.get(spotify_id='spotify-user-1')
         user = account.user
         self.assertEqual((user.username, user.email), ('dj-lifts', 'dj@example.com'))
         self.assertFalse(user.has_usable_password())
         self.assertTrue(UserProfile.objects.filter(user=user).exists())
         self.assertEqual(int(self.client.session['_auth_user_id']), user.pk)
+
+    def test_sign_up_sets_a_password_then_goes_to_onboarding(self):
+        approve(self.client, 'signup')
+        response = self.client.post(reverse('set_password'), {'new_password1': PASSWORD, 'new_password2': PASSWORD})
+
+        self.assertRedirects(response, reverse('onboarding'))
+        user = SpotifyAccount.objects.get().user
+        self.assertTrue(user.check_password(PASSWORD))
+        self.assertEqual(int(self.client.session['_auth_user_id']), user.pk)  # still logged in
+        self.client.logout()
+        response = self.client.post(reverse('login'), {'username': 'dj@example.com', 'password': PASSWORD})
+        self.assertRedirects(response, reverse('onboarding'))  # the real login form, which accepts an email
+
+    def test_once_a_password_is_set_spotify_can_be_disconnected(self):
+        approve(self.client, 'signup')
+        self.client.post(reverse('set_password'), {'new_password1': PASSWORD, 'new_password2': PASSWORD})
+        self.client.post(reverse('spotify_unlink'))
+        self.assertFalse(SpotifyAccount.objects.exists())
 
     def test_an_existing_local_email_is_not_auto_linked(self):
         existing = self.make_user('sam', 'DJ@example.com')
@@ -324,6 +356,7 @@ class UnlinkTests(SpotifyViewTestCase):
         response = self.client.post(reverse('spotify_unlink'), follow=True)
         self.assertTrue(SpotifyAccount.objects.exists())
         self.assertContains(response, 'can&#x27;t be disconnected until your account has a password')
+        self.assertContains(response, f'href="{reverse("set_password")}"')
 
     def test_unlink_is_post_only(self):
         self.link_to(self.log_in())

@@ -119,6 +119,7 @@ Auth lives in the `accounts` app and uses Django's built-in `User` model, sessio
 | `/accounts/register/` | `register` | Anonymous (logged-in users are redirected home) | Create an account; on success the user is logged in and sent to `/onboarding/` |
 | `/accounts/login/` | `login` | Anonymous | Log in with email (or username) and password |
 | `/accounts/logout/` | `logout` | `POST` only | Log out (the Log out buttons submit a form) |
+| `/accounts/password/set/` | `set_password` | Login required, only for accounts with no password (others are sent on) | Set a first password for an account made with "Sign up with Spotify" ([ADR-010](docs/adrs/adr-010.md)). Shown right after a Spotify sign-up (then onboarding) and at every Spotify sign-in until a password is set; keeps the user logged in |
 | `/onboarding/` | `onboarding` | Login required | Onboarding questionnaire (story D-2). Users who already finished it are sent to `/dashboard/` |
 | `/dashboard/` | `dashboard` | Login required | Profile summary. Users who haven't finished onboarding are sent to `/onboarding/` |
 | `/users/` | `user_profile` | Login required | The signed-in user's own profile only, with the Spotify section: "Link to Spotify", or "Spotify connected" with the Spotify name, a live connection status, and "Disconnect Spotify" |
@@ -136,7 +137,8 @@ already registered, wrong password) and [`features/onboarding.feature`](features
 onboarding, missing required answer, returning user skips onboarding), and [`features/meal_plan.feature`](features/meal_plan.feature)
 (plan within budget, budget too low, recipe service unavailable, plus the no-macro-targets and no-prices fallbacks), and
 [`features/grocery_list.feature`](features/grocery_list.feature) (ingredients combined, empty week, plus a missing-prices fallback), and
-[`features/spotify.feature`](features/spotify.feature) (link succeeds, user declines, unlink, log in with Spotify, and
+[`features/spotify.feature`](features/spotify.feature) (link succeeds, user declines, unlink, log in with Spotify, sign up then set a password, the password prompt at every
+Spotify sign-in for a Spotify-only account, and
 log in never matching on email). Step
 definitions are in `features/steps/`. Nothing calls the network: the connectors to D-4 and D-6 use the stand-ins in
 `nutrition/testing.py`, Spotify's HTTP endpoints are replaced by `spotify.testing.FakeSpotify`, and the recipe catalog is loaded into the test database after migrations.
@@ -175,8 +177,7 @@ uv run python manage.py behave  # Gherkin scenarios
 
 * **Spotify (D-7)** ([ADR-010](docs/adrs/adr-010.md)): while the Spotify app is in **Development Mode, only 5 Spotify
   users can authorize it**, and each must be added to the app's allowlist in the Spotify developer dashboard; anyone else
-  gets an error from Spotify. Users who signed up with Spotify have no password and can't disconnect Spotify until a
-  "set a password" page exists. The production secrets (`spotify-client-id`, `spotify-client-secret`,
+  gets an error from Spotify. The production secrets (`spotify-client-id`, `spotify-client-secret`,
   `spotify-token-encryption-key`), `SPOTIFY_REDIRECT_URI`, and the production redirect URI in the Spotify dashboard are
   not set up yet, so the feature is off in production until they are.
 

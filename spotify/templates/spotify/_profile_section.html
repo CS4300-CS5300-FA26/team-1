@@ -23,7 +23,7 @@ shown). The state is always written out in text too. Without JavaScript the pill
       {% if account.needs_relink %}Connection problem: Spotify access was revoked or expired. Link Spotify again to reconnect.{% else %}Connection not checked yet.{% endif %}
     </p>
     {% if not has_password %}
-      <p class="form-help mt-3" id="spotify-unlink-help">You signed up with Spotify, so it is your only way to log in. It can't be disconnected until your account has a password.</p>
+      <p class="form-help mt-3" id="spotify-unlink-help">You signed up with Spotify, so it is your only way to log in. It can't be disconnected until your account has a password. <a href="{% url 'set_password' %}">Set a password</a></p>
     {% endif %}
     <div class="alert alert--error mt-3" data-status-help{% if not account.needs_relink %} hidden{% endif %}>
       <p class="mt-0"><strong>FitPro can't reach your Spotify account.</strong> To fix it:</p>

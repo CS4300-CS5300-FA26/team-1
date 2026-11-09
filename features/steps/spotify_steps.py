@@ -136,3 +136,54 @@ def step_told_to_link(context):
     context.response = context.test.client.get(reverse('login'))
     context.test.assertContains(context.response, services.NOT_LINKED_FOR_LOGIN)
     context.test.assertFalse(SpotifyAccount.objects.exists())
+
+
+# --- Sign up with Spotify, and setting a password --------------------------------------------------------------
+
+
+@given("I don't have a FitPro account")
+def step_no_account(context):
+    use_fake_spotify(context)
+    context.test.assertFalse(User.objects.exists())
+
+
+@when('I sign up with Spotify and approve access')
+def step_sign_up_with_spotify(context):
+    context.response = approve(context.test.client, 'signup')
+    context.user = SpotifyAccount.objects.get(spotify_id=context.spotify.user_id).user
+
+
+@then('I am asked to set a password')
+def step_asked_for_password(context):
+    context.test.assertRedirects(context.response, reverse('set_password'))
+    context.test.assertFalse(User.objects.get(pk=context.user.pk).has_usable_password())
+
+
+@when('I set a password')
+def step_set_password(context):
+    context.response = context.test.client.post(
+        reverse('set_password'), {'new_password1': VALID_PASSWORD, 'new_password2': VALID_PASSWORD}
+    )
+
+
+@then('I am taken to the onboarding questionnaire')
+def step_taken_to_onboarding(context):
+    context.test.assertRedirects(context.response, reverse('onboarding'))
+
+
+@then('I can also log in with my email and that password')
+def step_log_in_with_password(context):
+    context.test.client.logout()
+    response = context.test.client.post(
+        reverse('login'), {'username': context.spotify.email, 'password': VALID_PASSWORD}
+    )
+    context.test.assertEqual(int(context.test.client.session['_auth_user_id']), context.user.pk)
+    context.test.assertEqual(response.status_code, 302)
+
+
+@given('I signed up with Spotify and skipped setting a password')
+def step_signed_up_and_skipped(context):
+    use_fake_spotify(context)
+    approve(context.test.client, 'signup')
+    context.user = SpotifyAccount.objects.get(spotify_id=context.spotify.user_id).user
+    context.test.client.logout()

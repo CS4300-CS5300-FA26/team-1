@@ -16,7 +16,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
 from accounts import throttle
-from core.models import UserProfile
+from accounts.views import after_login_url
 
 from . import client, oauth, services
 
@@ -104,8 +104,11 @@ def callback(request):
 
     # login() rotates the session key, which prevents session fixation.
     login(request, user, backend='django.contrib.auth.backends.ModelBackend')
-    profile_row, _ = UserProfile.objects.get_or_create(user=user)
-    return redirect('dashboard' if profile_row.onboarding_completed else 'onboarding')
+    if not user.has_usable_password():
+        # Accounts created with "Sign up with Spotify" have no password. Ask for one on every Spotify sign-in until
+        # it's set, so Spotify is never the only way in; a new user goes on to onboarding afterwards.
+        return redirect('set_password')
+    return redirect(after_login_url(user))
 
 
 @require_POST
