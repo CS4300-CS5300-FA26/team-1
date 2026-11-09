@@ -165,7 +165,7 @@ uv run python manage.py behave  # Gherkin scenarios
 | Logout | `POST` only, so a third-party page cannot log a user out with a link or image |
 | Redirects | The `next` parameter is only followed if it points at this site (no open redirects) |
 | Access control | `/onboarding/`, `/dashboard/`, and `/users/` require login; `/users/` previously listed every user's profile and now shows only the signed-in user's own |
-| Spotify sign-in | OAuth 2.0 Authorization Code flow on the server ([ADR-010](docs/adrs/adr-010.md)): a random, single-use, 10-minute `state` in the session; flows start with a CSRF-protected `POST`; accounts are matched on the Spotify user id only, never on the (unverified) email; tokens are encrypted at rest with Fernet, never logged, and never sent to the browser; log in / sign up with Spotify and the connection test are rate limited |
+| Spotify sign-in | OAuth 2.0 Authorization Code flow on the server ([ADR-010](docs/adrs/adr-010.md)): a random, single-use, 10-minute `state` in the session; flows start with a CSRF-protected `POST`; accounts are matched on the Spotify user id only, never on the (unverified) email, and a refused sign-up gets a generic message that doesn't confirm whether an email has an account; the production access log omits query strings, so OAuth codes aren't logged; tokens are encrypted at rest with Fernet, never logged, and never sent to the browser; log in / sign up with Spotify and the connection test are rate limited |
 
 ### Known gaps (planned follow-ups)
 * **Rate limiting is in place for login and registration** ([ADR-006](docs/adrs/adr-006.md)), but the
@@ -218,7 +218,7 @@ Settings read secrets from `/var/secrets/<name>` in Kubernetes and fall back to 
 ### Monitoring and incident response
 What exists today:
 * `/livez/` returns 200 while the process is serving requests (no database access). `/healthz/` returns 200 only if the database answers, otherwise 503. The Kubernetes probes and the load balancer health check use them.
-* Application logs, including tracebacks and `accounts.security` throttling warnings, go to stdout and are collected by Cloud Logging.
+* Application logs, including tracebacks and `accounts.security` throttling warnings, go to stdout and are collected by Cloud Logging. Gunicorn's access log (`gunicorn.conf.py`) records paths without query strings or referrers, so one-time values such as Spotify's OAuth `code` never reach the logs.
 * Deploys are gated by CI, a container smoke test, and a migration Job; `scripts/rollback.sh` reverts a bad release.
 
 Alerting and response: monitoring and alerts are currently handled through Google Cloud Monitoring and the Google Cloud mobile app. Caleb Harris owns the infrastructure and is the responsible party for responding to and fixing incidents.
