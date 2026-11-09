@@ -1,11 +1,13 @@
 """Token helper, encryption at rest, configuration, and the Spotify HTTP client (story D-7, ADR-010)."""
 
 from datetime import timedelta
+from unittest import mock
 
 from cryptography.fernet import Fernet
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured
-from django.db import connection
+from django.db import IntegrityError, connection, transaction
+from django.db.models.query import QuerySet
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
@@ -275,3 +277,75 @@ class ClientTests(TestCase):
         self.assertEqual(query['client_id'], ['test-client-id'])
         self.assertEqual(query['scope'][0].split(), settings.SPOTIFY_SCOPES)
         self.assertNotIn('client_secret', query)
+
+
+class OneAccountPerSpotifyIdTests(SpotifyTestCase):
+    """A Spotify account can be linked to only one FitPro user, and a user to only one Spotify account.
+
+    The rules are checked in spotify.services, but the database enforces them (unique indexes on spotify_id and
+    user_id), so two requests racing past the checks still can't both win.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.other = User.objects.create_user('other', 'other@example.com', 'Tr4ining-Plan-2026!')
+        self.profile = client.Profile(id='spotify-user-1', display_name='DJ Lifts', email='dj@example.com')
+        self.tokens = client.Tokens(access_token='a', expires_in=3600, scope='', refresh_token='r')
+
+    def test_the_database_rejects_a_spotify_id_linked_twice(self):
+        self.linked()
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            SpotifyAccount.objects.create(user=self.other, spotify_id='spotify-user-1')
+
+    def test_the_database_rejects_a_second_spotify_account_for_one_user(self):
+        self.linked()
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            SpotifyAccount.objects.create(user=self.user, spotify_id='another-spotify-user')
+
+    def test_linking_a_different_spotify_account_replaces_the_old_link(self):
+        self.linked(spotify_id='old-spotify-user')
+        services.link(self.user, self.profile, self.tokens)
+        self.assertEqual(list(SpotifyAccount.objects.values_list('spotify_id', flat=True)), ['spotify-user-1'])
+
+    def test_a_link_that_loses_a_race_is_refused_by_the_database(self):
+        SpotifyAccount.objects.create(user=self.other, spotify_id='spotify-user-1')
+        # Pretend both lookups ran before the other user's link was committed.
+        with (
+            mock.patch.object(QuerySet, 'first', return_value=None),
+            self.assertRaises(services.SpotifyAccountError) as err,
+        ):
+            services.link(self.user, self.profile, self.tokens)
+        self.assertEqual(str(err.exception), services.ALREADY_LINKED_ELSEWHERE)
+        self.assertEqual(SpotifyAccount.objects.get(spotify_id='spotify-user-1').user, self.other)
+        self.assertFalse(SpotifyAccount.objects.filter(user=self.user).exists())
+
+    def assert_sign_up_race(self, expected_message, stale_checks=2):
+        """Sign up as if the duplicate checks ran before another request committed; nothing may be left behind."""
+        real_exists = QuerySet.exists
+        calls = {'n': 0}
+
+        def stale_then_real(qs):
+            calls['n'] += 1
+            return False if calls['n'] <= stale_checks else real_exists(qs)  # the pre-checks miss the other row
+
+        users_before = User.objects.count()
+        with (
+            mock.patch.object(QuerySet, 'exists', stale_then_real),
+            self.assertRaises(services.SpotifyAccountError) as err,
+        ):
+            services.sign_up(self.profile, self.tokens)
+        self.assertEqual(str(err.exception), expected_message)
+        self.assertEqual(User.objects.count(), users_before)  # rolled back, no half-made account
+
+    def test_a_sign_up_that_loses_the_spotify_id_race_says_so(self):
+        SpotifyAccount.objects.create(user=self.other, spotify_id='spotify-user-1')
+        self.assert_sign_up_race(services.ALREADY_LINKED_FOR_SIGNUP)
+
+    def test_a_sign_up_that_loses_the_email_race_says_so(self):
+        User.objects.create_user('taken', 'dj@example.com')
+        self.assert_sign_up_race(services.EMAIL_EXISTS_FOR_SIGNUP)
+
+    def test_a_sign_up_that_loses_the_username_race_asks_to_try_again(self):
+        User.objects.create_user('dj-lifts', 'someone@example.com')
+        # Spotify id, email, and username checks all ran before the other user was committed.
+        self.assert_sign_up_race(services.SIGNUP_RETRY, stale_checks=3)

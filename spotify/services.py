@@ -33,6 +33,7 @@ EMAIL_EXISTS_FOR_SIGNUP = (
     'your profile.'
 )
 ALREADY_LINKED_FOR_SIGNUP = 'That Spotify account already has a FitPro account. Use "Log in with Spotify" instead.'
+SIGNUP_RETRY = "Signing up with Spotify didn't finish. Please try again."
 UNLINK_BLOCKED = (
     "You signed up with Spotify, so it is your only way to log in. Spotify can't be disconnected until your "
     'account has a password.'
@@ -196,8 +197,13 @@ def sign_up(profile: client.Profile, tokens: client.Tokens) -> User:
             _store_tokens(account, tokens)
             account.save()
     except IntegrityError:
-        # A parallel sign-up took the email, the username, or the Spotify id between the checks and the insert.
-        raise SpotifyAccountError(EMAIL_EXISTS_FOR_SIGNUP if profile.email else ALREADY_LINKED_FOR_SIGNUP) from None
+        # A parallel request took the Spotify id, the email, or the username between the checks and the insert; the
+        # unique indexes caught it and the transaction rolled back. Say which, now that the other row is committed.
+        if SpotifyAccount.objects.filter(spotify_id=profile.id).exists():
+            raise SpotifyAccountError(ALREADY_LINKED_FOR_SIGNUP) from None
+        if profile.email and User.objects.filter(email__iexact=profile.email).exists():
+            raise SpotifyAccountError(EMAIL_EXISTS_FOR_SIGNUP) from None
+        raise SpotifyAccountError(SIGNUP_RETRY) from None
     logger.info('User %s signed up with Spotify', user.pk)
     return user
 
