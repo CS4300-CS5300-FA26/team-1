@@ -28,12 +28,14 @@ NOT_LINKED_FOR_LOGIN = (
     'No FitPro account is linked to that Spotify account. Log in with your email and password, then link Spotify '
     'from your profile.'
 )
-EMAIL_EXISTS_FOR_SIGNUP = (
-    'An account with this email already exists. Log in with your email and password, then link Spotify from '
-    'your profile.'
+# Deliberately the same whether the email from Spotify belongs to a FitPro account or a sign-up lost a race: Spotify
+# doesn't verify that email, so a specific message would let anyone with a Spotify account test which addresses have
+# FitPro accounts (AGENTS.md: keep error messages generic).
+SIGNUP_REFUSED = (
+    "We couldn't create a FitPro account with that Spotify account. If you already have a FitPro account, log in with "
+    'your email and password, then link Spotify from your profile. Otherwise, please try again.'
 )
 ALREADY_LINKED_FOR_SIGNUP = 'That Spotify account already has a FitPro account. Use "Log in with Spotify" instead.'
-SIGNUP_RETRY = "Signing up with Spotify didn't finish. Please try again."
 UNLINK_BLOCKED = (
     "You signed up with Spotify, so it is your only way to log in. Spotify can't be disconnected until your "
     'account has a password.'
@@ -186,7 +188,7 @@ def sign_up(profile: client.Profile, tokens: client.Tokens) -> User:
     if SpotifyAccount.objects.filter(spotify_id=profile.id).exists():
         raise SpotifyAccountError(ALREADY_LINKED_FOR_SIGNUP)
     if profile.email and User.objects.filter(email__iexact=profile.email).exists():
-        raise SpotifyAccountError(EMAIL_EXISTS_FOR_SIGNUP)
+        raise SpotifyAccountError(SIGNUP_REFUSED)
     try:
         with transaction.atomic():
             user = User(username=_unique_username(profile), email=profile.email)
@@ -198,12 +200,11 @@ def sign_up(profile: client.Profile, tokens: client.Tokens) -> User:
             account.save()
     except IntegrityError:
         # A parallel request took the Spotify id, the email, or the username between the checks and the insert; the
-        # unique indexes caught it and the transaction rolled back. Say which, now that the other row is committed.
+        # unique indexes caught it and the transaction rolled back. Only a taken Spotify id is named (that account is
+        # the user's own); anything else gets the generic refusal, so a race can't reveal whether an email is in use.
         if SpotifyAccount.objects.filter(spotify_id=profile.id).exists():
             raise SpotifyAccountError(ALREADY_LINKED_FOR_SIGNUP) from None
-        if profile.email and User.objects.filter(email__iexact=profile.email).exists():
-            raise SpotifyAccountError(EMAIL_EXISTS_FOR_SIGNUP) from None
-        raise SpotifyAccountError(SIGNUP_RETRY) from None
+        raise SpotifyAccountError(SIGNUP_REFUSED) from None
     logger.info('User %s signed up with Spotify', user.pk)
     return user
 

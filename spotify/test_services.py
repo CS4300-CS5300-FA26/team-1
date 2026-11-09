@@ -343,9 +343,9 @@ class OneAccountPerSpotifyIdTests(SpotifyTestCase):
 
     def test_a_sign_up_that_loses_the_email_race_says_so(self):
         User.objects.create_user('taken', 'dj@example.com')
-        self.assert_sign_up_race(services.EMAIL_EXISTS_FOR_SIGNUP)
+        self.assert_sign_up_race(services.SIGNUP_REFUSED)
 
-    def test_a_sign_up_that_loses_the_username_race_asks_to_try_again(self):
+    def test_a_sign_up_that_loses_the_username_race_gets_the_same_generic_refusal(self):
         User.objects.create_user('dj-lifts', 'someone@example.com')
         # Spotify id, email, and username checks all ran before the other user was committed.
-        self.assert_sign_up_race(services.SIGNUP_RETRY, stale_checks=3)
+        self.assert_sign_up_race(services.SIGNUP_REFUSED, stale_checks=3)

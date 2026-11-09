@@ -318,7 +318,10 @@ class SignupTests(SpotifyViewTestCase):
         existing = self.make_user('sam', 'DJ@example.com')
         response = approve(self.client, 'signup')
         self.assertRedirects(response, reverse('register'))
-        self.assert_message(response, services.EMAIL_EXISTS_FOR_SIGNUP)
+        self.assert_message(response, services.SIGNUP_REFUSED)
+        # Spotify doesn't verify emails, so the refusal must not confirm that this address has an account.
+        self.assertNotIn('exists', services.SIGNUP_REFUSED)
+        self.assertNotIn('dj@example.com', services.SIGNUP_REFUSED.lower())
         self.assert_logged_out()
         self.assertFalse(SpotifyAccount.objects.exists())
         self.assertEqual(User.objects.filter(email__iexact='dj@example.com').get(), existing)
