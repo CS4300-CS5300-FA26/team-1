@@ -70,7 +70,7 @@ warn_unused_ignores = true
 warn_redundant_casts = true
 
 [[tool.mypy.overrides]]
-module = ["environ"]
+module = ["environ", "gunicorn.*"]
 ignore_missing_imports = true
 
 [tool.django-stubs]
