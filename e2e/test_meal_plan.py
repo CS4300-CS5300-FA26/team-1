@@ -62,7 +62,7 @@ class MealPlanBrowserTests(StaticLiveServerTestCase):
         self.page.goto(f'{self.live_server_url}/accounts/login/')
         self.page.get_by_label('Email or username').fill('e2e@example.com')
         self.page.get_by_label('Password').fill(PASSWORD)
-        self.page.get_by_role('button', name='Log in').click()
+        self.page.get_by_role('button', name='Log in', exact=True).click()
         self.page.wait_for_url('**/onboarding/' if not onboarded else '**/dashboard/')
 
     def open_meal_plan(self):

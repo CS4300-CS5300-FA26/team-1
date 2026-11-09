@@ -1,0 +1,59 @@
+{% comment %}
+Spotify on the profile page (story D-7). With an account linked, spotify_status.js checks the connection on load and
+sets data-state on the pill: "checking" (pulsing grey), "ok" (green), or "error" (red, and the troubleshooting help is
+shown). The state is always written out in text too. Without JavaScript the pill stays "not checked".
+{% endcomment %}
+{% load static %}
+<section class="mt-5" aria-labelledby="spotify-heading">
+  <h2 id="spotify-heading" class="h3">Spotify</h2>
+  {% if account %}
+    <div class="cluster">
+      <p class="connection-pill mb-0" data-spotify-status data-status-url="{% url 'spotify_status' %}"
+         data-state="{% if account.needs_relink %}error{% else %}unknown{% endif %}">
+        <span class="connection-pill__dot" aria-hidden="true"></span>
+        <span>Spotify connected</span>
+        <span class="connection-pill__name">{{ account.name }}</span>
+      </p>
+      <form method="post" action="{% url 'spotify_unlink' %}" class="mb-0">
+        {% csrf_token %}
+        <button type="submit" class="btn btn--secondary btn--sm"{% if not has_password %} aria-describedby="spotify-unlink-help"{% endif %}>Disconnect Spotify</button>
+      </form>
+    </div>
+    <p class="text-sm text-muted mt-3 mb-0" data-status-text role="status">
+      {% if account.needs_relink %}Connection problem: Spotify access was revoked or expired. Link Spotify again to reconnect.{% else %}Connection not checked yet.{% endif %}
+    </p>
+    {% if not has_password %}
+      <p class="form-help mt-3" id="spotify-unlink-help">You signed up with Spotify, so it is your only way to log in. It can't be disconnected until your account has a password.</p>
+    {% endif %}
+    <div class="alert alert--error mt-3" data-status-help{% if not account.needs_relink %} hidden{% endif %}>
+      <p class="mt-0"><strong>FitPro can't reach your Spotify account.</strong> To fix it:</p>
+      <ul class="alert__list">
+        <li>Reconnect Spotify with the button below to give FitPro access again.</li>
+        <li>Check that FitPro is still allowed under <a href="https://www.spotify.com/account/apps/" rel="noopener noreferrer">Manage apps in your Spotify account</a>.</li>
+        <li>While FitPro is in Spotify's Development Mode, only Spotify users the team has added can connect. Ask the FitPro team to add yours.</li>
+        <li>If Spotify itself is down, wait a few minutes and reload this page.</li>
+      </ul>
+      {% if configured %}
+        <form method="post" action="{% url 'spotify_link' %}" class="mt-3">
+          {% csrf_token %}
+          <button type="submit" class="btn btn--primary btn--sm">Reconnect Spotify</button>
+        </form>
+      {% endif %}
+    </div>
+    <script src="{% static 'spotify/js/spotify_status.js' %}" defer></script>
+  {% else %}
+    <p class="connection-pill" data-state="off">
+      <span class="connection-pill__dot" aria-hidden="true"></span>
+      <span>Spotify not connected</span>
+    </p>
+    {% if configured %}
+      <form method="post" action="{% url 'spotify_link' %}" class="mt-3">
+        {% csrf_token %}
+        <button type="submit" class="btn btn--primary">Link to Spotify</button>
+      </form>
+      <p class="form-help mt-3">You'll approve access on Spotify's site, then come back here. FitPro never sees your Spotify password.</p>
+    {% else %}
+      <p class="text-muted text-sm">Linking Spotify isn't available right now.</p>
+    {% endif %}
+  {% endif %}
+</section>
