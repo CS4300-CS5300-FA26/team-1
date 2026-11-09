@@ -399,7 +399,16 @@ class StatusEndpointTests(SpotifyViewTestCase):
         self.link_to(self.log_in())
         self.client.get(reverse('spotify_status'))
         with self.assertLogs('accounts.security', 'WARNING'):
-            self.assertEqual(self.client.get(reverse('spotify_status')).status_code, 429)
+            response = self.client.get(reverse('spotify_status'))
+        self.assertEqual(response.status_code, 429)
+        self.assertGreater(int(response['Retry-After']), 0)
+        data = response.json()
+        # Its own state, so the page doesn't report a broken link or suggest reconnecting.
+        self.assertEqual(data['state'], 'rate_limited')
+        self.assertIn('too many checks', data['message'])
+        self.assertIn("doesn't mean anything is wrong", data['message'])
+        self.assertIn('5 minutes', data['message'])  # the 300 s window, rounded up to minutes
+        self.assertEqual(self.spotify.me_calls(), 1)  # the throttled check never reached Spotify
 
 
 class PageTests(SpotifyViewTestCase):

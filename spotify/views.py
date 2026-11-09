@@ -5,6 +5,7 @@ mode stored in the session next to `state`. Starting a flow is a POST, so anothe
 """
 
 import logging
+import math
 
 from django.contrib import messages
 from django.contrib.auth import login
@@ -128,6 +129,15 @@ def unlink(request):
 @login_required
 def status(request):
     """Connection check for the profile page: a token (refreshed if needed) and GET /v1/me. Never returns tokens."""
-    if throttle.acquire_spotify_status(request.user.pk):
-        return JsonResponse({'state': 'error', 'message': throttle.THROTTLED_MESSAGE, 'display_name': ''}, status=429)
+    retry_after = throttle.acquire_spotify_status(request.user.pk)
+    if retry_after:
+        # Its own state, not "error": the link may be fine, and reconnecting wouldn't lift the limit anyway.
+        minutes = max(1, math.ceil(retry_after / 60))
+        message = (
+            "Connection not checked: there were too many checks in a short time. This doesn't mean anything is wrong "
+            f'with your Spotify link. Reload the page in about {minutes} minute{"s" if minutes != 1 else ""}.'
+        )
+        response = JsonResponse({'state': 'rate_limited', 'message': message, 'display_name': ''}, status=429)
+        response['Retry-After'] = str(retry_after)
+        return response
     return JsonResponse(services.connection_status(request.user).as_json())

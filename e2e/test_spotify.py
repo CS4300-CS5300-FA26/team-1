@@ -11,6 +11,7 @@ from datetime import timedelta
 from unittest import skipUnless
 from urllib.parse import parse_qs, urlencode, urlsplit
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.test import override_settings, tag
@@ -152,6 +153,20 @@ class SpotifyBrowserTests(StaticLiveServerTestCase):
         expect(self.page.get_by_text("Connection problem: Spotify isn't responding")).to_be_visible()
         expect(self.page.get_by_role('button', name='Reconnect Spotify')).to_be_visible()
         expect(self.page.get_by_role('link', name='Manage apps in your Spotify account')).to_be_visible()
+
+    def test_a_rate_limited_check_is_neutral_and_offers_no_reconnect(self):
+        self.link()
+        self.log_in()
+        with override_settings(AUTH_THROTTLE={**settings.AUTH_THROTTLE, 'spotify_status': (1, 300)}):
+            self.page.goto(f'{self.live_server_url}/users/')
+            expect(self.pill()).to_have_attribute('data-state', 'ok')
+            self.page.reload()
+            expect(self.pill()).to_have_attribute('data-state', 'unknown')
+
+        expect(self.page.get_by_text('Connection not checked: there were too many checks')).to_be_visible()
+        expect(self.page.locator('[data-status-help]')).to_be_hidden()
+        expect(self.page.get_by_role('button', name='Reconnect Spotify')).to_be_hidden()
+        expect(self.page.get_by_text('Connection problem')).to_have_count(0)
 
     def test_log_in_with_spotify(self):
         self.link()

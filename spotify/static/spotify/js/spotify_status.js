@@ -1,6 +1,7 @@
 // Spotify connection check on the profile page (story D-7). Calls /spotify/status/, which uses the server-side
 // token helper and GET /v1/me, then shows the result on the pill: pulsing grey while checking, green when it works,
-// red with troubleshooting help when it doesn't. Tokens never reach this script; the endpoint only returns a state.
+// red with troubleshooting help when it doesn't. When the check itself is rate limited it shows that, neutrally,
+// without the reconnect help. Tokens never reach this script; the endpoint only returns a state.
 (function () {
   'use strict';
 
@@ -27,6 +28,9 @@
         if (data.state === 'ok') {
           if (name && data.display_name) name.textContent = data.display_name;
           show('ok', 'Connection OK: FitPro can reach your Spotify account.');
+        } else if (data.state === 'rate_limited') {
+          // Too many checks, not a broken link: a neutral pill and no reconnect advice, which wouldn't help.
+          show('unknown', data.message || 'Connection not checked: too many checks. Reload the page in a few minutes.');
         } else {
           show('error', 'Connection problem: ' + (data.message || 'the connection check failed.'));
         }
