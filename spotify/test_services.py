@@ -208,6 +208,21 @@ class ConfigTests(TestCase):
         with self.assertRaisesMessage(ImproperlyConfigured, 'must be a Fernet key'):
             config.check_startup_config()
 
+    def test_a_copy_of_env_example_starts_with_spotify_off(self):
+        # The README says `cp .env.example .env`; that must give a working app, not a partial Spotify configuration.
+        from django.conf import settings
+
+        values = {}
+        for line in (settings.BASE_DIR / '.env.example').read_text().splitlines():
+            name, sep, value = line.partition('=')
+            if sep and name in config.REQUIRED_SETTINGS:
+                values[name] = value
+        self.assertEqual(set(values), set(config.REQUIRED_SETTINGS))
+        self.assertEqual(set(values.values()), {''})
+        with override_settings(**values):
+            config.check_startup_config()
+            self.assertFalse(config.is_configured())
+
     @override_settings(**TEST_SETTINGS)
     def test_complete_configuration(self):
         config.check_startup_config()
