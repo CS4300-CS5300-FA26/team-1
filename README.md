@@ -40,6 +40,10 @@ SQLite is the default. To develop against PostgreSQL like production, set the `D
 > [!tip]
 > In DevEdu, port 8000 isn't available, so do this instead: `uv run python manage.py runserver 0.0.0.0:3000`
 
+To try Spotify linking and "Log in / Sign up with Spotify" locally, set the four `SPOTIFY_*` variables in `.env` (see
+`.env.example` and [Spotify integration](#spotify-integration)) and open the app at `http://127.0.0.1:8000`, not
+`localhost`: Spotify rejects `localhost` redirect URIs, and the session cookie must belong to the same host.
+
 ## Common Commands
 * `uv run python manage.py runserver` [Starts the Django development server]
 * `uv run python manage.py makemigrations` [Creates new database migrations]
@@ -87,7 +91,7 @@ colours, so contrast and dark mode stay correct.
 | Buttons | `btn` plus `btn--primary`, `btn--secondary`, `btn--ghost`, or `btn--danger`; modifiers `btn--sm`, `btn--block`. Use `<button>` for actions and `<a class="btn">` for navigation |
 | Forms | `form`, `form-field`, `form-label`, `form-input`, `form-help`, `form-error`, `form-fieldset`, `choice-list`, `choice`. `{% include "core/_form_fields.html" %}` renders a whole Django form with these classes and keeps Django's `aria-describedby` / `aria-invalid` wiring |
 | Feedback | `alert` plus `alert--error`, `alert--success`, `alert--warning`, or `alert--info` (add `role="alert"` or `role="status"`) |
-| Content | `hero`, `hero__lede`, `data-list` (on a `<dl>`), `badge`, `media-list` with `media` / `media__thumb` / `media__body` / `media__eyebrow` / `media__title` / `media__meta` (rows of thumbnail + text; add `media--link` and `aria-current="true"` for a selectable row), `day-picker` (step through or jump to a day of the week; `day-picker__name` / `__date` / `__today` stack the weekday, date, and a "Today" label), `split` (list beside details), `panel` / `panel--sticky` (a side panel that stays in view and scrolls on its own), `toolbar`, `meal-stack` / `meal-card` with `meal-card__header` / `__heading` / `__title` / `__meta` / `__recipe` (a planned meal with its recipe in a `disclosure` underneath), `split--main-first` with `split__main` / `split__aside` (summary above the main content on phones, beside it on wide screens), `macro-list` / `macro-list__row` / `macro-list__meter` (grams against targets), `stat--start`, `alert__list` (bullets inside an alert), `food-image` (course-tinted placeholder art), `chip-list` / `chip`, `macro-grid`, `tabs` (with `meal_plan.js`), `ingredient-grid` (add `ingredient-grid--weighed` with an `ingredient-grid__amount` per item for a weight at the end of each line), `steps`, `status-badge`, `eyebrow` |
+| Content | `hero`, `hero__lede`, `data-list` (on a `<dl>`), `badge`, `connection-pill` with `connection-pill__dot` / `connection-pill__name` (a linked service and its health; set `data-state` to `off`, `unknown`, `checking` (pulsing grey), `ok` (green), or `error` (red), and always say the state in text too), `media-list` with `media` / `media__thumb` / `media__body` / `media__eyebrow` / `media__title` / `media__meta` (rows of thumbnail + text; add `media--link` and `aria-current="true"` for a selectable row), `day-picker` (step through or jump to a day of the week; `day-picker__name` / `__date` / `__today` stack the weekday, date, and a "Today" label), `split` (list beside details), `panel` / `panel--sticky` (a side panel that stays in view and scrolls on its own), `toolbar`, `meal-stack` / `meal-card` with `meal-card__header` / `__heading` / `__title` / `__meta` / `__recipe` (a planned meal with its recipe in a `disclosure` underneath), `split--main-first` with `split__main` / `split__aside` (summary above the main content on phones, beside it on wide screens), `macro-list` / `macro-list__row` / `macro-list__meter` (grams against targets), `stat--start`, `alert__list` (bullets inside an alert), `food-image` (course-tinted placeholder art), `chip-list` / `chip`, `macro-grid`, `tabs` (with `meal_plan.js`), `ingredient-grid` (add `ingredient-grid--weighed` with an `ingredient-grid__amount` per item for a weight at the end of each line), `steps`, `status-badge`, `eyebrow` |
 | Report and charts | `report-section`, `hero-figure` (one per page), `meter` (one value against a limit), `bar` / `bar-list` (SVG bars; widths as SVG attributes), `stat-row` / `stat-tile`, `data-table` inside `table-scroll` (focusable, labelled region), `disclosure-list` / `disclosure`, `messages` (Django messages, rendered by `base.html`), `stat` / `stat__value` / `stat__label` (a headline number) |
 | Utilities | `text-muted`, `text-center`, `text-sm`, `h3` (h3 size on another heading level), `mt-0`, `mb-0`, `mt-3`, `mt-4`, `mt-5`, `visually-hidden` |
 
@@ -117,9 +121,13 @@ Auth lives in the `accounts` app and uses Django's built-in `User` model, sessio
 | `/accounts/logout/` | `logout` | `POST` only | Log out (the Log out buttons submit a form) |
 | `/onboarding/` | `onboarding` | Login required | Onboarding questionnaire (story D-2). Users who already finished it are sent to `/dashboard/` |
 | `/dashboard/` | `dashboard` | Login required | Profile summary. Users who haven't finished onboarding are sent to `/onboarding/` |
-| `/users/` | `user_profile` | Login required | The signed-in user's own profile only |
+| `/users/` | `user_profile` | Login required | The signed-in user's own profile only, with the Spotify section: "Link to Spotify", or "Spotify connected" with the Spotify name, a live connection status, and "Disconnect Spotify" |
 | `/meal-plan/` | `meal_plan` | Login required (onboarded users) | This week's meal plan (story D-5, [ADR-008](docs/adrs/adr-008.md)): a week strip to pick a day, that day's meals (chosen in onboarding) as cards with portion, kcal, and macros, each recipe's weighed ingredients and steps opening in place, the day's totals against its targets, the estimated grocery cost and an over-budget notice once grocery prices are connected (D-6), a notice for each fallback in use, and a "temporarily unavailable" state. `?day=` selects a day; `meal_plan.js` switches days without a reload |
 | `/meal-plan/new/` | `meal_plan_new` | Login required, `POST` only | Replace this week's plan with a different one |
+| `/spotify/link/`, `/spotify/login/`, `/spotify/signup/` | `spotify_link`, `spotify_login`, `spotify_signup` | `POST` only; link needs login, log in / sign up need a logged-out user and are rate limited | Start Spotify's OAuth flow (story D-7, [ADR-010](docs/adrs/adr-010.md)): store a single-use `state` in the session and redirect to Spotify's consent page |
+| `/auth-callback/spotify` | `spotify_callback` | Anyone with a matching `state` | Spotify's redirect URI (no trailing slash; must match the Spotify dashboard). Checks `state`, handles `error=access_denied`, exchanges the code, calls `GET /v1/me`, then links, logs in, or signs up |
+| `/spotify/disconnect/` | `spotify_unlink` | Login required, `POST` only | Delete the Spotify link and tokens; refused if Spotify is the user's only way to log in |
+| `/spotify/status/` | `spotify_status` | Login required, rate limited | JSON connection test for the profile page (`GET /v1/me` through the token helper); never returns tokens |
 | `/grocery-list/` | `grocery_list` | Login required (onboarded users) | This week's grocery list (story D-6, [ADR-009](docs/adrs/adr-009.md)): the meal plan's ingredients combined (rice on Monday and Wednesday is listed once, in cups), with the amount to buy, an estimated cost per item and for the week, an over-budget notice, a note on how the list was made, and the unmeasured pantry items. With no meal plan this week, it asks the user to create one first. It reads only the signed-in user's own plan and never creates one |
 
 ### Acceptance scenarios
@@ -127,13 +135,16 @@ The Gherkin scenarios live in [`features/user_auth.feature`](features/user_auth.
 already registered, wrong password) and [`features/onboarding.feature`](features/onboarding.feature) (complete
 onboarding, missing required answer, returning user skips onboarding), and [`features/meal_plan.feature`](features/meal_plan.feature)
 (plan within budget, budget too low, recipe service unavailable, plus the no-macro-targets and no-prices fallbacks), and
-[`features/grocery_list.feature`](features/grocery_list.feature) (ingredients combined, empty week, plus a missing-prices fallback). Step
+[`features/grocery_list.feature`](features/grocery_list.feature) (ingredients combined, empty week, plus a missing-prices fallback), and
+[`features/spotify.feature`](features/spotify.feature) (link succeeds, user declines, unlink, log in with Spotify, and
+log in never matching on email). Step
 definitions are in `features/steps/`. Nothing calls the network: the connectors to D-4 and D-6 use the stand-ins in
-`nutrition/testing.py`, and the recipe catalog is loaded into the test database after migrations.
+`nutrition/testing.py`, Spotify's HTTP endpoints are replaced by `spotify.testing.FakeSpotify`, and the recipe catalog is loaded into the test database after migrations.
 Django tests are in `accounts/tests.py` (registration, login, logout), `core/test_onboarding.py` (onboarding, dashboard,
 and the login redirect), `core/tests.py` (models, health checks, and access control), and `nutrition/test_*.py` (meal
 planner and pricing, recipe catalog and loader, connectors and fallbacks, Meal Plan page) and `grocery/test_*.py` (combining
-and amounts, costs, the Grocery List page, and the price file). Browser tests for the Meal Plan page are in `e2e/` (see Common Commands).
+and amounts, costs, the Grocery List page, and the price file) and `spotify/test_*.py` (state checks, link/login/signup rules, token refresh and relink, encryption at
+rest, configuration, the status endpoint). Browser tests for the Meal Plan page and the Spotify flows are in `e2e/` (see Common Commands).
 
 ```shell
 uv run python manage.py test    # Django tests
@@ -152,6 +163,7 @@ uv run python manage.py behave  # Gherkin scenarios
 | Logout | `POST` only, so a third-party page cannot log a user out with a link or image |
 | Redirects | The `next` parameter is only followed if it points at this site (no open redirects) |
 | Access control | `/onboarding/`, `/dashboard/`, and `/users/` require login; `/users/` previously listed every user's profile and now shows only the signed-in user's own |
+| Spotify sign-in | OAuth 2.0 Authorization Code flow on the server ([ADR-010](docs/adrs/adr-010.md)): a random, single-use, 10-minute `state` in the session; flows start with a CSRF-protected `POST`; accounts are matched on the Spotify user id only, never on the (unverified) email; tokens are encrypted at rest with Fernet, never logged, and never sent to the browser; log in / sign up with Spotify and the connection test are rate limited |
 
 ### Known gaps (planned follow-ups)
 * **Rate limiting is in place for login and registration** ([ADR-006](docs/adrs/adr-006.md)), but the
@@ -161,7 +173,29 @@ uv run python manage.py behave  # Gherkin scenarios
 * **Meal plan (D-5)** ([ADR-008](docs/adrs/adr-008.md)): until D-4 is connected, plans use the FDA Daily Values (2,000 kcal) instead of personal macro targets. D-6's price source is connected but prices only 54 of the 55 ingredients. Until D-3 ships "This Week", the unavailable notice links to the dashboard. The catalog has 25 recipes with no dietary filters yet, nutrients come from USDA SR Legacy (2018), and pantry staples aren't counted. "Today" and the week boundary use the server's time zone (UTC).
 * **Grocery list (D-6)** ([ADR-009](docs/adrs/adr-009.md)): prices come from `grocery/data/price_quotes.json`, which has real, cited U.S. average prices for 54 of the 55 ingredients, so the list shows those costs. BLS quotes 9 and Walmart quotes the rest. Green-onions is the one thats not priced and is unpriced because it is sold by the bunch with no weight. Amounts are rounded for shopping, pantry staples aren't measured or priced, and there are no "got it" checkboxes yet. Baked potato chili recipe isn't fully priced because it uses green onions.
 
+* **Spotify (D-7)** ([ADR-010](docs/adrs/adr-010.md)): while the Spotify app is in **Development Mode, only 5 Spotify
+  users can authorize it**, and each must be added to the app's allowlist in the Spotify developer dashboard; anyone else
+  gets an error from Spotify. Users who signed up with Spotify have no password and can't disconnect Spotify until a
+  "set a password" page exists. The production secrets (`spotify-client-id`, `spotify-client-secret`,
+  `spotify-token-encryption-key`), `SPOTIFY_REDIRECT_URI`, and the production redirect URI in the Spotify dashboard are
+  not set up yet, so the feature is off in production until they are.
+
 * **Password hashing** uses Django's default; Argon2 is a possible upgrade (needs the `argon2-cffi` dependency).
+
+## Spotify integration
+User story **D-7**: link a Spotify account, and log in or sign up with Spotify, so later features can build playlists and
+control playback. The `spotify` app uses Spotify's OAuth 2.0 Authorization Code flow, handled by the backend
+([ADR-010](docs/adrs/adr-010.md)).
+
+* **Set up:** in the [Spotify developer dashboard](https://developer.spotify.com/dashboard), register the redirect URI
+  `http://127.0.0.1:8000/auth-callback/spotify` (and the production one, `https://<host>/auth-callback/spotify`), then
+  set `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REDIRECT_URI`, and `SPOTIFY_TOKEN_ENCRYPTION_KEY` in
+  `.env` (see `.env.example`). With none set, the Spotify buttons are hidden; with only some set, the app won't start
+  and the error names what's missing.
+* **Development Mode limit:** while the Spotify app is in Development Mode, at most **5 Spotify users** can authorize
+  it, and each one has to be added under *User Management* in the dashboard first.
+* **For later features:** call `spotify.services.get_access_token(user)` for a valid access token (it refreshes and
+  handles revocation). Never read `SpotifyAccount.access_token` directly, and never log or render a token.
 
 ## Contributing
 * Read [AGENTS.md](AGENTS.md) first: it is the team's working agreement (security rules, code standards, ADRs, frontend theme and accessibility, workflow) for humans and AI coding tools alike.
@@ -240,3 +274,4 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 | Claude | Caleb Harris | Claude Code applied the PR #20/#27 review follow-ups (merged duplicate test modules, onboarding input bounds, shared base template, ADR-005) and moved the coverage report into `ci.yml` with the 80% gate and artifact on PRs only |
 | Claude | Caleb Harris | Claude Code implemented story D-5 (weekly budget meal plan): `nutrition` app with connectors for D-3, D-4, and D-6 and their fallbacks (FDA Daily Values, no-price planning), a USDA FoodData Central recipe catalog and loader, a whole-package, ingredient-sharing planner, stored weekly plans for D-6, the Meal Plan page (week strip, day view with in-place recipes), meal checkboxes in onboarding, unit/Gherkin/Playwright tests, ADR-008, and a temporary AGENTS.md note on wiring the connectors |
 | Claude | Savannah Harmony Swan | Claude Code implemented story D-6 (grocery list): the `grocery` app with the Grocery List page, ingredient combining and cup/count/pound amounts, whole-package costing that matches the meal plan, the price source and its validated file of cited BLS and Walmart price quotes, unit/page/Gherkin tests, ADR-009, and pinned three D-5 tests to the not-connected prices |
+| Claude | Caleb Harris | Claude Code implemented story D-7 (Spotify integration): the `spotify` app with the backend OAuth Authorization Code flow for link, log in, and sign up, encrypted token storage and the refresh helper, the profile connection status pill, unit/Gherkin/Playwright tests, ADR-010, and these README updates |
