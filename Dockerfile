@@ -68,9 +68,10 @@ LABEL org.opencontainers.image.title="fitpro" \
 
 # Replace "fitpro.wsgi" with your Django project module.
 # --worker-tmp-dir /dev/shm: Gunicorn heartbeat files stay in memory (read-only root fs).
+# gunicorn.conf.py sets the access log (stdout, paths without query strings, so OAuth codes aren't logged).
 CMD ["gunicorn", "fitpro.wsgi:application", \
+     "--config", "gunicorn.conf.py", \
      "--bind", "0.0.0.0:8000", \
      "--workers", "2", \
      "--timeout", "60", \
-     "--worker-tmp-dir", "/dev/shm", \
-     "--access-logfile", "-"]
+     "--worker-tmp-dir", "/dev/shm"]

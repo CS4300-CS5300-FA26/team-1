@@ -19,10 +19,14 @@ from django.urls import include, path
 from django.urls import include, path
 
 from core import views
+from spotify import views as spotify_views
 
 urlpatterns = [
     path('', views.home, name='home'),
     path('accounts/', include('accounts.urls')),
+    # Must match the redirect URI registered in the Spotify developer dashboard exactly (no trailing slash).
+    path('auth-callback/spotify', spotify_views.callback, name='spotify_callback'),
+    path('spotify/', include('spotify.urls')),
     # path('admin/', admin.site.urls),  # admin disabled, see ADR-007
     path('users/', views.user_profile_view, name='user_profile'),
     path('onboarding/', views.onboarding, name='onboarding'),

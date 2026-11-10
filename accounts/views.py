@@ -1,6 +1,9 @@
 from typing import cast
 
-from django.contrib.auth import login
+from django.contrib import messages
+from django.contrib.auth import login, update_session_auth_hash
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.forms import SetPasswordForm
 from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView
 from django.db import IntegrityError, transaction
@@ -91,3 +94,30 @@ def register(request):
         login(request, user)
         return redirect('onboarding')
     return render(request, 'accounts/register.html', {'form': form})
+
+
+def after_login_url(user) -> str:
+    """Where a newly logged-in user goes: onboarding until they finish it, then the dashboard."""
+    profile, _ = UserProfile.objects.get_or_create(user=user)
+    return reverse('dashboard' if profile.onboarding_completed else 'onboarding')
+
+
+@login_required
+@sensitive_post_parameters('new_password1', 'new_password2')  # keep passwords out of error reports
+def set_password(request):
+    """Give a password to an account that has none (one created with "Sign up with Spotify").
+
+    No current password is asked for because there isn't one; the user has just proved who they are by logging in.
+    Accounts that already have a password are sent on, so this can never be used to change a password without the
+    old one.
+    """
+    if request.user.has_usable_password():
+        return redirect(after_login_url(request.user))
+    form = SetPasswordForm(request.user, request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        user = form.save()
+        # Changing the password changes the session hash; keep this session logged in (and rotate its key).
+        update_session_auth_hash(request, user)
+        messages.success(request, 'Password set. You can now log in with your email and password too.')
+        return redirect(after_login_url(user))
+    return render(request, 'accounts/set_password.html', {'form': form})
