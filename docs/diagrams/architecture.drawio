@@ -73,7 +73,7 @@
         <mxCell id="legend" parent="gcp" style="text;html=1;whiteSpace=wrap;align=left;verticalAlign=top;fontSize=11;fillColor=none;strokeColor=none;" value="Solid = built&lt;br&gt;Dashed = future iteration" vertex="1">
           <mxGeometry height="50" width="230" x="30" y="660" as="geometry" />
         </mxCell>
-        <mxCell id="net" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;" value="Public internet&lt;br&gt;(outbound calls)" vertex="1">
+        <mxCell id="net" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;" value="Public internet&lt;br&gt;(outbound calls)&lt;br&gt;Spotify Accounts + Web API&lt;br&gt;(OAuth, D-7 / ADR-010)" vertex="1">
           <mxGeometry height="70" width="130" x="1500" y="420" as="geometry" />
         </mxCell>
         <mxCell id="e1" edge="1" parent="1" source="user" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;fontSize=11;" target="lb" value="HTTP :80&lt;br&gt;(HTTPS after domain)">

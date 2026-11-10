@@ -1,4 +1,5 @@
 {% extends "accounts/base_auth.html" %}
+{% load spotify %}
 {% block title %}Log in | FitPro{% endblock %}
 {% block content %}
   <h1 class="card__title">Log in</h1>
@@ -9,6 +10,7 @@
     <input type="hidden" name="next" value="{{ next }}">
     <button type="submit" class="btn btn--primary btn--block">Log in</button>
   </form>
+  {% spotify_sign_in_button "login" %}
   <div class="card__footer">
     <p>New to FitPro? <a href="{% url 'register' %}">Create an account</a></p>
   </div>

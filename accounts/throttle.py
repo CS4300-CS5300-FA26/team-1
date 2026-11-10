@@ -1,4 +1,4 @@
-"""Database-backed rate limiting for login and registration (see ADR-006)."""
+"""Database-backed rate limiting for login, registration, and Spotify sign-in (see ADR-006 and ADR-010)."""
 
 import hashlib
 import logging
@@ -16,6 +16,8 @@ logger = logging.getLogger('accounts.security')
 LOGIN_ID = 'login-id'  # login attempts for one identifier from one IP
 LOGIN_IP = 'login-ip'  # login attempts from one IP, whatever the identifier
 REGISTER_IP = 'register-ip'  # registration attempts from one IP
+SPOTIFY_AUTH_IP = 'spotify-auth-ip'  # Spotify log-in or sign-up flows started from one IP
+SPOTIFY_STATUS_USER = 'spotify-status'  # Spotify connection checks by one user
 
 THROTTLED_MESSAGE = 'Too many attempts. Please wait a while and try again.'
 
@@ -136,4 +138,20 @@ def acquire_register(ip):
     wait = acquire((REGISTER_IP, _digest(ip), 'register'))
     if wait:
         logger.warning('Registration throttled for ip=%s', _safe_for_log(ip))
+    return wait
+
+
+def acquire_spotify_auth(ip):
+    """Count a "Log in / Sign up with Spotify" attempt (story D-7). Returns 0 or the seconds to wait."""
+    wait = acquire((SPOTIFY_AUTH_IP, _digest(ip), 'spotify_auth'))
+    if wait:
+        logger.warning('Spotify sign-in throttled for ip=%s', _safe_for_log(ip))
+    return wait
+
+
+def acquire_spotify_status(user_id):
+    """Count a Spotify connection check, which calls Spotify's API. Returns 0 or the seconds to wait."""
+    wait = acquire((SPOTIFY_STATUS_USER, _digest(str(user_id)), 'spotify_status'))
+    if wait:
+        logger.warning('Spotify connection check throttled for user=%s', _safe_for_log(user_id))
     return wait
