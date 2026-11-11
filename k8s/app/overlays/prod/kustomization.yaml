@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: app
 resources:
   - ../../base
+  - old-host-redirect.yaml
 
 images:
   - name: django-app
@@ -16,8 +17,8 @@ configMapGenerator:
   - name: django-app-config
     literals:
       - DEBUG=False
-      - ALLOWED_HOSTS=fitpro-app.tech,fitpro.rockymountaintechlab.com
-      - CSRF_TRUSTED_ORIGINS=https://fitpro-app.tech,https://fitpro.rockymountaintechlab.com
+      - ALLOWED_HOSTS=fitpro-app.tech
+      - CSRF_TRUSTED_ORIGINS=https://fitpro-app.tech
       - DB_ENGINE=django.db.backends.postgresql
       - DB_HOST=127.0.0.1
       - DB_PORT=5432
@@ -69,12 +70,13 @@ patches:
           - type: NamedAddress
             value: fitpro-lb-ip
 
-  # Both routes (app on :443, redirect on :80) serve only the real hostname.
+  # Both base routes (app on :443, redirect on :80) serve only the real hostname. Named, so the old host's
+  # redirect route (old-host-redirect.yaml) keeps its own hostname.
   - target:
       kind: HTTPRoute
+      name: fitpro-(app|redirect)
     patch: |-
       - op: replace
         path: /spec/hostnames
         value:
           - fitpro-app.tech
-          - fitpro.rockymountaintechlab.com
