@@ -177,9 +177,7 @@ uv run python manage.py behave  # Gherkin scenarios
 
 * **Spotify (D-7)** ([ADR-010](docs/adrs/adr-010.md)): while the Spotify app is in **Development Mode, only 5 Spotify
   users can authorize it**, and each must be added to the app's allowlist in the Spotify developer dashboard; anyone else
-  gets an error from Spotify. Production uses the redirect URI `https://fitpro-app.tech/auth-callback/spotify`, so
-  Spotify sign-in only works on that hostname, not on the old `fitpro.rockymountaintechlab.com` (see
-  [ADR-011](docs/adrs/adr-011.md)).
+  gets an error from Spotify. Production uses the redirect URI `https://fitpro-app.tech/auth-callback/spotify`.
 
 * **Password hashing** uses Django's default; Argon2 is a possible upgrade (needs the `argon2-cffi` dependency).
 
@@ -231,7 +229,7 @@ Alerting and response: monitoring and alerts are currently handled through Googl
 | Secrets | Secret Manager `fitpro-db-password`, `fitpro-django-secret-key`, and `fitpro-spotify-token-encryption-key` (randomly generated), and `fitpro-spotify-client-secret` (created empty; its value is added with `gcloud` so it never enters Terraform state, see below). Only the app service account can read them (per-secret binding), and secret reads are written to Data Access audit logs |
 | Identity | Runtime service account `fitpro-app` (`cloudsql.client` + per-secret `secretAccessor`), bound by Workload Identity to Kubernetes service account `app/django-app`. No service account keys exist |
 | Images | Artifact Registry `fitpro` (Docker, `us-central1`) with immutable tags, keeping the 15 most recent images and deleting anything older than 30 days |
-| Ingress / TLS | Reserved global static IP `fitpro-lb-ip`, Google-managed certificate through Certificate Manager (DNS authorization) and certificate map `fitpro-certmap` for `fitpro-app.tech` and, until it is retired, `fitpro.rockymountaintechlab.com` (DNS only in Cloudflare, see [ADR-004](docs/adrs/adr-004.md) and [ADR-011](docs/adrs/adr-011.md)), SSL policy `fitpro-ssl-policy` (TLS 1.2+, MODERN profile) |
+| Ingress / TLS | Reserved global static IP `fitpro-lb-ip`, Google-managed certificate through Certificate Manager (DNS authorization) and certificate map `fitpro-certmap` for `fitpro-app.tech`, plus one for the old `fitpro.rockymountaintechlab.com`, which the Gateway only redirects to the new domain (DNS only in Cloudflare, see [ADR-004](docs/adrs/adr-004.md) and [ADR-011](docs/adrs/adr-011.md)), SSL policy `fitpro-ssl-policy` (TLS 1.2+, MODERN profile) |
 
 Terraform runs locally as the GCP project owner through `gcloud auth application-default login`, so no Terraform
 service account or key exists. `terraform.tfvars` (gitignored) needs `project_id` and `app_hostnames`. See
@@ -295,3 +293,4 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 | Claude | Caleb Harris | Claude Code implemented story D-7 (Spotify integration): the `spotify` app with the backend OAuth Authorization Code flow for link, log in, and sign up, encrypted token storage and the refresh helper, the profile connection status pill, unit/Gherkin/Playwright tests, ADR-010, and these README updates |
 | Claude | Caleb Harris | Claude Code added the production Spotify secrets to `terraform_scripts/secrets.tf` (generated token encryption key, empty client secret filled with `gcloud`, per-secret access for the app) and the README steps for them |
 | Claude | Caleb Harris | Claude Code planned the move to `fitpro-app.tech`: ADR-011 (two-step, no-downtime cutover), the ADR-004 update note, and the README, deployment doc, tfvars example, and architecture diagram updates; and switched Spotify on in production (secret mounts and ConfigMap values) |
+| Claude | Caleb Harris | Claude Code added the Gateway redirect from `fitpro.rockymountaintechlab.com` to `fitpro-app.tech`, removed the old host from the app routes and Django host settings, and recorded it in ADR-011 |
