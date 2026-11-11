@@ -16,8 +16,8 @@ configMapGenerator:
   - name: django-app-config
     literals:
       - DEBUG=False
-      - ALLOWED_HOSTS=fitpro.rockymountaintechlab.com
-      - CSRF_TRUSTED_ORIGINS=https://fitpro.rockymountaintechlab.com
+      - ALLOWED_HOSTS=fitpro-app.tech,fitpro.rockymountaintechlab.com
+      - CSRF_TRUSTED_ORIGINS=https://fitpro-app.tech,https://fitpro.rockymountaintechlab.com
       - DB_ENGINE=django.db.backends.postgresql
       - DB_HOST=127.0.0.1
       - DB_PORT=5432
@@ -72,4 +72,5 @@ patches:
       - op: replace
         path: /spec/hostnames
         value:
+          - fitpro-app.tech
           - fitpro.rockymountaintechlab.com
