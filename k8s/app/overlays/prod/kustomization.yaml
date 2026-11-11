@@ -24,6 +24,10 @@ configMapGenerator:
       - DB_NAME=fitpro
       - DB_USER=fitpro_app
       - LOG_LEVEL=INFO
+      # Spotify (ADR-010): not secret. The client secret and token key are mounted from Secret Manager, and the app
+      # refuses to start unless all four are set. The redirect URI must be registered in the Spotify dashboard.
+      - SPOTIFY_CLIENT_ID=1b0a4f151ba14c3da7e4cd66bea59fb4
+      - SPOTIFY_REDIRECT_URI=https://fitpro-app.tech/auth-callback/spotify
 
 patches:
   # Workload Identity: pods using this KSA act as the fitpro-app GSA.

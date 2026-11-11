@@ -177,10 +177,9 @@ uv run python manage.py behave  # Gherkin scenarios
 
 * **Spotify (D-7)** ([ADR-010](docs/adrs/adr-010.md)): while the Spotify app is in **Development Mode, only 5 Spotify
   users can authorize it**, and each must be added to the app's allowlist in the Spotify developer dashboard; anyone else
-  gets an error from Spotify. Terraform now creates the production Spotify secrets, but the client secret's value,
-  the k8s mounts and ConfigMap values (`SPOTIFY_CLIENT_ID`, `SPOTIFY_REDIRECT_URI`), and the production redirect URI in
-  the Spotify dashboard are not in place yet, so the feature is off in production until they are (see
-  [Spotify secrets in production](#spotify-secrets-in-production)).
+  gets an error from Spotify. Production uses the redirect URI `https://fitpro-app.tech/auth-callback/spotify`, so
+  Spotify sign-in only works on that hostname, not on the old `fitpro.rockymountaintechlab.com` (see
+  [ADR-011](docs/adrs/adr-011.md)).
 
 * **Password hashing** uses Django's default; Argon2 is a possible upgrade (needs the `argon2-cffi` dependency).
 
@@ -259,10 +258,11 @@ gcloud secrets versions add fitpro-spotify-client-secret --data-file=-
 gcloud secrets versions list fitpro-spotify-client-secret   # one ENABLED version
 ```
 
-Only then mount the two secrets in `k8s/app/base/secretproviderclass.yaml` (paths `spotify-client-secret` and
-`spotify-token-encryption-key`) and add `SPOTIFY_CLIENT_ID` and `SPOTIFY_REDIRECT_URI` to the prod ConfigMap, in the
-same rollout. A mounted secret with no version stops pods (and the migrate Job) from starting, and the app refuses to
-start with only some Spotify settings. Register `https://<host>/auth-callback/spotify` in the Spotify dashboard too.
+`k8s/app/base/secretproviderclass.yaml` mounts both secrets (paths `spotify-client-secret` and
+`spotify-token-encryption-key`), and the prod ConfigMap sets `SPOTIFY_CLIENT_ID` and `SPOTIFY_REDIRECT_URI`, so the
+client secret must have a version **before** those manifests are deployed. A mounted secret with no version stops pods
+(and the migrate Job) from starting, and the app refuses to start with only some Spotify settings. Register
+`https://fitpro-app.tech/auth-callback/spotify` in the Spotify dashboard too.
 
 After the first apply, add the `dns_authorization_records` CNAME and an A record pointing at `lb_ip_address` in
 Cloudflare (DNS only / gray cloud). The Kubernetes Gateway uses `lb_ip_name` as its address, `certificate_map_name` in the
@@ -294,4 +294,4 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 | Claude | Savannah Harmony Swan | Claude Code implemented story D-6 (grocery list): the `grocery` app with the Grocery List page, ingredient combining and cup/count/pound amounts, whole-package costing that matches the meal plan, the price source and its validated file of cited BLS and Walmart price quotes, unit/page/Gherkin tests, ADR-009, and pinned three D-5 tests to the not-connected prices |
 | Claude | Caleb Harris | Claude Code implemented story D-7 (Spotify integration): the `spotify` app with the backend OAuth Authorization Code flow for link, log in, and sign up, encrypted token storage and the refresh helper, the profile connection status pill, unit/Gherkin/Playwright tests, ADR-010, and these README updates |
 | Claude | Caleb Harris | Claude Code added the production Spotify secrets to `terraform_scripts/secrets.tf` (generated token encryption key, empty client secret filled with `gcloud`, per-secret access for the app) and the README steps for them |
-| Claude | Caleb Harris | Claude Code planned the move to `fitpro-app.tech`: ADR-011 (two-step, no-downtime cutover), the ADR-004 update note, and the README, deployment doc, tfvars example, and architecture diagram updates |
+| Claude | Caleb Harris | Claude Code planned the move to `fitpro-app.tech`: ADR-011 (two-step, no-downtime cutover), the ADR-004 update note, and the README, deployment doc, tfvars example, and architecture diagram updates; and switched Spotify on in production (secret mounts and ConfigMap values) |
