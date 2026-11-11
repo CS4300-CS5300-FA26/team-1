@@ -13,7 +13,6 @@ from core.models import UserProfile
 from nutrition.domain import MacroTargets
 from nutrition.services import week_start
 
-from .generator import generate_plan
 from .macro_targets import PlanMacroTargets
 from .models import WeeklyPlan
 
@@ -58,39 +57,35 @@ class PlanMacroTargetsTests(TestCase):
     def test_seven_days_of_the_saved_plans_targets(self):
         user = make_user()
         WeeklyPlan.objects.create(user=user, week_start=MONDAY, data={'days': [], 'macros': STORED})
-        with mock.patch('plans.macro_targets.generate_plan', side_effect=AssertionError('regenerated')):
-            targets = self.week(user)
-        self.assertEqual(targets, [as_targets(STORED)] * 7)
+        self.assertEqual(self.week(user), [as_targets(STORED)] * 7)
 
-    def test_without_a_saved_plan_it_calculates_the_same_targets_and_saves_nothing(self):
+    def test_no_plan_yet_gives_none_and_saves_nothing(self):
+        # D-4's "No plan yet": an onboarded user who hasn't opened This Week or Nutrition this week.
         user = make_user()
-        expected = as_targets(generate_plan(user.userprofile)['macros'])
-        self.assertEqual(self.week(user), [expected] * 7)
+        with mock.patch('plans.services.generate_plan', side_effect=AssertionError('generated')):
+            self.assertIsNone(self.provider.weekly_targets(user, MONDAY))
         self.assertFalse(WeeklyPlan.objects.exists())
 
-    def test_another_weeks_plan_is_not_used(self):
+    def test_last_weeks_plan_is_not_used(self):
         user = make_user()
         WeeklyPlan.objects.create(user=user, week_start=MONDAY - timedelta(days=7), data={'macros': STORED})
-        self.assertNotEqual(self.week(user)[0], as_targets(STORED))
+        self.assertIsNone(self.provider.weekly_targets(user, MONDAY))
 
     def test_another_users_plan_is_never_used(self):
         bob = make_user('bob')
         WeeklyPlan.objects.create(user=bob, week_start=MONDAY, data={'macros': STORED})
-        alice = make_user('alice', completed=False)
-        self.assertIsNone(self.provider.weekly_targets(alice, MONDAY))
+        self.assertIsNone(self.provider.weekly_targets(make_user('alice'), MONDAY))
 
     def test_none_before_onboarding(self):
         self.assertIsNone(self.provider.weekly_targets(make_user(completed=False), MONDAY))
 
-    def test_none_when_the_profile_cant_make_a_plan(self):
-        self.assertIsNone(self.provider.weekly_targets(make_user(goal=''), MONDAY))
-        self.assertFalse(WeeklyPlan.objects.exists())
-
     def test_unusable_saved_targets_are_logged_and_ignored(self):
         user = make_user()
         WeeklyPlan.objects.create(user=user, week_start=MONDAY, data={'macros': {**STORED, 'carbs': 0}})
-        with self.assertLogs('plans.macro_targets', level='WARNING'):
-            self.assertIsNone(self.provider.weekly_targets(user, MONDAY))
+        WeeklyPlan.objects.create(user=user, week_start=MONDAY + timedelta(days=7), data={'days': []})
+        for monday in (MONDAY, MONDAY + timedelta(days=7)):
+            with self.subTest(monday=monday), self.assertLogs('plans.macro_targets', level='WARNING'):
+                self.assertIsNone(self.provider.weekly_targets(user, monday))
 
 
 class MealPlanUsesPlanTargetsTests(TestCase):
@@ -108,6 +103,12 @@ class MealPlanUsesPlanTargetsTests(TestCase):
         self.assertEqual(result.plan.daily_targets, tuple([as_targets(shown)] * 7))
         self.assertContains(response, 'Meals are matched to your daily macro targets')
         self.assertNotContains(response, "macro targets aren't ready")
+
+    def test_meal_plan_uses_the_daily_values_until_the_week_has_a_plan(self):
+        response = self.client.get(reverse('meal_plan'))
+        self.assertFalse(response.context['result'].personal_targets)
+        self.assertContains(response, "Your personal macro targets aren't ready yet")
+        self.assertFalse(WeeklyPlan.objects.exists())
 
     def test_meal_plan_uses_this_weeks_saved_plan(self):
         WeeklyPlan.objects.create(

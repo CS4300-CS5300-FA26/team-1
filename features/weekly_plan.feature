@@ -23,5 +23,6 @@ Feature: Weekly workout plan and daily macro targets
 
   Scenario: My meal plan aims at my macro targets
     Given I am logged in with a completed profile
+    And I have opened Nutrition this week
     When I open Meal Plan
     Then the meal plan aims at the daily macro targets on my Nutrition page

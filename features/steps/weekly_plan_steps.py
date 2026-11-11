@@ -101,6 +101,12 @@ def step_see_daily_macros(context):
     step_see_todays_macros(context)
 
 
+@given('I have opened Nutrition this week')
+def step_opened_nutrition(context):
+    # The first visit of the week creates the plan; until then the meal plan uses the Daily Values (ADR-012).
+    step_open_nutrition(context)
+
+
 @then('the meal plan aims at the daily macro targets on my Nutrition page')
 def step_meal_plan_uses_plan_targets(context):
     # "I open Meal Plan" (meal_plan_steps.py) uses the real D-4 connector setting, so this checks the wiring.
