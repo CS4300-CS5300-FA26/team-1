@@ -212,8 +212,8 @@ NUTRITION_RECIPE_SOURCE = 'nutrition.recipe_sources.CatalogRecipeSource'
 NUTRITION_MACRO_TARGETS_PROVIDER = 'plans.macro_targets.PlanMacroTargets'
 # D-6 Grocery List Generation. Until connected, plans have no cost estimate and aren't limited by the budget.
 NUTRITION_GROCERY_PRICE_SOURCE = 'grocery.prices.StoredGroceryPrices'
-# D-3 Workout Split Generation: where "This Week" lives. The dashboard until D-3 adds its page.
-NUTRITION_WORKOUTS_LINK = {'url_name': 'dashboard', 'text': 'Go to your dashboard'}
+# D-3 Workout Split Generation: the "This Week" page (plans app, ADR-012), linked from the "unavailable" notice.
+NUTRITION_WORKOUTS_LINK = {'url_name': 'this_week', 'text': 'Open This Week'}
 
 
 # Internationalization

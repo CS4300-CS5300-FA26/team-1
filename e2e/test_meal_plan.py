@@ -168,8 +168,9 @@ class MealPlanBrowserTests(StaticLiveServerTestCase):
         self.log_in()
         self.open_meal_plan()
         self.assertTrue(self.page.get_by_text('Meal suggestions are temporarily unavailable.').is_visible())
-        self.page.get_by_role('link', name='Go to your dashboard').click()
-        self.page.wait_for_url('**/dashboard/')
+        self.page.get_by_role('link', name='Open This Week').click()
+        self.page.wait_for_url('**/plans/this-week/')
+        self.assertTrue(self.page.get_by_role('heading', name='This Week', level=1).is_visible())
 
     def test_skip_link_is_the_first_tab_stop_and_moves_focus_to_main(self):
         self.log_in()

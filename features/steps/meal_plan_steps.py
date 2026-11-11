@@ -138,7 +138,7 @@ def step_unavailable_notice(context):
 
 @then('I can still open This Week and start a workout')
 def step_workouts_still_reachable(context):
-    # "This Week" belongs to D-3, which plugs its page into NUTRITION_WORKOUTS_LINK. Until then it's the dashboard.
+    # "This Week" (plans app) is plugged in through NUTRITION_WORKOUTS_LINK, so follow whatever the setting names.
     home = reverse(settings.NUTRITION_WORKOUTS_LINK['url_name'])
     context.test.assertContains(context.response, f'href="{home}"')
     context.test.assertEqual(context.test.client.get(home).status_code, 200)
