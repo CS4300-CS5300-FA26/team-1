@@ -207,8 +207,9 @@ SPOTIFY_SCOPES = [
 # Meal planning (story D-5, ADR-008). The meal plan talks to the features built alongside it through connectors,
 # each named here by dotted path (see nutrition/ports.py). Point a setting at your implementation to plug it in.
 NUTRITION_RECIPE_SOURCE = 'nutrition.recipe_sources.CatalogRecipeSource'
-# D-4 Macro Generation. Until connected, plans use the FDA Daily Values (nutrition/targets.py).
-NUTRITION_MACRO_TARGETS_PROVIDER = 'nutrition.connectors.NoMacroTargets'
+# D-4 Macro Generation: the weekly plan's daily targets (ADR-012). Users without a plan yet get the FDA Daily
+# Values (nutrition/targets.py).
+NUTRITION_MACRO_TARGETS_PROVIDER = 'plans.macro_targets.PlanMacroTargets'
 # D-6 Grocery List Generation. Until connected, plans have no cost estimate and aren't limited by the budget.
 NUTRITION_GROCERY_PRICE_SOURCE = 'grocery.prices.StoredGroceryPrices'
 # D-3 Workout Split Generation: where "This Week" lives. The dashboard until D-3 adds its page.

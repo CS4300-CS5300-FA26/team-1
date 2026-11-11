@@ -14,6 +14,8 @@ from .templatetags.meal_plan import servings
 User = get_user_model()
 PASSWORD = 'Tr4ining-Plan-2026!'
 FLAT_PRICES = 'nutrition.testing.FlatGroceryPrices'
+# The "no personal targets yet" fallback, pinned so these tests keep covering it now that D-4 is connected.
+NO_TARGETS = 'nutrition.connectors.NoMacroTargets'
 
 
 def page_text(response) -> str:
@@ -96,6 +98,7 @@ class DayViewTests(TestCase):
             self.assertContains(response, step)
         self.assertContains(response, meal.recipe.title)
 
+    @override_settings(NUTRITION_MACRO_TARGETS_PROVIDER=NO_TARGETS)
     def test_each_day_shows_its_totals_against_targets(self):
         response = self.client.get(reverse('meal_plan'))
         text = page_text(response)
@@ -113,6 +116,7 @@ class DayViewTests(TestCase):
         response = self.client.get(reverse('meal_plan'), {'day': 'friday'})
         self.assertContains(response, '<input type="hidden" name="day" value="friday" data-day-input>', html=False)
 
+    @override_settings(NUTRITION_MACRO_TARGETS_PROVIDER=NO_TARGETS)
     def test_daily_values_notice_until_d4(self):
         text = page_text(self.client.get(reverse('meal_plan')))
         self.assertIn("Your personal macro targets aren't ready yet", text)

@@ -11,6 +11,7 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 
 from core.models import UserProfile
+from nutrition.domain import MacroTargets
 
 User = get_user_model()
 
@@ -30,6 +31,7 @@ def step_logged_in_completed_profile(context):
         experience_level='intermediate',
         weekly_food_budget=Decimal('85.50'),
         equipment=['dumbbells'],
+        planned_meals=['breakfast', 'lunch', 'dinner'],
     )
     context.test.assertTrue(context.test.client.login(username=USERNAME, password=VALID_PASSWORD))
 
@@ -97,3 +99,14 @@ def step_see_todays_macros(context):
 @then('I see my daily macro targets')
 def step_see_daily_macros(context):
     step_see_todays_macros(context)
+
+
+@then('the meal plan aims at the daily macro targets on my Nutrition page')
+def step_meal_plan_uses_plan_targets(context):
+    # "I open Meal Plan" (meal_plan_steps.py) uses the real D-4 connector setting, so this checks the wiring.
+    result = context.response.context['result']
+    context.test.assertTrue(result.personal_targets)
+    context.test.assertContains(context.response, 'Meals are matched to your daily macro targets')
+    macros = context.test.client.get(reverse('nutrition')).context['macros']
+    daily = MacroTargets(protein_g=macros['protein'], carbs_g=macros['carbs'], fat_g=macros['fat'])
+    context.test.assertEqual(result.plan.daily_targets, (daily,) * 7)

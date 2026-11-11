@@ -20,3 +20,8 @@ Feature: Weekly workout plan and daily macro targets
     When I open This Week from the dashboard
     Then I see a starter plan with a full week of workouts
     And I see today's macro targets
+
+  Scenario: My meal plan aims at my macro targets
+    Given I am logged in with a completed profile
+    When I open Meal Plan
+    Then the meal plan aims at the daily macro targets on my Nutrition page
