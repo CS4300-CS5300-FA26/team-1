@@ -123,6 +123,8 @@ Auth lives in the `accounts` app and uses Django's built-in `User` model, sessio
 | `/onboarding/` | `onboarding` | Login required | Onboarding questionnaire (story D-2). Users who already finished it are sent to `/dashboard/` |
 | `/dashboard/` | `dashboard` | Login required | Profile summary. Users who haven't finished onboarding are sent to `/onboarding/` |
 | `/users/` | `user_profile` | Login required | The signed-in user's own profile only, with the Spotify section: "Link to Spotify", or "Spotify connected" with the Spotify name, a live connection status, and "Disconnect Spotify" |
+| `/plans/this-week/` | `this_week` | Login required (onboarded users) | This week's workout plan and daily macro targets ([ADR-012](docs/adrs/adr-012.md)): seven days, Monday first, with each training day's exercises, sets, and reps, rest days, today marked, and today's calories, protein, carbs, and fat. Generated from the onboarding profile on the first visit of the week and saved, so it stays the same all week; a starter plan (not saved) is shown if generation fails |
+| `/plans/nutrition/` | `nutrition` | Login required (onboarded users) | The daily macro targets from this week's plan, the same ones the Meal Plan aims at |
 | `/meal-plan/` | `meal_plan` | Login required (onboarded users) | This week's meal plan (story D-5, [ADR-008](docs/adrs/adr-008.md)): a week strip to pick a day, that day's meals (chosen in onboarding) as cards with portion, kcal, and macros, each recipe's weighed ingredients and steps opening in place, the day's totals against its targets, the estimated grocery cost and an over-budget notice once grocery prices are connected (D-6), a notice for each fallback in use, and a "temporarily unavailable" state. `?day=` selects a day; `meal_plan.js` switches days without a reload |
 | `/meal-plan/new/` | `meal_plan_new` | Login required, `POST` only | Replace this week's plan with a different one |
 | `/spotify/link/`, `/spotify/login/`, `/spotify/signup/` | `spotify_link`, `spotify_login`, `spotify_signup` | `POST` only; link needs login, log in / sign up need a logged-out user and are rate limited | Start Spotify's OAuth flow (story D-7, [ADR-010](docs/adrs/adr-010.md)): store a single-use `state` in the session and redirect to Spotify's consent page |
@@ -134,7 +136,8 @@ Auth lives in the `accounts` app and uses Django's built-in `User` model, sessio
 ### Acceptance scenarios
 The Gherkin scenarios live in [`features/user_auth.feature`](features/user_auth.feature) (successful registration, email
 already registered, wrong password) and [`features/onboarding.feature`](features/onboarding.feature) (complete
-onboarding, missing required answer, returning user skips onboarding), and [`features/meal_plan.feature`](features/meal_plan.feature)
+onboarding, missing required answer, returning user skips onboarding), and [`features/weekly_plan.feature`](features/weekly_plan.feature) (see my plan, see my macro targets, plan generator
+down, and the meal plan aiming at my macro targets), and [`features/meal_plan.feature`](features/meal_plan.feature)
 (plan within budget, budget too low, recipe service unavailable, plus the no-macro-targets and no-prices fallbacks), and
 [`features/grocery_list.feature`](features/grocery_list.feature) (ingredients combined, empty week, plus a missing-prices fallback), and
 [`features/spotify.feature`](features/spotify.feature) (link succeeds, user declines, unlink, log in with Spotify, sign up then set a password, the password prompt at every
@@ -143,7 +146,8 @@ log in never matching on email). Step
 definitions are in `features/steps/`. Nothing calls the network: the connectors to D-4 and D-6 use the stand-ins in
 `nutrition/testing.py`, Spotify's HTTP endpoints are replaced by `spotify.testing.FakeSpotify`, and the recipe catalog is loaded into the test database after migrations.
 Django tests are in `accounts/tests.py` (registration, login, logout), `core/test_onboarding.py` (onboarding, dashboard,
-and the login redirect), `core/tests.py` (models, health checks, and access control), and `nutrition/test_*.py` (meal
+and the login redirect), `core/tests.py` (models, health checks, and access control), `plans/tests.py` and `plans/test_macro_targets.py` (generator,
+starter fallback, saved weeks, the This Week and Nutrition pages, and the meal plan connector), and `nutrition/test_*.py` (meal
 planner and pricing, recipe catalog and loader, connectors and fallbacks, Meal Plan page) and `grocery/test_*.py` (combining
 and amounts, costs, the Grocery List page, and the price file) and `spotify/test_*.py` (state checks, link/login/signup rules, token refresh and relink, encryption at
 rest, configuration, the status endpoint). Browser tests for the Meal Plan page and the Spotify flows are in `e2e/` (see Common Commands).
@@ -164,7 +168,7 @@ uv run python manage.py behave  # Gherkin scenarios
 | CSRF | Every form posts a CSRF token; Django rejects POSTs without one |
 | Logout | `POST` only, so a third-party page cannot log a user out with a link or image |
 | Redirects | The `next` parameter is only followed if it points at this site (no open redirects) |
-| Access control | `/onboarding/`, `/dashboard/`, and `/users/` require login; `/users/` previously listed every user's profile and now shows only the signed-in user's own |
+| Access control | `/onboarding/`, `/dashboard/`, `/users/`, and the plan, meal plan, and grocery pages require login and read only the signed-in user's own data; `/users/` previously listed every user's profile and now shows only the signed-in user's own |
 | Spotify sign-in | OAuth 2.0 Authorization Code flow on the server ([ADR-010](docs/adrs/adr-010.md)): a random, single-use, 10-minute `state` in the session; flows start with a CSRF-protected `POST`; accounts are matched on the Spotify user id only, never on the (unverified) email, and a refused sign-up gets a generic message that doesn't confirm whether an email has an account; the production access log omits query strings, so OAuth codes aren't logged; tokens are encrypted at rest with Fernet, never logged, and never sent to the browser; log in / sign up with Spotify and the connection test are rate limited |
 
 ### Known gaps (planned follow-ups)
@@ -172,12 +176,15 @@ uv run python manage.py behave  # Gherkin scenarios
   "email already exists" message required by the user story still reveals that an email has an account.
 * **Email format is validated, but ownership is not.** Email verification and password reset need a production email backend (`MAILERS` still uses the console backend).
 * **No admin site.** It was removed ([ADR-007](docs/adrs/adr-007.md)); manage data with `manage.py shell` or a one-off Job. Re-adding it needs network-level restriction first.
-* **Meal plan (D-5)** ([ADR-008](docs/adrs/adr-008.md)): until D-4 is connected, plans use the FDA Daily Values (2,000 kcal) instead of personal macro targets. D-6's price source is connected but prices only 54 of the 55 ingredients. Until D-3 ships "This Week", the unavailable notice links to the dashboard. The catalog has 25 recipes with no dietary filters yet, nutrients come from USDA SR Legacy (2018), and pantry staples aren't counted. "Today" and the week boundary use the server's time zone (UTC).
+* **Meal plan (D-5)** ([ADR-008](docs/adrs/adr-008.md)): meals aim at the weekly plan's macro targets (D-4, [ADR-012](docs/adrs/adr-012.md)), the same target every day of the week; users who haven't finished onboarding get the FDA Daily Values (2,000 kcal). D-6's price source is connected but prices only 54 of the 55 ingredients. Until D-3 ships "This Week", the unavailable notice links to the dashboard. The catalog has 25 recipes with no dietary filters yet, nutrients come from USDA SR Legacy (2018), and pantry staples aren't counted. "Today" and the week boundary use the server's time zone (UTC).
 * **Grocery list (D-6)** ([ADR-009](docs/adrs/adr-009.md)): prices come from `grocery/data/price_quotes.json`, which has real, cited U.S. average prices for 54 of the 55 ingredients, so the list shows those costs. BLS quotes 9 and Walmart quotes the rest. Green-onions is the one thats not priced and is unpriced because it is sold by the bunch with no weight. Amounts are rounded for shopping, pantry staples aren't measured or priced, and there are no "got it" checkboxes yet. Baked potato chili recipe isn't fully priced because it uses green onions.
 
 * **Spotify (D-7)** ([ADR-010](docs/adrs/adr-010.md)): while the Spotify app is in **Development Mode, only 5 Spotify
   users can authorize it**, and each must be added to the app's allowlist in the Spotify developer dashboard; anyone else
   gets an error from Spotify. Production uses the redirect URI `https://fitpro-app.tech/auth-callback/spotify`.
+
+* **Weekly plan and macro targets** ([ADR-012](docs/adrs/adr-012.md)): onboarding doesn't ask for age or sex, so the
+  calorie estimate assumes age 25 and a sex-neutral constant; a profile change applies from the next week's plan.
 
 * **Password hashing** uses Django's default; Argon2 is a possible upgrade (needs the `argon2-cffi` dependency).
 
@@ -230,7 +237,6 @@ Alerting and response: monitoring and alerts are currently handled through Googl
 | Identity | Runtime service account `fitpro-app` (`cloudsql.client` + per-secret `secretAccessor`), bound by Workload Identity to Kubernetes service account `app/django-app`. No service account keys exist |
 | Images | Artifact Registry `fitpro` (Docker, `us-central1`) with immutable tags, keeping the 15 most recent images and deleting anything older than 30 days |
 | Ingress / TLS | Reserved global static IP `fitpro-lb-ip`, Google-managed certificate through Certificate Manager (DNS authorization) and certificate map `fitpro-certmap` for `fitpro-app.tech`, plus one for the old `fitpro.rockymountaintechlab.com`, which the Gateway only redirects to the new domain (DNS only in Cloudflare, see [ADR-004](docs/adrs/adr-004.md) and [ADR-011](docs/adrs/adr-011.md)), SSL policy `fitpro-ssl-policy` (TLS 1.2+, MODERN profile) |
-
 
 Terraform runs locally as the GCP project owner through `gcloud auth application-default login`, so no Terraform
 service account or key exists. `terraform.tfvars` (gitignored) needs `project_id` and `app_hostnames`. See
@@ -295,3 +301,4 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 | Claude | Caleb Harris | Claude Code added the production Spotify secrets to `terraform_scripts/secrets.tf` (generated token encryption key, empty client secret filled with `gcloud`, per-secret access for the app) and the README steps for them |
 | Claude | Caleb Harris | Claude Code planned the move to `fitpro-app.tech`: ADR-011 (two-step, no-downtime cutover), the ADR-004 update note, and the README, deployment doc, tfvars example, and architecture diagram updates; and switched Spotify on in production (secret mounts and ConfigMap values) |
 | Claude | Caleb Harris | Claude Code added the Gateway redirect from `fitpro.rockymountaintechlab.com` to `fitpro-app.tech`, removed the old host from the app routes and Django host settings, and recorded it in ADR-011 |
+| Claude | Caleb Harris | Claude Code applied the PR #36 review: connected the weekly plan's macro targets to the meal plan (`plans.macro_targets.PlanMacroTargets` and its tests, a Gherkin scenario, the pinned fallback tests), added `plans` to coverage, wrote ADR-012, and updated the README routes and docs |
