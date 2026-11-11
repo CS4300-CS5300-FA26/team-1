@@ -19,6 +19,8 @@ from core.models import UserProfile
 
 User = get_user_model()
 PASSWORD = 'Tr4ining-Plan-2026!'
+# The "no personal targets yet" fallback, pinned so these tests keep covering it now that D-4 is connected.
+NO_TARGETS = 'nutrition.connectors.NoMacroTargets'
 
 
 @tag('e2e')
@@ -95,7 +97,10 @@ class MealPlanBrowserTests(StaticLiveServerTestCase):
         eyebrows = self.visible_cards().locator('.eyebrow').evaluate_all('els => els.map(e => e.textContent)')
         self.assertEqual([text.split()[0] for text in eyebrows], ['Breakfast', 'Dinner'])
 
-    @override_settings(NUTRITION_GROCERY_PRICE_SOURCE='nutrition.connectors.NoGroceryPrices')
+    @override_settings(
+        NUTRITION_GROCERY_PRICE_SOURCE='nutrition.connectors.NoGroceryPrices',
+        NUTRITION_MACRO_TARGETS_PROVIDER=NO_TARGETS,
+    )
     def test_one_day_at_a_time_with_the_fallback_note(self):
         self.log_in()
         self.open_meal_plan()
@@ -163,8 +168,9 @@ class MealPlanBrowserTests(StaticLiveServerTestCase):
         self.log_in()
         self.open_meal_plan()
         self.assertTrue(self.page.get_by_text('Meal suggestions are temporarily unavailable.').is_visible())
-        self.page.get_by_role('link', name='Go to your dashboard').click()
-        self.page.wait_for_url('**/dashboard/')
+        self.page.get_by_role('link', name='Open This Week').click()
+        self.page.wait_for_url('**/plans/this-week/')
+        self.assertTrue(self.page.get_by_role('heading', name='This Week', level=1).is_visible())
 
     def test_skip_link_is_the_first_tab_stop_and_moves_focus_to_main(self):
         self.log_in()

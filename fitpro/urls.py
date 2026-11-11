@@ -31,6 +31,7 @@ urlpatterns = [
     path('users/', views.user_profile_view, name='user_profile'),
     path('onboarding/', views.onboarding, name='onboarding'),
     path('dashboard/', views.dashboard, name='dashboard'),
+    path('plans/', include('plans.urls')),
     path('', include('nutrition.urls')),
     path('', include('grocery.urls')),
 ]

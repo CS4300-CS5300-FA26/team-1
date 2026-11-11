@@ -27,6 +27,8 @@ ITS_MONDAY = date(2026, 10, 26)
 
 FIXED_TARGETS = 'nutrition.testing.FixedMacroTargets'
 FLAT_PRICES = 'nutrition.testing.FlatGroceryPrices'
+# The "no personal targets yet" fallback, pinned so these tests keep covering it now that D-4 is connected.
+NO_TARGETS = 'nutrition.connectors.NoMacroTargets'
 
 
 def make_user(name='sam'):
@@ -43,6 +45,7 @@ class MacroTargetFallbackTests(TestCase):
     def setUp(self):
         self.user = make_user()
 
+    @override_settings(NUTRITION_MACRO_TARGETS_PROVIDER=NO_TARGETS)
     def test_without_d4_the_published_daily_values_are_used(self):
         result = current_meal_plan(self.user, ALL_MEALS, Decimal('50'), A_THURSDAY)
         assert result.plan is not None
