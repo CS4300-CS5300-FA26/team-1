@@ -68,6 +68,8 @@ INSTALLED_APPS = [
     'accounts',
     'plans',
     'nutrition',
+    'grocery',
+    'spotify',
 ]
 
 # behave-django runs the Gherkin scenarios in features/ (`manage.py behave`). It is a dev
@@ -173,18 +175,45 @@ AUTH_THROTTLE = {
     'login': (5, 15 * 60),  # failed logins per identifier + IP
     'login_ip': (20, 15 * 60),  # failed logins per IP, any identifier
     'register': (10, 60 * 60),  # registration attempts per IP
+    'spotify_auth': (20, 15 * 60),  # "Log in / Sign up with Spotify" flows started per IP (ADR-010)
+    'spotify_status': (30, 5 * 60),  # Spotify connection checks per user; each one calls Spotify's API
 }
+
+
+# Spotify (story D-7, ADR-010): OAuth 2.0 Authorization Code flow, handled by the backend.
+# Set all four to switch on "Link / Log in / Sign up with Spotify", or none to switch it off; a partial
+# configuration stops the app at startup (spotify/config.py). The redirect URI must match one registered in the
+# Spotify developer dashboard exactly, and Spotify doesn't accept "localhost": use http://127.0.0.1:8000 locally.
+SPOTIFY_CLIENT_ID = read_secret('spotify-client-id', 'SPOTIFY_CLIENT_ID', default='')
+SPOTIFY_CLIENT_SECRET = read_secret('spotify-client-secret', 'SPOTIFY_CLIENT_SECRET', default='')
+SPOTIFY_REDIRECT_URI = env('SPOTIFY_REDIRECT_URI', default='')
+# Fernet key(s) that encrypt the stored tokens; comma-separate to rotate (newest first).
+SPOTIFY_TOKEN_ENCRYPTION_KEY = read_secret('spotify-token-encryption-key', 'SPOTIFY_TOKEN_ENCRYPTION_KEY', default='')
+# https://developer.spotify.com/documentation/web-api/concepts/scopes
+SPOTIFY_SCOPES = [
+    # Identity: GET /v1/me
+    'user-read-private',
+    'user-read-email',
+    # Playlists and playback, for the features that follow D-7
+    'playlist-read-private',
+    'playlist-modify-private',
+    'playlist-modify-public',
+    'user-read-playback-state',
+    'user-modify-playback-state',
+    'user-read-currently-playing',
+]
 
 
 # Meal planning (story D-5, ADR-008). The meal plan talks to the features built alongside it through connectors,
 # each named here by dotted path (see nutrition/ports.py). Point a setting at your implementation to plug it in.
 NUTRITION_RECIPE_SOURCE = 'nutrition.recipe_sources.CatalogRecipeSource'
-# D-4 Macro Generation. Until connected, plans use the FDA Daily Values (nutrition/targets.py).
-NUTRITION_MACRO_TARGETS_PROVIDER = 'nutrition.connectors.NoMacroTargets'
+# D-4 Macro Generation: the weekly plan's daily targets (ADR-012). Users without a plan yet get the FDA Daily
+# Values (nutrition/targets.py).
+NUTRITION_MACRO_TARGETS_PROVIDER = 'plans.macro_targets.PlanMacroTargets'
 # D-6 Grocery List Generation. Until connected, plans have no cost estimate and aren't limited by the budget.
-NUTRITION_GROCERY_PRICE_SOURCE = 'nutrition.connectors.NoGroceryPrices'
-# D-3 Workout Split Generation: where "This Week" lives. The dashboard until D-3 adds its page.
-NUTRITION_WORKOUTS_LINK = {'url_name': 'dashboard', 'text': 'Go to your dashboard'}
+NUTRITION_GROCERY_PRICE_SOURCE = 'grocery.prices.StoredGroceryPrices'
+# D-3 Workout Split Generation: the "This Week" page (plans app, ADR-012), linked from the "unavailable" notice.
+NUTRITION_WORKOUTS_LINK = {'url_name': 'this_week', 'text': 'Open This Week'}
 
 
 # Internationalization

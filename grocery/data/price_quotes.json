@@ -1,0 +1,491 @@
+{
+  "_comment": "Grocery price quotes for the D-6 price source (grocery/prices.py, ADR-009). Each entry is a real, cited price for one ingredient key from nutrition/data/recipe_catalog.json; never estimate a price. The first nine are U.S. city average retail prices from the Bureau of Labor Statistics, September 2026 (one unit each: 1 lb, 1 dozen, 1 gal). The rest are Walmart.com shelf prices seen on 2026-11-03; each source names the product and its page, and the price can vary by store. green-onions has no entry: Walmart sells it by the bunch with no weight, which the catalog's per-onion weight cannot convert. To add or refresh a price, edit an entry with its source and the date you saw it.",
+  "quotes": {
+    "white-rice": [
+      {
+        "price": "1.118",
+        "quantity": "1",
+        "unit": "lb",
+        "source": "BLS: Rice, white, long grain, uncooked, per lb., U.S. city average",
+        "observed_on": "2026-09-01"
+      }
+    ],
+    "dry-pasta": [
+      {
+        "price": "1.375",
+        "quantity": "1",
+        "unit": "lb",
+        "source": "BLS: Spaghetti and macaroni, per lb., U.S. city average",
+        "observed_on": "2026-09-01"
+      }
+    ],
+    "eggs": [
+      {
+        "price": "2.272",
+        "quantity": "12",
+        "unit": "each",
+        "source": "BLS: Eggs, grade A, large, per doz., U.S. city average",
+        "observed_on": "2026-09-01"
+      }
+    ],
+    "whole-milk": [
+      {
+        "price": "4.106",
+        "quantity": "1",
+        "unit": "gal",
+        "source": "BLS: Milk, fresh, whole, fortified, per gal., U.S. city average",
+        "observed_on": "2026-09-01"
+      }
+    ],
+    "cheddar-cheese": [
+      {
+        "price": "6.133",
+        "quantity": "1",
+        "unit": "lb",
+        "source": "BLS: Cheddar cheese, natural, per lb., U.S. city average",
+        "observed_on": "2026-09-01"
+      }
+    ],
+    "bananas": [
+      {
+        "price": "0.656",
+        "quantity": "1",
+        "unit": "lb",
+        "source": "BLS: Bananas, per lb., U.S. city average",
+        "observed_on": "2026-09-01"
+      }
+    ],
+    "potatoes": [
+      {
+        "price": "0.989",
+        "quantity": "1",
+        "unit": "lb",
+        "source": "BLS: Potatoes, white, per lb., U.S. city average",
+        "observed_on": "2026-09-01"
+      }
+    ],
+    "tomatoes": [
+      {
+        "price": "1.992",
+        "quantity": "1",
+        "unit": "lb",
+        "source": "BLS: Tomatoes, field grown, per lb., U.S. city average",
+        "observed_on": "2026-09-01"
+      }
+    ],
+    "chicken-breast": [
+      {
+        "price": "4.203",
+        "quantity": "1",
+        "unit": "lb",
+        "source": "BLS: Chicken breast, boneless, per lb., U.S. city average",
+        "observed_on": "2026-09-01"
+      }
+    ],
+    "rolled-oats": [
+      {
+        "price": "5.24",
+        "quantity": "42",
+        "unit": "oz",
+        "source": "Walmart.com: Quaker Old Fashioned Oats, 42 oz canister (walmart.com/ip/10312439)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "bell-peppers": [
+      {
+        "price": "1.38",
+        "quantity": "1",
+        "unit": "each",
+        "source": "Walmart.com: Fresh Red Bell Pepper, each (walmart.com/ip/44391581)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "chia-seeds": [
+      {
+        "price": "14.82",
+        "quantity": "2",
+        "unit": "lb",
+        "source": "Walmart.com: BetterBody Foods Organic Chia Seeds, 2 lb (walmart.com/ip/16298460188)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "cucumbers": [
+      {
+        "price": "0.76",
+        "quantity": "1",
+        "unit": "each",
+        "source": "Walmart.com: Fresh Cucumber, each (walmart.com/ip/44390954)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "frozen-broccoli": [
+      {
+        "price": "2.28",
+        "quantity": "32",
+        "unit": "oz",
+        "source": "Walmart.com: Great Value Fresh Frozen Broccoli Cuts, 32 oz bag (walmart.com/ip/204535526)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "garlic": [
+      {
+        "price": "6.97",
+        "quantity": "1",
+        "unit": "lb",
+        "source": "Walmart.com: Fresh Peeled Garlic Cloves, 1 lb; listed price, out of stock online on 2026-11-03 (walmart.com/ip/449150302)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "instant-ramen": [
+      {
+        "price": "0.50",
+        "quantity": "3",
+        "unit": "oz",
+        "source": "Walmart.com: Maruchan Ramen Noodle Soup, Soy Sauce Flavor, 3 oz (walmart.com/ip/10448073)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "onions": [
+      {
+        "price": "2.25",
+        "quantity": "3",
+        "unit": "lb",
+        "source": "Walmart.com: Fresh Yellow Onions, 3 lb bag (walmart.com/ip/10447842)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "refried-beans": [
+      {
+        "price": "1.00",
+        "quantity": "16",
+        "unit": "oz",
+        "source": "Walmart.com: Great Value Fat Free Refried Beans, 16 oz (walmart.com/ip/10451542)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "soy-sauce": [
+      {
+        "price": "1.82",
+        "quantity": "15",
+        "unit": "fl oz",
+        "source": "Walmart.com: Great Value Naturally Brewed Soy Sauce, 15 fl oz (walmart.com/ip/10315653)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "black-beans-canned": [
+      {
+        "price": "0.92",
+        "quantity": "15",
+        "unit": "oz",
+        "source": "Walmart.com: Great Value Black Beans, 15 oz can (walmart.com/ip/10534038)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "chicken-broth": [
+      {
+        "price": "1.50",
+        "quantity": "32",
+        "unit": "fl oz",
+        "source": "Walmart.com: Great Value Gluten-Free Chicken Broth, 32 oz carton (walmart.com/ip/10899013)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "egg-noodles": [
+      {
+        "price": "2.48",
+        "quantity": "12",
+        "unit": "oz",
+        "source": "Walmart.com: Golden Grain Extra Wide Egg Noodles, 12 oz (walmart.com/ip/47375517)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "frozen-corn": [
+      {
+        "price": "0.98",
+        "quantity": "12",
+        "unit": "oz",
+        "source": "Walmart.com: Great Value Whole Kernel Corn, 12 oz frozen bag (walmart.com/ip/659879040)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "greek-yogurt": [
+      {
+        "price": "3.28",
+        "quantity": "32",
+        "unit": "oz",
+        "source": "Walmart.com: Great Value Greek Plain Nonfat Yogurt, 32 oz tub (walmart.com/ip/26559565)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "lemon-juice": [
+      {
+        "price": "2.42",
+        "quantity": "15",
+        "unit": "fl oz",
+        "source": "Walmart.com: ReaLemon 100% Lemon Juice, 15 fl oz (walmart.com/ip/10294761)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "parmesan": [
+      {
+        "price": "3.18",
+        "quantity": "8",
+        "unit": "oz",
+        "source": "Walmart.com: Great Value Grated Parmesan Cheese, 8 oz shaker (walmart.com/ip/10315402)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "salmon-canned": [
+      {
+        "price": "7.10",
+        "quantity": "14.75",
+        "unit": "oz",
+        "source": "Walmart.com: Trident Seafoods Royal Pink Wild Alaska Pink Salmon, 14.75 oz can (walmart.com/ip/10313895)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "spinach": [
+      {
+        "price": "1.97",
+        "quantity": "10",
+        "unit": "oz",
+        "source": "Walmart.com: Marketside Fresh Spinach, 10 oz bag (walmart.com/ip/13893738)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "butter": [
+      {
+        "price": "4.46",
+        "quantity": "16",
+        "unit": "oz",
+        "source": "Walmart.com: Land O Lakes Unsalted Butter Half Sticks, 1 lb (walmart.com/ip/36741628)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "chicken-thighs": [
+      {
+        "price": "9.87",
+        "quantity": "3",
+        "unit": "lb",
+        "source": "Walmart.com: Great Value All Natural Boneless Skinless Chicken Thighs, 3 lb frozen (walmart.com/ip/51259017)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "firm-tofu": [
+      {
+        "price": "2.27",
+        "quantity": "16",
+        "unit": "oz",
+        "source": "Walmart.com: Azumaya Firm Tofu, 16 oz (walmart.com/ip/10898985)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "frozen-mixed-vegetables": [
+      {
+        "price": "0.98",
+        "quantity": "12",
+        "unit": "oz",
+        "source": "Walmart.com: Great Value Mixed Vegetables, 12 oz frozen bag (walmart.com/ip/38065284)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "light-mayonnaise": [
+      {
+        "price": "2.97",
+        "quantity": "2.1",
+        "unit": "lb",
+        "source": "Walmart.com: Great Value Light Mayonnaise, 30 fl oz, listed weight 2.1 lb (walmart.com/ip/17056887)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "peanut-butter": [
+      {
+        "price": "2.24",
+        "quantity": "16",
+        "unit": "oz",
+        "source": "Walmart.com: Great Value Creamy Peanut Butter, 16 oz (walmart.com/ip/3716446909)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "salsa": [
+      {
+        "price": "1.97",
+        "quantity": "16",
+        "unit": "oz",
+        "source": "Walmart.com: Great Value Thick and Chunky Salsa Medium, 16 oz (walmart.com/ip/3562572626)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "tuna-canned": [
+      {
+        "price": "0.96",
+        "quantity": "5",
+        "unit": "oz",
+        "source": "Walmart.com: Great Value Chunk Light Tuna in Water, 5 oz can (walmart.com/ip/11965048)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "canned-chili": [
+      {
+        "price": "2.18",
+        "quantity": "15",
+        "unit": "oz",
+        "source": "Walmart.com: Great Value Chili with Beans, 15 oz can (walmart.com/ip/10534168)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "chickpeas-canned": [
+      {
+        "price": "0.92",
+        "quantity": "15.5",
+        "unit": "oz",
+        "source": "Walmart.com: Great Value Garbanzos Chick Peas, 15.5 oz can (walmart.com/ip/10534041)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "flour-tortillas": [
+      {
+        "price": "2.50",
+        "quantity": "16",
+        "unit": "oz",
+        "source": "Walmart.com: Great Value Flour Tortillas Medium, 16 oz, 10 count (walmart.com/ip/463895077)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "frozen-peas": [
+      {
+        "price": "0.98",
+        "quantity": "16",
+        "unit": "oz",
+        "source": "Walmart.com: Great Value Frozen Sweet Peas, 16 oz steamable bag (walmart.com/ip/10315048)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "ground-turkey": [
+      {
+        "price": "1.98",
+        "quantity": "1",
+        "unit": "lb",
+        "source": "Walmart.com: FESTIVE Ground Turkey, Frozen, 1 lb roll (walmart.com/ip/22210558)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "maple-syrup": [
+      {
+        "price": "8.27",
+        "quantity": "12.5",
+        "unit": "fl oz",
+        "source": "Walmart.com: Great Value Pure Maple Syrup, 12.5 fl oz (walmart.com/ip/13925187)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "plain-yogurt": [
+      {
+        "price": "2.77",
+        "quantity": "32",
+        "unit": "oz",
+        "source": "Walmart.com: Great Value Original Plain Nonfat Yogurt, 32 oz tub; nonfat used as the low-fat price (walmart.com/ip/10450107)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "sesame-oil": [
+      {
+        "price": "9.58",
+        "quantity": "17",
+        "unit": "fl oz",
+        "source": "Walmart.com: Cookwell Toasted Sesame Oil, 17 fl oz; toasted type (walmart.com/ip/22101581)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "vegetable-oil": [
+      {
+        "price": "4.00",
+        "quantity": "48",
+        "unit": "fl oz",
+        "source": "Walmart.com: Great Value Vegetable Oil, 48 fl oz bottle (walmart.com/ip/10451002)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "canned-tomatoes": [
+      {
+        "price": "0.96",
+        "quantity": "14.5",
+        "unit": "oz",
+        "source": "Walmart.com: Great Value Diced Tomatoes in Tomato Juice, 14.5 oz can (walmart.com/ip/10450990)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "cottage-cheese": [
+      {
+        "price": "2.97",
+        "quantity": "24",
+        "unit": "oz",
+        "source": "Walmart.com: Great Value 2% Low-fat Small Curd Cottage Cheese, 24 oz (walmart.com/ip/12444458)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "frozen-blueberries": [
+      {
+        "price": "3.24",
+        "quantity": "16",
+        "unit": "oz",
+        "source": "Walmart.com: Great Value Blueberries, 16 oz frozen bag (walmart.com/ip/13252699)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "frozen-peas-carrots": [
+      {
+        "price": "0.98",
+        "quantity": "12",
+        "unit": "oz",
+        "source": "Walmart.com: Great Value Peas and Carrots, 12 oz frozen bag (walmart.com/ip/994038828)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "honey": [
+      {
+        "price": "3.72",
+        "quantity": "12",
+        "unit": "oz",
+        "source": "Walmart.com: Great Value Honey, 12 oz bear (walmart.com/ip/20647992)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "marinara-sauce": [
+      {
+        "price": "2.14",
+        "quantity": "23",
+        "unit": "oz",
+        "source": "Walmart.com: Great Value Marinara Pasta Sauce, 23 oz (walmart.com/ip/952045923)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "red-lentils": [
+      {
+        "price": "2.18",
+        "quantity": "1",
+        "unit": "lb",
+        "source": "Walmart.com: Great Value Red Lentils, 1 lb (walmart.com/ip/876645227)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "smoked-sausage": [
+      {
+        "price": "4.67",
+        "quantity": "14",
+        "unit": "oz",
+        "source": "Walmart.com: Hillshire Farm Smoked Sausage Rope, 14 oz (walmart.com/ip/44391058)",
+        "observed_on": "2026-11-03"
+      }
+    ],
+    "whole-wheat-bread": [
+      {
+        "price": "2.02",
+        "quantity": "20",
+        "unit": "oz",
+        "source": "Walmart.com: Great Value 100% Whole Wheat Round Top Bread, 20 oz (walmart.com/ip/10804551)",
+        "observed_on": "2026-11-03"
+      }
+    ]
+  }
+}
