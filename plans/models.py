@@ -7,6 +7,8 @@ class WeeklyPlan(models.Model):
 
     The plan itself is stored as JSON (see plans/generator.py for its shape) so the exercise
     library can change without a migration, and so a user sees the same plan all week.
+    Besides what the generator returns, the JSON may hold 'switches': how many times the user
+    has swapped this week's split (see plans/services.py and ADR-013).
     """
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='weekly_plans')
