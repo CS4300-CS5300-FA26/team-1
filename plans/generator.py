@@ -1,6 +1,6 @@
 """Rule-based weekly plan generator (no database or Django imports, so it is easy to test).
 
-generate_plan(profile) returns a dict:
+generate_plan(profile, split=None, after=None) returns a dict:
 
     {
       'days': [  # always 7 entries, Monday first
@@ -10,10 +10,15 @@ generate_plan(profile) returns a dict:
         ...
       ],
       'macros': {'calories': 2400, 'protein': 160, 'carbs': 280, 'fat': 67},
+      'split': 'full_body',  # which SPLIT_STYLES entry built the workouts (see ADR-013)
     }
 
-It raises PlanGenerationError if the profile is incomplete or invalid; the caller then
-falls back to the starter plan.
+`split` picks a split style. Without it, `after` (last week's style) picks the next style in
+rotation, and with neither the default style for the user's experience level is used. The
+number of training days never depends on the split, so macro targets don't either.
+
+It raises PlanGenerationError if the profile is incomplete or invalid, or the requested split is
+not available; the caller then falls back to the starter plan.
 """
 
 from typing import Any
@@ -71,6 +76,20 @@ EXERCISES = {
         ('bands', 'Banded Split Squat'),
         ('none', 'Reverse Lunge'),
     ],
+    'triceps': [
+        ('barbell', 'Close-Grip Bench Press'),
+        ('machines', 'Cable Triceps Pressdown'),
+        ('dumbbells', 'Dumbbell Overhead Triceps Extension'),
+        ('bands', 'Banded Triceps Pressdown'),
+        ('none', 'Diamond Push-Up'),
+    ],
+    'biceps': [
+        ('barbell', 'Barbell Curl'),
+        ('machines', 'Cable Biceps Curl'),
+        ('dumbbells', 'Dumbbell Curl'),
+        ('bands', 'Banded Curl'),
+        ('none', 'Towel Isometric Curl'),
+    ],
     'core': [('none', 'Plank')],
     'cardio': [('cardio', 'Treadmill or Bike Intervals'), ('none', 'Brisk Walk or Jog')],
 }
@@ -80,26 +99,42 @@ EXERCISES = {
 TRAINING_DAYS = {'beginner': 3, 'intermediate': 4, 'advanced': 5}
 TRAINING_WEEKDAYS = {3: (0, 2, 4), 4: (0, 1, 3, 4), 5: (0, 1, 2, 3, 4)}
 
-SPLITS = {
-    3: [
-        ('Full Body A', ['squat', 'push', 'row', 'lunge', 'core']),
-        ('Full Body B', ['hinge', 'overhead', 'pulldown', 'core']),
-        ('Full Body A', ['squat', 'push', 'row', 'lunge', 'core']),
-    ],
-    4: [
-        ('Upper Body A', ['push', 'row', 'overhead', 'pulldown']),
-        ('Lower Body A', ['squat', 'hinge', 'lunge', 'core']),
-        ('Upper Body B', ['overhead', 'pulldown', 'push', 'row']),
-        ('Lower Body B', ['hinge', 'lunge', 'squat', 'core']),
-    ],
-    5: [
-        ('Upper Body A', ['push', 'row', 'overhead', 'pulldown']),
-        ('Lower Body A', ['squat', 'hinge', 'lunge', 'core']),
-        ('Upper Body B', ['overhead', 'pulldown', 'push', 'row']),
-        ('Lower Body B', ['hinge', 'lunge', 'squat', 'core']),
-        ('Full Body', ['squat', 'push', 'row', 'hinge', 'core']),
-    ],
+UPPER_A = ('Upper Body A', ['push', 'row', 'overhead', 'pulldown'])
+LOWER_A = ('Lower Body A', ['squat', 'hinge', 'lunge', 'core'])
+UPPER_B = ('Upper Body B', ['overhead', 'pulldown', 'push', 'row'])
+LOWER_B = ('Lower Body B', ['hinge', 'lunge', 'squat', 'core'])
+PUSH = ('Push', ['push', 'overhead', 'triceps'])
+PULL = ('Pull', ['row', 'pulldown', 'biceps'])
+LEGS = ('Legs', ['squat', 'hinge', 'lunge', 'core'])
+UPPER = ('Upper Body', ['push', 'row', 'overhead', 'pulldown'])  # extra days after push/pull/legs
+LOWER = ('Lower Body', ['hinge', 'lunge', 'squat', 'core'])
+
+# Split styles, in rotation order. Each maps a number of training days to that week's workouts.
+# Every style that offers a given day count uses the same weekdays, so switching styles never
+# changes how many days someone trains (and so never changes their macro targets).
+# Full body is only offered at 3 days: with 4 or 5 training days some would fall back to back.
+SPLIT_STYLES = {
+    'full_body': {
+        3: [
+            ('Full Body A', ['squat', 'push', 'row', 'lunge', 'core']),
+            ('Full Body B', ['hinge', 'overhead', 'pulldown', 'core']),
+            ('Full Body A', ['squat', 'push', 'row', 'lunge', 'core']),
+        ],
+    },
+    'upper_lower': {
+        3: [UPPER_A, LOWER_A, UPPER_B],
+        4: [UPPER_A, LOWER_A, UPPER_B, LOWER_B],
+        5: [UPPER_A, LOWER_A, UPPER_B, LOWER_B, ('Full Body', ['squat', 'push', 'row', 'hinge', 'core'])],
+    },
+    'push_pull_legs': {
+        3: [PUSH, PULL, LEGS],
+        4: [PUSH, PULL, LEGS, UPPER],
+        5: [PUSH, PULL, LEGS, UPPER, LOWER],
+    },
 }
+SPLIT_LABELS = {'full_body': 'Full Body', 'upper_lower': 'Upper / Lower', 'push_pull_legs': 'Push / Pull / Legs'}
+# What a profile gets when nothing says otherwise; this is what every plan used before ADR-013.
+DEFAULT_SPLIT = {3: 'full_body', 4: 'upper_lower', 5: 'upper_lower'}
 
 # Reps per set by goal. Cardio is added to every training day for these goals.
 GOAL_REPS = {
@@ -136,6 +171,35 @@ def pick_exercise(movement, equipment):
     raise PlanGenerationError(f'No exercise available for {movement}')  # pragma: no cover
 
 
+def available_splits(training_days):
+    """Split styles that can be used with this many training days, in rotation order."""
+    return [style for style, by_days in SPLIT_STYLES.items() if training_days in by_days]
+
+
+def next_split(previous, training_days):
+    """The style after `previous` in rotation, among those available for `training_days`.
+
+    If `previous` isn't available (or isn't known), the first available style is returned.
+    """
+    options = available_splits(training_days)
+    if previous in options:
+        return options[(options.index(previous) + 1) % len(options)]
+    return options[0]
+
+
+def split_of(plan):
+    """The split style of a saved plan.
+
+    Plans saved before ADR-013 have no 'split' key; they were built with the default style for
+    their number of training days, so that is inferred. Returns None if it can't be worked out.
+    """
+    split = plan.get('split')
+    if split in SPLIT_STYLES:
+        return split
+    trained = sum(1 for day in plan.get('days', []) if day.get('exercises'))
+    return DEFAULT_SPLIT.get(trained)
+
+
 def calculate_macros(goal, weight_lb, height_in, age, training_days):
     """Daily calories and grams of protein, carbs and fat (Mifflin-St Jeor estimate)."""
     weight_kg = weight_lb * LB_TO_KG
@@ -168,13 +232,21 @@ def _read_profile(profile):
     return goal, level, float(weight), float(height), age, equipment
 
 
-def generate_plan(profile):
-    """Build the 7-day plan and daily macro targets for a profile."""
+def generate_plan(profile, split=None, after=None):
+    """Build the 7-day plan and daily macro targets for a profile.
+
+    `split` chooses the split style; otherwise `after` (the previous week's style) chooses the
+    next one in rotation; with neither, the default style for the profile's level is used.
+    """
     goal, level, weight, height, age, equipment = _read_profile(profile)
 
     training_days = TRAINING_DAYS[level]
     sets = 4 if level == 'advanced' else 3
-    split = SPLITS[training_days]
+    if split is None:
+        split = next_split(after, training_days) if after else DEFAULT_SPLIT[training_days]
+    if split not in available_splits(training_days):
+        raise PlanGenerationError(f'Split {split!r} is not available for {training_days} training days')
+    workouts = SPLIT_STYLES[split][training_days]
     weekdays = TRAINING_WEEKDAYS[training_days]
 
     days: list[dict[str, Any]] = []
@@ -182,7 +254,7 @@ def generate_plan(profile):
         if index not in weekdays:
             days.append({'day': day_name, 'name': 'Rest', 'exercises': []})
             continue
-        workout_name, movements = split[weekdays.index(index)]
+        workout_name, movements = workouts[weekdays.index(index)]
         exercises = []
         for movement in movements:
             reps = CORE_REPS if movement == 'core' else GOAL_REPS[goal]
@@ -192,4 +264,4 @@ def generate_plan(profile):
         days.append({'day': day_name, 'name': workout_name, 'exercises': exercises})
 
     macros = calculate_macros(goal, weight, height, age, training_days)
-    return {'days': days, 'macros': macros}
+    return {'days': days, 'macros': macros, 'split': split}

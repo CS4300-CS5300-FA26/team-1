@@ -7,6 +7,9 @@
     {% if is_starter %}
       <div class="alert alert--warning" role="status">Our plan generator is unavailable right now, so this is a general starter plan. Check back soon for a plan built from your profile.</div>
     {% endif %}
+    {% if split_label %}
+      <p>Split this week: <span class="badge">{{ split_label }}</span></p>
+    {% endif %}
     {% include "plans/_macros.html" %}
     <div class="stack mt-5">
       {% for day in days %}
@@ -32,6 +35,31 @@
         </section>
       {% endfor %}
     </div>
+    {% if split_label %}
+      <section class="stack mt-5" aria-labelledby="split-heading">
+        <h2 class="h3" id="split-heading">Change your split</h2>
+        <p>Your split rotates automatically each week. Want a different one now? You have {{ switches_left }} switch{{ switches_left|pluralize:"es" }} left this week, and your macro targets stay the same.</p>
+        <form method="post" action="{% url 'change_split' %}" class="stack">
+          {% csrf_token %}
+          <div class="form-field">
+            <label for="split-choice">Workout split</label>
+            <select id="split-choice" name="split">
+              {% for key, label in split_choices %}
+                <option value="{{ key }}"{% if key == split_key %} selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="cluster">
+            <button type="submit" class="btn btn--secondary">Use this split</button>
+          </div>
+        </form>
+        <form method="post" action="{% url 'change_split' %}">
+          {% csrf_token %}
+          <input type="hidden" name="split" value="next">
+          <button type="submit" class="btn btn--primary">Switch it up</button>
+        </form>
+      </section>
+    {% endif %}
     <div class="cluster mt-5">
       <a class="btn btn--secondary" href="{% url 'nutrition' %}">Nutrition</a>
       <a class="btn btn--secondary" href="{% url 'dashboard' %}">Dashboard</a>
