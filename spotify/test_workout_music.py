@@ -155,6 +155,53 @@ class StartWorkoutMusicTests(WorkoutMusicTestCase):
         self.assertEqual(music, services.WorkoutMusic(services.MUSIC_NOT_LINKED, services.RELINK_FOR_MUSIC))
         self.assertEqual(self.spotify.requests, [])
 
+    def test_a_rejected_fresh_token_is_refreshed_and_the_search_retried(self):
+        self.link()
+        self.spotify.search_error = 'unauthorized_once'
+        music = services.start_workout_music(self.user, 'Push')
+
+        self.assertEqual(music.state, services.MUSIC_PLAYING)
+        self.assertEqual(len(self.spotify.grants('refresh_token')), 1)
+        self.assertEqual(len(self.spotify.searches()), 2)
+        self.assertEqual(self.spotify.requests[-1].get_header('Authorization'), 'Bearer access-1')  # the new token
+
+    def test_a_rejected_token_during_playback_is_refreshed_and_retried(self):
+        self.link()
+        self.spotify.play_error = 'unauthorized_once'
+        music = services.start_workout_music(self.user, 'Push')
+
+        self.assertEqual(music.state, services.MUSIC_PLAYING)
+        self.assertEqual(len(self.spotify.grants('refresh_token')), 1)
+        self.assertEqual(len(self.spotify.plays()), 2)
+
+    def test_401_even_after_refreshing_asks_to_link_again(self):
+        account = self.link()
+        self.spotify.search_error = 'unauthorized'
+        music = services.start_workout_music(self.user, 'Push')
+
+        self.assertEqual(music, services.WorkoutMusic(services.MUSIC_NOT_LINKED, services.RELINK_FOR_MUSIC))
+        self.assertEqual(len(self.spotify.grants('refresh_token')), 1)  # retried once, not in a loop
+        account.refresh_from_db()
+        # The rejected token isn't reused next time, and the refresh token is kept for the next attempt.
+        self.assertEqual((account.access_token, account.expires_at), ('', None))
+        self.assertEqual(account.refresh_token, 'stored-refresh')
+
+    def test_401_during_playback_after_refreshing_asks_to_link_again(self):
+        self.link()
+        self.spotify.play_error = 'unauthorized'
+        music = services.start_workout_music(self.user, 'Push')
+        self.assertEqual(music, services.WorkoutMusic(services.MUSIC_NOT_LINKED, services.RELINK_FOR_MUSIC))
+
+    def test_a_revoked_refresh_token_after_a_401_asks_to_link_again(self):
+        account = self.link()
+        self.spotify.search_error = 'unauthorized_once'
+        self.spotify.refresh_error = 'invalid_grant'
+        music = services.start_workout_music(self.user, 'Push')
+
+        self.assertEqual(music, services.WorkoutMusic(services.MUSIC_NOT_LINKED, services.RELINK_FOR_MUSIC))
+        account.refresh_from_db()
+        self.assertTrue(account.needs_relink)
+
     def test_an_expired_token_is_refreshed_first(self):
         self.link(expires_at=timezone.now())
         self.assertEqual(services.start_workout_music(self.user, 'Push').state, services.MUSIC_PLAYING)

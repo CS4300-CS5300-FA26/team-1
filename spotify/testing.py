@@ -44,7 +44,10 @@ class FakeSpotify:
     exchange_error / refresh_error: 'invalid_grant', 'down' (HTTP 503), or 'offline' (connection refused)
     me_error: 'unauthorized' (HTTP 401), 'down', or 'offline'
     search_error: 'unauthorized', 'down', or 'offline'
-    play_error: 'no_device' (HTTP 404 NO_ACTIVE_DEVICE), 'premium' (HTTP 403 PREMIUM_REQUIRED), 'down', or 'offline'
+    play_error: 'no_device' (HTTP 404 NO_ACTIVE_DEVICE), 'premium' (HTTP 403 PREMIUM_REQUIRED), 'unauthorized', 'down',
+        or 'offline'
+
+    Add '_once' to search_error or play_error (e.g. 'unauthorized_once') to fail only the next call to that endpoint.
 
     `playlists` is what search returns, as Spotify's simplified playlist objects (None entries are allowed).
     """
@@ -97,14 +100,22 @@ class FakeSpotify:
                 json.dumps({'id': self.user_id, 'display_name': self.display_name, 'email': self.email}).encode()
             )
         if _base(request.full_url) == client.SEARCH_URL:
-            self._fail(request.full_url, self.search_error)
+            self._fail(request.full_url, self._take('search_error'))
             return _Response(json.dumps({'playlists': {'items': self.playlists}}).encode())
         if request.full_url == client.PLAY_URL:
             if request.get_method() != 'PUT':
                 raise AssertionError(f'Start playback must be a PUT, not {request.get_method()}')
-            self._fail(request.full_url, self.play_error)
+            self._fail(request.full_url, self._take('play_error'))
             return _Response(b'')  # 204 No Content
         raise AssertionError(f'Unexpected request to {request.full_url}')
+
+    def _take(self, attribute: str) -> str | None:
+        """The error set for an endpoint; an '<error>_once' error is cleared after this call."""
+        error = getattr(self, attribute)
+        if error and error.endswith('_once'):
+            setattr(self, attribute, None)
+            return error.removesuffix('_once')
+        return error
 
     def _tokens(self, new_refresh: bool) -> _Response:
         self._issued += 1

@@ -5,6 +5,7 @@ so matching on email would let anyone who sets a victim's address on a Spotify a
 """
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -267,21 +268,44 @@ def workout_search_query(workout_name: str) -> str:
     return f'{" ".join(words) or "gym"} workout'.lower()
 
 
+def _expire_access_token(user) -> None:
+    """Forget the cached access token so the next `get_access_token` refreshes it. The refresh token is kept."""
+    # Empty means "no token" (see EncryptedTextField), not a hard-coded credential.
+    SpotifyAccount.objects.filter(user=user).update(access_token='', expires_at=None)  # nosec B106
+
+
+def _call_with_token[T](user, call: Callable[[str], T]) -> T:
+    """Run `call(access_token)`. If Spotify rejects a token we thought was fresh (HTTP 401), refresh it and retry once.
+
+    A second 401 is raised to the caller with the cached token already dropped, so the next attempt refreshes too.
+    """
+    try:
+        return call(get_access_token(user))
+    except client.SpotifyUnauthorized:
+        _expire_access_token(user)
+    try:
+        return call(get_access_token(user))
+    except client.SpotifyUnauthorized:
+        _expire_access_token(user)
+        raise
+
+
 def start_workout_music(user, workout_name: str) -> WorkoutMusic:
     """Find a playlist for the workout and play it on the user's active Spotify device.
 
     Never raises for a Spotify problem: the workout starts either way, and the result says what to show instead.
+    Access Spotify rejects even after a refresh (HTTP 401 twice) is treated like revoked access: link again.
     """
     if not SpotifyAccount.objects.filter(user=user).exists():
         return WorkoutMusic(MUSIC_NOT_LINKED)
     if throttle.acquire_spotify_playback(user.pk):
         return WorkoutMusic(MUSIC_CANT_PLAY, MUSIC_THROTTLED)
+    query = workout_search_query(workout_name)
     try:
-        token = get_access_token(user)
-        playlist = client.search_playlist(token, workout_search_query(workout_name))
+        playlist = _call_with_token(user, lambda token: client.search_playlist(token, query))
     except NotLinked:
         return WorkoutMusic(MUSIC_NOT_LINKED)
-    except NeedsRelink:
+    except (NeedsRelink, client.SpotifyUnauthorized):
         return WorkoutMusic(MUSIC_NOT_LINKED, RELINK_FOR_MUSIC)
     except client.SpotifyError:
         return WorkoutMusic(MUSIC_CANT_PLAY, MUSIC_UNAVAILABLE)
@@ -290,7 +314,11 @@ def start_workout_music(user, workout_name: str) -> WorkoutMusic:
 
     found = {'playlist_name': playlist.name, 'playlist_url': playlist.url}
     try:
-        client.start_playback(token, playlist.uri)
+        _call_with_token(user, lambda token: client.start_playback(token, playlist.uri))
+    except NotLinked:
+        return WorkoutMusic(MUSIC_NOT_LINKED)
+    except (NeedsRelink, client.SpotifyUnauthorized):
+        return WorkoutMusic(MUSIC_NOT_LINKED, RELINK_FOR_MUSIC)
     except client.SpotifyError as exc:
         if exc.reason == 'NO_ACTIVE_DEVICE':
             message = NO_ACTIVE_DEVICE
