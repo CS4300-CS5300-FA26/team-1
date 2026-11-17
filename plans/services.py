@@ -5,6 +5,7 @@ from enum import Enum
 from django.db import transaction
 from django.utils import timezone
 
+from .ai_trainer import improve_plan
 from .generator import available_splits, generate_plan, next_split, split_of
 from .models import WeeklyPlan
 from .starter import starter_plan
@@ -27,10 +28,24 @@ def week_start_for(day):
     return day - timedelta(days=day.weekday())
 
 
-def _previous_split(user, week_start):
-    """The split style of the user's most recent plan from an earlier week, or None."""
+def _previous_plan(user, week_start):
+    """The user's most recent plan from an earlier week, or None."""
     previous = WeeklyPlan.objects.filter(user=user, week_start__lt=week_start).first()  # newest first
-    return split_of(previous.data) if previous else None
+    return previous.data if previous else None
+
+
+def _exercise_names(plan):
+    """Every exercise name in a plan, so the AI trainer can avoid repeating them (ADR-014)."""
+    if not plan:
+        return []
+    return [exercise['name'] for day in plan.get('days', []) for exercise in day.get('exercises', [])]
+
+
+def _new_plan(profile, previous, split=None):
+    """Build a week's plan: the rule-based plan, with exercises chosen by the AI trainer when it is on and works."""
+    after = None if split or not previous else split_of(previous)
+    plan = generate_plan(profile, split=split, after=after)
+    return improve_plan(profile, plan, recent=_exercise_names(previous))
 
 
 def get_weekly_plan(profile, today=None):
@@ -49,7 +64,7 @@ def get_weekly_plan(profile, today=None):
         return saved.data, False
 
     try:
-        plan = generate_plan(profile, after=_previous_split(profile.user, week_start))
+        plan = _new_plan(profile, _previous_plan(profile.user, week_start))
     except Exception:  # any generator failure (bad data, bug, future external service) falls back
         logger.exception('Plan generation failed for user %s; showing the starter plan', profile.user_id)
         return starter_plan(), True
@@ -69,7 +84,8 @@ def switch_split(profile, choice, today=None):
     With no saved plan yet, this simply creates the week's plan with that split and uses up no
     switch. With one, the workouts are rebuilt in the new split but the saved macro targets are
     kept (profile changes apply from next week, ADR-012), and one of the weekly switches is used.
-    The plan row is locked so two quick requests can't get past the limit.
+    The plan row is locked so two quick requests can't get past the limit; that includes the time
+    the AI trainer takes (at most its timeout), and only that user's own plan is locked.
     """
     today = today or timezone.localdate()
     week_start = week_start_for(today)
@@ -77,10 +93,8 @@ def switch_split(profile, choice, today=None):
         with transaction.atomic():
             saved = WeeklyPlan.objects.select_for_update().filter(user=profile.user, week_start=week_start).first()
             if saved is None:
-                if choice == NEXT_SPLIT:
-                    plan = generate_plan(profile, after=_previous_split(profile.user, week_start))
-                else:
-                    plan = generate_plan(profile, split=choice)
+                previous = _previous_plan(profile.user, week_start)
+                plan = _new_plan(profile, previous, split=None if choice == NEXT_SPLIT else choice)
                 WeeklyPlan.objects.create(user=profile.user, week_start=week_start, data=plan)
                 return SwitchResult.CHANGED
 
@@ -95,7 +109,7 @@ def switch_split(profile, choice, today=None):
             if switches >= MAX_SPLIT_SWITCHES:
                 return SwitchResult.LIMIT
 
-            plan = generate_plan(profile, split=target)
+            plan = improve_plan(profile, generate_plan(profile, split=target), recent=_exercise_names(saved.data))
             plan['macros'] = saved.data['macros']
             plan['switches'] = switches + 1
             saved.data = plan
