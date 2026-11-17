@@ -177,6 +177,7 @@ AUTH_THROTTLE = {
     'register': (10, 60 * 60),  # registration attempts per IP
     'spotify_auth': (20, 15 * 60),  # "Log in / Sign up with Spotify" flows started per IP (ADR-010)
     'spotify_status': (30, 5 * 60),  # Spotify connection checks per user; each one calls Spotify's API
+    'spotify_playback': (10, 5 * 60),  # workout playlists started per user; each one searches and plays on Spotify
 }
 
 

@@ -5,10 +5,15 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from core.models import UserProfile
+from spotify import config as spotify_config
+from spotify import services as spotify_services
 
 from .forms import SplitChoiceForm
 from .generator import SPLIT_LABELS, available_splits, split_of
 from .services import MAX_SPLIT_SWITCHES, SwitchResult, get_weekly_plan, switch_split
+
+# The music result of the workout started today, kept between the POST that starts it and the workout screen.
+WORKOUT_MUSIC_SESSION_KEY = 'workout_music'
 
 
 def _load_plan(request, today):
@@ -85,5 +90,51 @@ def nutrition(request):
         {
             'macros': plan['macros'],
             'is_starter': is_starter,
+        },
+    )
+
+
+def _todays_workout(plan, today):
+    return plan['days'][today.weekday()]
+
+
+@login_required
+@require_POST
+def start_workout(request):
+    """Start today's workout, and a playlist for it when Spotify is linked. The workout starts whatever Spotify says."""
+    today = timezone.localdate()
+    loaded = _load_plan(request, today)
+    if loaded is None:
+        return redirect('onboarding')
+    day = _todays_workout(loaded[0], today)
+    if not day['exercises']:
+        messages.info(request, 'Today is a rest day, so there is no workout to start.')
+        return redirect('this_week')
+    if spotify_config.is_configured():
+        music = spotify_services.start_workout_music(request.user, day['name'])
+    else:
+        music = spotify_services.WorkoutMusic(spotify_services.MUSIC_NOT_LINKED)
+    request.session[WORKOUT_MUSIC_SESSION_KEY] = {**music.as_dict(), 'date': today.isoformat()}
+    # Redirect so reloading the workout screen doesn't start the music again.
+    return redirect('workout')
+
+
+@login_required
+def workout(request):
+    """Today's workout screen: the exercises, and what happened to the music if the workout was started."""
+    today = timezone.localdate()
+    loaded = _load_plan(request, today)
+    if loaded is None:
+        return redirect('onboarding')
+    music = request.session.get(WORKOUT_MUSIC_SESSION_KEY)
+    if not isinstance(music, dict) or music.get('date') != today.isoformat():
+        music = None
+    return render(
+        request,
+        'plans/workout.html',
+        {
+            'day': _todays_workout(loaded[0], today),
+            'music': music,
+            'spotify_configured': spotify_config.is_configured(),
         },
     )

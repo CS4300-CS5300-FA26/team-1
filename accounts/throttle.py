@@ -1,4 +1,4 @@
-"""Database-backed rate limiting for login, registration, and Spotify sign-in (see ADR-006 and ADR-010)."""
+"""Database-backed rate limiting for login, registration, and Spotify calls (see ADR-006, ADR-010, and ADR-014)."""
 
 import hashlib
 import logging
@@ -18,6 +18,7 @@ LOGIN_IP = 'login-ip'  # login attempts from one IP, whatever the identifier
 REGISTER_IP = 'register-ip'  # registration attempts from one IP
 SPOTIFY_AUTH_IP = 'spotify-auth-ip'  # Spotify log-in or sign-up flows started from one IP
 SPOTIFY_STATUS_USER = 'spotify-status'  # Spotify connection checks by one user
+SPOTIFY_PLAYBACK_USER = 'spotify-playback'  # workout playlists started by one user
 
 THROTTLED_MESSAGE = 'Too many attempts. Please wait a while and try again.'
 
@@ -154,4 +155,12 @@ def acquire_spotify_status(user_id):
     wait = acquire((SPOTIFY_STATUS_USER, _digest(str(user_id)), 'spotify_status'))
     if wait:
         logger.warning('Spotify connection check throttled for user=%s', _safe_for_log(user_id))
+    return wait
+
+
+def acquire_spotify_playback(user_id):
+    """Count a workout playlist start, which searches Spotify and starts playback. Returns 0 or the seconds to wait."""
+    wait = acquire((SPOTIFY_PLAYBACK_USER, _digest(str(user_id)), 'spotify_playback'))
+    if wait:
+        logger.warning('Workout playlist start throttled for user=%s', _safe_for_log(user_id))
     return wait

@@ -1,0 +1,62 @@
+{% extends "core/base.html" %}
+{% block title %}Today's Workout | FitPro{% endblock %}
+{% block body %}
+  <div class="card card--wide">
+    <h1 class="card__title">Today's Workout</h1>
+    <p class="card__subtitle">{{ day.day }}: {{ day.name }}</p>
+    {% if day.exercises %}
+      {% if music %}
+        <section class="mt-4" aria-labelledby="music-heading">
+          <h2 class="h3" id="music-heading">Music</h2>
+          {% if music.state == "playing" %}
+            <div class="alert alert--success" role="status">
+              <p class="mt-0 mb-0">Now playing on Spotify: <strong>{{ music.playlist_name }}</strong></p>
+            </div>
+          {% elif music.state == "not_linked" %}
+            <div class="alert alert--info" role="status">
+              <p class="mt-0">{{ music.message|default:"Your workout has started. Link Spotify and a playlist will start with your next workout." }}</p>
+              {% if spotify_configured %}
+                <form method="post" action="{% url 'spotify_link' %}" class="mb-0">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn--secondary btn--sm">Link Spotify for music</button>
+                </form>
+              {% else %}
+                <p class="mb-0">Music from Spotify isn't available right now.</p>
+              {% endif %}
+            </div>
+          {% else %}
+            <div class="alert alert--warning" role="status">
+              <p class="mt-0{% if not music.playlist_url %} mb-0{% endif %}">Your workout has started, but the music didn't. {{ music.message }}</p>
+              {% if music.playlist_url %}
+                <p class="mb-0"><a href="{{ music.playlist_url }}" rel="noopener noreferrer">Open in Spotify</a>: {{ music.playlist_name }}</p>
+              {% endif %}
+            </div>
+          {% endif %}
+        </section>
+      {% else %}
+        <form method="post" action="{% url 'start_workout' %}" class="mt-4">
+          {% csrf_token %}
+          <button type="submit" class="btn btn--primary">Start today's workout</button>
+        </form>
+      {% endif %}
+      <div class="table-scroll mt-4">
+        <table class="data-table" aria-label="Today's exercises">
+          <thead>
+            <tr><th scope="col">Exercise</th><th scope="col" class="data-table__num">Sets</th><th scope="col" class="data-table__num">Reps</th></tr>
+          </thead>
+          <tbody>
+            {% for exercise in day.exercises %}
+              <tr><td>{{ exercise.name }}</td><td class="data-table__num">{{ exercise.sets }}</td><td class="data-table__num">{{ exercise.reps }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="mt-4">Today is a rest day. Enjoy it, and check back on your next training day.</p>
+    {% endif %}
+    <div class="cluster mt-5">
+      <a class="btn btn--secondary" href="{% url 'this_week' %}">This Week</a>
+      <a class="btn btn--secondary" href="{% url 'dashboard' %}">Dashboard</a>
+    </div>
+  </div>
+{% endblock %}

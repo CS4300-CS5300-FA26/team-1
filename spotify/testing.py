@@ -1,6 +1,7 @@
 """Test doubles for Spotify (story D-7). Nothing in the tests calls the network.
 
-`FakeSpotify` stands in for Spotify's token endpoint and GET /v1/me by replacing `urlopen` in `spotify.client`, so
+`FakeSpotify` stands in for Spotify's token endpoint, GET /v1/me, playlist search, and start playback by replacing
+`urlopen` in `spotify.client`, so
 tests still exercise the real request building and response parsing. `approve()` walks a test client through the
 whole OAuth round trip the way a browser would.
 """
@@ -42,6 +43,10 @@ class FakeSpotify:
 
     exchange_error / refresh_error: 'invalid_grant', 'down' (HTTP 503), or 'offline' (connection refused)
     me_error: 'unauthorized' (HTTP 401), 'down', or 'offline'
+    search_error: 'unauthorized', 'down', or 'offline'
+    play_error: 'no_device' (HTTP 404 NO_ACTIVE_DEVICE), 'premium' (HTTP 403 PREMIUM_REQUIRED), 'down', or 'offline'
+
+    `playlists` is what search returns, as Spotify's simplified playlist objects (None entries are allowed).
     """
 
     def __init__(self, user_id='spotify-user-1', display_name='DJ Lifts', email='dj@example.com'):
@@ -53,6 +58,9 @@ class FakeSpotify:
         self.exchange_error: str | None = None
         self.refresh_error: str | None = None
         self.me_error: str | None = None
+        self.search_error: str | None = None
+        self.play_error: str | None = None
+        self.playlists: list[dict | None] = [{'id': 'WorkoutMix123', 'name': 'Beast Mode Workout'}]
         self.requests: list = []
         self._issued = 0
 
@@ -65,6 +73,14 @@ class FakeSpotify:
 
     def me_calls(self) -> int:
         return sum(1 for r in self.requests if r.full_url == client.ME_URL)
+
+    def searches(self) -> list[dict[str, list[str]]]:
+        """The query parameters of each playlist search."""
+        return [parse_qs(urlsplit(r.full_url).query) for r in self.requests if _base(r.full_url) == client.SEARCH_URL]
+
+    def plays(self) -> list[dict]:
+        """The JSON bodies of each start-playback request."""
+        return [json.loads(r.data) for r in self.requests if r.full_url == client.PLAY_URL]
 
     # The fake endpoints ------------------------------------------------------------------------------------------
 
@@ -80,6 +96,14 @@ class FakeSpotify:
             return _Response(
                 json.dumps({'id': self.user_id, 'display_name': self.display_name, 'email': self.email}).encode()
             )
+        if _base(request.full_url) == client.SEARCH_URL:
+            self._fail(request.full_url, self.search_error)
+            return _Response(json.dumps({'playlists': {'items': self.playlists}}).encode())
+        if request.full_url == client.PLAY_URL:
+            if request.get_method() != 'PUT':
+                raise AssertionError(f'Start playback must be a PUT, not {request.get_method()}')
+            self._fail(request.full_url, self.play_error)
+            return _Response(b'')  # 204 No Content
         raise AssertionError(f'Unexpected request to {request.full_url}')
 
     def _tokens(self, new_refresh: bool) -> _Response:
@@ -102,6 +126,14 @@ class FakeSpotify:
             raise _http_error(url, 401, {'error': {'status': 401, 'message': 'The access token expired'}})
         if error == 'down':
             raise _http_error(url, 503, {'error': {'status': 503, 'message': 'Service unavailable'}})
+        if error == 'no_device':
+            raise _http_error(
+                url, 404, {'error': {'status': 404, 'message': 'Not found', 'reason': 'NO_ACTIVE_DEVICE'}}
+            )
+        if error == 'premium':
+            raise _http_error(
+                url, 403, {'error': {'status': 403, 'message': 'Premium required', 'reason': 'PREMIUM_REQUIRED'}}
+            )
         if error == 'offline':
             raise URLError(ConnectionRefusedError())
 
@@ -112,6 +144,10 @@ class FakeSpotify:
 
         with mock.patch('spotify.client.urlopen', side_effect=self.urlopen):
             yield self
+
+
+def _base(url: str) -> str:
+    return url.split('?')[0]
 
 
 def start(test_client, mode: str):
