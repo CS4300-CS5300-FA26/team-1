@@ -895,6 +895,64 @@ input[type="radio"] {
   border-color: var(--color-success-border);
 }
 
+/* Connection pill: a linked service and its health (Spotify on the profile page). The text names the state; the
+   dot only reinforces it. data-state: off, unknown, checking (pulsing grey), ok (green), error (red). The dot colours
+   are existing text tokens, so they are >= 3:1 against the pill in both themes. */
+.connection-pill {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: 0.25rem var(--space-4);
+  font-weight: 600;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+}
+
+.connection-pill__name { font-weight: 400; color: var(--color-text-muted); }
+
+.connection-pill__dot {
+  width: 0.75rem;
+  height: 0.75rem;
+  flex-shrink: 0;
+  border: 2px solid var(--color-border-strong);
+  border-radius: 50%;
+  background: transparent;
+}
+
+.connection-pill[data-state="checking"] .connection-pill__dot {
+  background: var(--color-border-strong);
+  animation: connection-pulse 1.2s ease-in-out infinite;
+}
+
+.connection-pill[data-state="ok"] {
+  border-color: var(--color-success-border);
+  background: var(--color-success-bg);
+}
+
+.connection-pill[data-state="ok"] .connection-pill__dot {
+  background: var(--color-success);
+  border-color: var(--color-success);
+}
+
+.connection-pill[data-state="error"] {
+  border-color: var(--color-danger-border);
+  background: var(--color-danger-bg);
+}
+
+.connection-pill[data-state="error"] .connection-pill__dot {
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
+@keyframes connection-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
 .status-badge__icon,
 .meter__icon,
 .chip__icon {
@@ -1389,7 +1447,10 @@ input[type="radio"] {
   .alert,
   .form-input,
   .form-field input,
-  .form-field select { border: 1px solid CanvasText; }
+  .form-field select,
+  .connection-pill { border: 1px solid CanvasText; }
+
+  .connection-pill__dot { border-color: CanvasText; }
 
   :focus-visible { outline-color: Highlight; }
 }

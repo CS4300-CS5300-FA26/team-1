@@ -123,8 +123,7 @@ Auth lives in the `accounts` app and uses Django's built-in `User` model, sessio
 | `/onboarding/` | `onboarding` | Login required | Onboarding questionnaire (story D-2). Users who already finished it are sent to `/dashboard/` |
 | `/dashboard/` | `dashboard` | Login required | Profile summary. Users who haven't finished onboarding are sent to `/onboarding/` |
 | `/users/` | `user_profile` | Login required | The signed-in user's own profile only, with the Spotify section: "Link to Spotify", or "Spotify connected" with the Spotify name, a live connection status, and "Disconnect Spotify" |
-| `/plans/this-week/` | `this_week` | Login required (onboarded users) | This week's workout plan and daily macro targets ([ADR-012](docs/adrs/adr-012.md)): seven days, Monday first, with each training day's exercises, sets, and reps, rest days, today marked, and today's calories, protein, carbs, and fat. Generated from the onboarding profile on the first visit of the week and saved, so it stays the same all week, and the workout split (full body, upper / lower, or push / pull / legs) rotates each week ([ADR-013](docs/adrs/adr-013.md)); a starter plan (not saved) is shown if generation fails |
-| `/plans/this-week/split/` | `change_split` | Login required (onboarded users), POST only | Switches this week's split to the one chosen, or to the next in rotation ("Switch it up"), up to 3 times a week; macro targets stay the same ([ADR-013](docs/adrs/adr-013.md)) |
+| `/plans/this-week/` | `this_week` | Login required (onboarded users) | This week's workout plan and daily macro targets ([ADR-012](docs/adrs/adr-012.md)): seven days, Monday first, with each training day's exercises, sets, and reps, rest days, today marked, and today's calories, protein, carbs, and fat. Generated from the onboarding profile on the first visit of the week and saved, so it stays the same all week; a starter plan (not saved) is shown if generation fails |
 | `/plans/nutrition/` | `nutrition` | Login required (onboarded users) | The daily macro targets from this week's plan, the same ones the Meal Plan aims at |
 | `/meal-plan/` | `meal_plan` | Login required (onboarded users) | This week's meal plan (story D-5, [ADR-008](docs/adrs/adr-008.md)): a week strip to pick a day, that day's meals (chosen in onboarding) as cards with portion, kcal, and macros, each recipe's weighed ingredients and steps opening in place, the day's totals against its targets, the estimated grocery cost and an over-budget notice once grocery prices are connected (D-6), a notice for each fallback in use, and a "temporarily unavailable" state. `?day=` selects a day; `meal_plan.js` switches days without a reload |
 | `/meal-plan/new/` | `meal_plan_new` | Login required, `POST` only | Replace this week's plan with a different one |
@@ -138,8 +137,7 @@ Auth lives in the `accounts` app and uses Django's built-in `User` model, sessio
 The Gherkin scenarios live in [`features/user_auth.feature`](features/user_auth.feature) (successful registration, email
 already registered, wrong password) and [`features/onboarding.feature`](features/onboarding.feature) (complete
 onboarding, missing required answer, returning user skips onboarding), and [`features/weekly_plan.feature`](features/weekly_plan.feature) (see my plan, see my macro targets, plan generator
-down, and the meal plan aiming at my macro targets), [`features/workout_variety.feature`](features/workout_variety.feature)
-(a new split each week, picking or switching a split, the weekly switch limit, and splits that fit my equipment), and [`features/meal_plan.feature`](features/meal_plan.feature)
+down, and the meal plan aiming at my macro targets), and [`features/meal_plan.feature`](features/meal_plan.feature)
 (plan within budget, budget too low, recipe service unavailable, plus the no-macro-targets and no-prices fallbacks), and
 [`features/grocery_list.feature`](features/grocery_list.feature) (ingredients combined, empty week, plus a missing-prices fallback), and
 [`features/spotify.feature`](features/spotify.feature) (link succeeds, user declines, unlink, log in with Spotify, sign up then set a password, the password prompt at every
@@ -148,8 +146,8 @@ log in never matching on email). Step
 definitions are in `features/steps/`. Nothing calls the network: the connectors to D-4 and D-6 use the stand-ins in
 `nutrition/testing.py`, Spotify's HTTP endpoints are replaced by `spotify.testing.FakeSpotify`, and the recipe catalog is loaded into the test database after migrations.
 Django tests are in `accounts/tests.py` (registration, login, logout), `core/test_onboarding.py` (onboarding, dashboard,
-and the login redirect), `core/tests.py` (models, health checks, and access control), `plans/tests.py`, `plans/test_workout_variety.py`, and `plans/test_macro_targets.py` (generator,
-starter fallback, saved weeks, split rotation and switching, the This Week and Nutrition pages, and the meal plan connector), and `nutrition/test_*.py` (meal
+and the login redirect), `core/tests.py` (models, health checks, and access control), `plans/tests.py` and `plans/test_macro_targets.py` (generator,
+starter fallback, saved weeks, the This Week and Nutrition pages, and the meal plan connector), and `nutrition/test_*.py` (meal
 planner and pricing, recipe catalog and loader, connectors and fallbacks, Meal Plan page) and `grocery/test_*.py` (combining
 and amounts, costs, the Grocery List page, and the price file) and `spotify/test_*.py` (state checks, link/login/signup rules, token refresh and relink, encryption at
 rest, configuration, the status endpoint). Browser tests for the Meal Plan page and the Spotify flows are in `e2e/` (see Common Commands).
@@ -187,8 +185,6 @@ uv run python manage.py behave  # Gherkin scenarios
 
 * **Weekly plan and macro targets** ([ADR-012](docs/adrs/adr-012.md)): onboarding doesn't ask for age or sex, so the
   calorie estimate assumes age 25 and a sex-neutral constant; a profile change applies from the next week's plan.
-  Switching split keeps the week's saved macro targets, and full body is only offered to 3-day plans
-  ([ADR-013](docs/adrs/adr-013.md)).
 
 * **Password hashing** uses Django's default; Argon2 is a possible upgrade (needs the `argon2-cffi` dependency).
 
@@ -306,4 +302,3 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 | Claude | Caleb Harris | Claude Code planned the move to `fitpro-app.tech`: ADR-011 (two-step, no-downtime cutover), the ADR-004 update note, and the README, deployment doc, tfvars example, and architecture diagram updates; and switched Spotify on in production (secret mounts and ConfigMap values) |
 | Claude | Caleb Harris | Claude Code added the Gateway redirect from `fitpro.rockymountaintechlab.com` to `fitpro-app.tech`, removed the old host from the app routes and Django host settings, and recorded it in ADR-011 |
 | Claude | Caleb Harris | Claude Code applied the PR #36 review: connected the weekly plan's macro targets to the meal plan (`plans.macro_targets.PlanMacroTargets` and its tests, a Gherkin scenario, the pinned fallback tests), added `plans` to coverage, wrote ADR-012, and updated the README routes and docs; then kept the Daily Values until a week's plan is saved, linked the unavailable notice to This Week, and removed the finished connector note from AGENTS.md |
-| Claude | Nathan Galay | Claude (chat) implemented week-to-week workout variety: split styles and weekly rotation in `plans.generator`, split switching with a weekly limit in `plans.services`, the This Week split controls, tests, Gherkin scenarios, and ADR-013 |

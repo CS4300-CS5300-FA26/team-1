@@ -1,0 +1,96 @@
+{% extends "core/base.html" %}
+{% block title %}Grocery list | FitPro{% endblock %}
+{% block body %}
+  <div class="card card--wide">
+    <div class="cluster cluster--between">
+      <div>
+        <h1 class="card__title mb-0">Grocery list</h1>
+        <p class="text-muted text-sm mb-0">Week of {{ week_start|date:"F j" }} to {{ week_end|date:"F j" }}</p>
+      </div>
+      {% if groceries and groceries.total is not None %}
+        <p class="stat">
+          <span class="stat__value">Est. ${{ groceries.total }}</span>
+          <span class="stat__label">for the week{% if budget is not None %}, of your ${{ budget }} budget{% endif %}</span>
+        </p>
+      {% endif %}
+    </div>
+
+    {% if groceries is None %}
+      <div class="alert alert--info mt-5" role="status">
+        <p class="mb-0"><strong>You don't have a meal plan for this week yet.</strong>
+          Create a meal plan first, and your grocery list will be built from it.</p>
+      </div>
+      <div class="cluster mt-5">
+        <a class="btn btn--primary" href="{% url 'meal_plan' %}">Create a meal plan</a>
+      </div>
+    {% else %}
+      {% if over_budget_by %}
+        <div class="alert alert--warning mt-4" role="status">
+          <p class="mb-0"><strong>${{ over_budget_by }} over your ${{ budget }} budget.</strong>
+            You can generate a different meal plan to try for a cheaper list.</p>
+        </div>
+      {% endif %}
+
+      <div class="alert alert--info mt-4" role="note">
+        <p class="mb-0"><strong>How this list was made</strong></p>
+        <ul class="alert__list">
+          <li>It combines the ingredients from every meal in your meal plan, so each ingredient is listed once.</li>
+          {% if groceries.total is not None %}
+            <li>The estimate averages current grocery prices and buys whole packages, so some ingredients will be left over.</li>
+          {% elif groceries.has_prices %}
+            <li>Prices are only available for {{ groceries.priced }} of {{ groceries.items|length }} ingredients, so there's no total yet. The ${{ groceries.priced_total }} below covers just the ingredients with a price.</li>
+          {% else %}
+            <li>Grocery prices aren't available yet, so there's no cost estimate.</li>
+          {% endif %}
+          <li>Amounts are rounded to the nearest quarter, and what you'll use is shown, not what a package holds.</li>
+        </ul>
+      </div>
+
+      <h2 class="h3 mt-5" id="items-title">Ingredients to buy</h2>
+      <div class="table-scroll" role="region" aria-labelledby="items-title" tabindex="0">
+        <table class="data-table">
+          <caption class="visually-hidden">Ingredients for this week's meal plan, combined, with the amount needed and an estimated cost</caption>
+          <thead>
+            <tr>
+              <th scope="col">Ingredient</th>
+              <th scope="col" class="data-table__num">You need</th>
+              <th scope="col" class="data-table__num">Est. cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in groceries.items %}
+              <tr>
+                <th scope="row">{{ item.name }}</th>
+                <td class="data-table__num">{{ item.amount }} <span class="text-muted">&middot; {{ item.grams|floatformat:"0" }} g</span></td>
+                <td class="data-table__num">{% if item.cost is not None %}${{ item.cost }}{% else %}<span class="text-muted">No price yet</span>{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+          {% if groceries.has_prices %}
+            <tfoot>
+              <tr>
+                <th scope="row" colspan="2">{% if groceries.total is not None %}Estimated total{% else %}Total of priced ingredients{% endif %}</th>
+                <td class="data-table__num"><strong>${% if groceries.total is not None %}{{ groceries.total }}{% else %}{{ groceries.priced_total }}{% endif %}</strong></td>
+              </tr>
+            </tfoot>
+          {% endif %}
+        </table>
+      </div>
+      {% if groceries.total is not None %}
+        <p class="text-muted text-sm mt-3">Each cost is rounded to the cent, so the items can differ from the total by a cent or two.</p>
+      {% endif %}
+
+      {% if groceries.pantry %}
+        <h2 class="h3 mt-5" id="pantry-title">Check your pantry</h2>
+        <p class="text-muted text-sm">These aren't measured or priced, so they aren't in the total. Make sure you have them.</p>
+        <ul class="chip-list" aria-labelledby="pantry-title">
+          {% for text in groceries.pantry %}<li class="chip">{{ text }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+
+      <div class="cluster mt-5">
+        <a class="btn btn--secondary" href="{% url 'meal_plan' %}">Back to meal plan</a>
+      </div>
+    {% endif %}
+  </div>
+{% endblock %}

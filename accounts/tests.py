@@ -398,3 +398,67 @@ class ThrottleConcurrencyTests(TransactionTestCase):
             results = list(pool.map(lambda _: attempt(), range(20)))
         self.assertEqual(results.count(0), limit)
         self.assertEqual(ThrottleCounter.objects.get(scope='login-id', key='k').count, limit)
+
+
+class SetPasswordTests(TestCase):
+    """/accounts/password/set/: a first password for accounts made with "Sign up with Spotify" (ADR-010)."""
+
+    def setUp(self):
+        self.user = User.objects.create_user('spotify-user', 'spotify@example.com')  # no password: unusable
+        UserProfile.objects.create(user=self.user)
+        self.client.force_login(self.user)
+
+    def post(self, password=PASSWORD, confirm=None):
+        return self.client.post(
+            reverse('set_password'),
+            {'new_password1': password, 'new_password2': password if confirm is None else confirm},
+        )
+
+    def test_page_renders_with_the_login_names(self):
+        response = self.client.get(reverse('set_password'))
+        self.assertContains(response, 'Set a password')
+        self.assertContains(response, 'spotify@example.com')
+        self.assertContains(response, 'spotify-user')
+
+    def test_requires_login(self):
+        self.client.logout()
+        response = self.client.get(reverse('set_password'))
+        self.assertRedirects(response, f'{reverse("login")}?next={reverse("set_password")}')
+
+    def test_setting_a_password_keeps_the_user_logged_in_and_continues_to_onboarding(self):
+        response = self.post()
+        self.assertRedirects(response, reverse('onboarding'), fetch_redirect_response=False)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(PASSWORD))
+        self.assertEqual(int(self.client.session['_auth_user_id']), self.user.pk)
+        self.assertEqual(self.client.get(reverse('onboarding')).status_code, 200)
+
+    def test_onboarded_users_continue_to_the_dashboard(self):
+        UserProfile.objects.filter(user=self.user).update(onboarding_completed=True)
+        self.assertRedirects(self.post(), reverse('dashboard'), fetch_redirect_response=False)
+
+    def test_password_rules_apply(self):
+        for password, confirm in (('short', None), ('12345678901', None), (PASSWORD, PASSWORD + 'x')):
+            with self.subTest(password=password):
+                response = self.post(password, confirm)
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, 'aria-invalid="true"')
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.has_usable_password())
+
+    def test_an_existing_password_cannot_be_changed_here(self):
+        # No old password is asked for, so this page must never replace a real one.
+        self.user.set_password(PASSWORD)
+        self.user.save()
+        self.client.force_login(self.user)
+        onboarding = reverse('onboarding')
+        self.assertRedirects(self.client.get(reverse('set_password')), onboarding, fetch_redirect_response=False)
+        self.assertRedirects(self.post('An0ther-Passw0rd-2026'), onboarding, fetch_redirect_response=False)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(PASSWORD))
+
+    def test_post_requires_csrf(self):
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.user)
+        response = client.post(reverse('set_password'), {'new_password1': PASSWORD, 'new_password2': PASSWORD})
+        self.assertEqual(response.status_code, 403)

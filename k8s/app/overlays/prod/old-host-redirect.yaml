@@ -1,0 +1,25 @@
+# Sends the retired hostname to the new domain (ADR-011): 301 to https://fitpro-app.tech with the same path and
+# query, from both listeners, so HTTP requests go straight there in one hop. The load balancer answers these itself;
+# they never reach Django, which no longer lists the old host in ALLOWED_HOSTS. HTTPS on the old name still needs
+# its certificate, so the hostname stays in Terraform's app_hostnames until this route is removed.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: fitpro-old-host-redirect
+  labels:
+    app.kubernetes.io/part-of: fitpro
+spec:
+  parentRefs:
+    - name: fitpro
+      sectionName: https
+    - name: fitpro
+      sectionName: http
+  hostnames:
+    - fitpro.rockymountaintechlab.com
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            hostname: fitpro-app.tech
+            statusCode: 301

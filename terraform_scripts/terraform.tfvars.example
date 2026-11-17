@@ -1,6 +1,6 @@
 # Copy to terraform.tfvars (which is gitignored) and fill in.
 project_id    = "your-project-id"
-app_hostnames = ["fitpro.example.com"]
+app_hostnames = ["fitpro.example.com"]  # production also lists the old hostname while it redirects (ADR-011)
 # GitHub repository allowed to deploy, and its numeric ID:
 #   curl -s https://api.github.com/repos/<org>/<repo> | grep '"id"' | head -1
 #   (or: gh api repos/<org>/<repo> --jq .id)

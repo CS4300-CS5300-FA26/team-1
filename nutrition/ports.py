@@ -10,7 +10,7 @@ the meal plan falls back as described in ADR-008.
 | NUTRITION_RECIPE_SOURCE            | D-5: FitPro's catalog            | `CatalogRecipeSource`           |
 | NUTRITION_MACRO_TARGETS_PROVIDER   | D-4 Macro Generation             | `NoMacroTargets` -> Daily Values |
 | NUTRITION_GROCERY_PRICE_SOURCE     | D-6 Grocery List Generation      | `NoGroceryPrices` -> no costs   |
-| NUTRITION_WORKOUTS_LINK            | D-3 Workout Split ("This Week")  | the dashboard                   |
+| NUTRITION_WORKOUTS_LINK            | D-3 Workout Split ("This Week")  | the dashboard (before D-3)      |
 
 In the other direction, D-6 reads the stored week from `nutrition.services.stored_week_plan`.
 """

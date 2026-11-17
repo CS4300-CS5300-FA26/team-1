@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: app
 resources:
   - ../../base
+  - old-host-redirect.yaml
 
 images:
   - name: django-app
@@ -16,14 +17,18 @@ configMapGenerator:
   - name: django-app-config
     literals:
       - DEBUG=False
-      - ALLOWED_HOSTS=fitpro.rockymountaintechlab.com
-      - CSRF_TRUSTED_ORIGINS=https://fitpro.rockymountaintechlab.com
+      - ALLOWED_HOSTS=fitpro-app.tech
+      - CSRF_TRUSTED_ORIGINS=https://fitpro-app.tech
       - DB_ENGINE=django.db.backends.postgresql
       - DB_HOST=127.0.0.1
       - DB_PORT=5432
       - DB_NAME=fitpro
       - DB_USER=fitpro_app
       - LOG_LEVEL=INFO
+      # Spotify (ADR-010): not secret. The client secret and token key are mounted from Secret Manager, and the app
+      # refuses to start unless all four are set. The redirect URI must be registered in the Spotify dashboard.
+      - SPOTIFY_CLIENT_ID=1b0a4f151ba14c3da7e4cd66bea59fb4
+      - SPOTIFY_REDIRECT_URI=https://fitpro-app.tech/auth-callback/spotify
 
 patches:
   # Workload Identity: pods using this KSA act as the fitpro-app GSA.
@@ -65,11 +70,13 @@ patches:
           - type: NamedAddress
             value: fitpro-lb-ip
 
-  # Both routes (app on :443, redirect on :80) serve only the real hostname.
+  # Both base routes (app on :443, redirect on :80) serve only the real hostname. Named, so the old host's
+  # redirect route (old-host-redirect.yaml) keeps its own hostname.
   - target:
       kind: HTTPRoute
+      name: fitpro-(app|redirect)
     patch: |-
       - op: replace
         path: /spec/hostnames
         value:
-          - fitpro.rockymountaintechlab.com
+          - fitpro-app.tech

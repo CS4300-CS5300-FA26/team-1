@@ -1,0 +1,13 @@
+{% if configured %}
+  <p class="text-center text-muted text-sm mt-4 mb-0">or</p>
+  {# A POST with a CSRF token, so another site can't start a Spotify sign-in for this browser. #}
+  <form method="post" action="{% if mode == 'signup' %}{% url 'spotify_signup' %}{% else %}{% url 'spotify_login' %}{% endif %}" class="mt-3">
+    {% csrf_token %}
+    <button type="submit" class="btn btn--secondary btn--block">
+      {% if mode == 'signup' %}Sign up with Spotify{% else %}Log in with Spotify{% endif %}
+    </button>
+  </form>
+  {% if mode == 'signup' %}
+    <p class="form-help mt-3">Already have a FitPro account? Log in and link Spotify from your profile instead.</p>
+  {% endif %}
+{% endif %}
