@@ -32,7 +32,7 @@ MAX_EXERCISES_PER_DAY = 8
 MAX_RECENT_NAMES = 60
 MIN_SETS, MAX_SETS = 1, 5
 MAX_REP_NUMBER = 60  # reps, seconds, or minutes
-REPS_PATTERN = re.compile(r'\d{1,2}(-\d{1,2})?( sec| min)?')  # "10", "8-12", "30-45 sec", "20 min"
+REPS_PATTERN = re.compile(r'\d{1,2}(-\d{1,2})?( sec| min)?( each side)?')  # "10", "8-12", "30-45 sec", "8-12 each side"
 
 # Which movement every exercise in the library trains (names are unique across the library).
 MOVEMENT_OF = {name: movement for movement, options in EXERCISES.items() for _, name in options}
@@ -46,6 +46,7 @@ SYSTEM_PROMPT = (
     'Every movement listed in a day\'s "must_cover" must be trained at least once that day. '
     'Give 1 to 5 sets per exercise. '
     'Write reps as a number or a range such as "10" or "8-12", or a time such as "30-45 sec" or "20 min". '
+    'For one-sided exercises such as lunges, add " each side", for example "8-12 each side". '
     'Where an equally suitable alternative exists, prefer exercises that are not in "recently_used" '
     'so the week feels fresh. '
     'Match the volume to the goal and experience level. Do not add notes or any other text.'

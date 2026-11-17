@@ -55,7 +55,7 @@ def valid_answer(plan, sets=4):
 def fake_trainer(body):
     """Answer like a well-behaved AI trainer, using only what the request says: one allowed exercise per movement."""
     details = json.loads(body['messages'][1]['content'])
-    first = {}
+    first: dict[str, str] = {}
     for item in details['allowed_exercises']:
         first.setdefault(item['movement'], item['name'])
     return {
@@ -162,6 +162,8 @@ class ValidateAnswerTests(SimpleTestCase):
             'empty reps': lambda answer: first_exercise(answer).update(reps=''),
             'reps in words': lambda answer: first_exercise(answer).update(reps='many'),
             'reps with a trailing word': lambda answer: first_exercise(answer).update(reps='8-12 reps'),
+            'reps with a stray extra word': lambda answer: first_exercise(answer).update(reps='8-12 each side now'),
+            'reps with only a suffix': lambda answer: first_exercise(answer).update(reps='each side'),
             'reps backwards': lambda answer: first_exercise(answer).update(reps='12-8'),
             'reps too large': lambda answer: first_exercise(answer).update(reps='99'),
             'reps zero': lambda answer: first_exercise(answer).update(reps='0'),
@@ -176,7 +178,7 @@ class ValidateAnswerTests(SimpleTestCase):
                     validate_days(answer, self.plan, self.catalog)
 
     def test_good_reps_formats_are_accepted(self):
-        for reps in ('10', '8-12', '15-20', '30-45 sec', '20 min', '60 sec'):
+        for reps in ('10', '8-12', '15-20', '30-45 sec', '20 min', '60 sec', '8-12 each side', '30 sec each side'):
             with self.subTest(reps):
                 answer = valid_answer(self.plan)
                 answer['days'][0]['exercises'][0]['reps'] = reps
@@ -262,7 +264,7 @@ class CallOpenAiTests(SimpleTestCase):
         return {'model': 'm', 'messages': []}
 
     def test_a_good_answer_is_returned_and_the_key_only_goes_in_the_header(self):
-        answer = {'days': []}
+        answer: dict[str, list[object]] = {'days': []}
         with mock.patch('plans.ai_trainer.urlopen', return_value=fake_http_response(answer)) as urlopen:
             self.assertEqual(call_openai(self.body()), answer)
         request = urlopen.call_args.args[0]
@@ -298,7 +300,7 @@ class CallOpenAiTests(SimpleTestCase):
                 self.assertNotIn('sk-leak', '\n'.join(logs.output))
 
     def test_unusable_responses_are_errors(self):
-        good = {'days': []}
+        good: dict[str, list[object]] = {'days': []}
         responses = {
             'not json': mock.MagicMock(read=mock.Mock(return_value=b'<html>oops</html>')),
             'not an object': mock.MagicMock(read=mock.Mock(return_value=b'[1, 2]')),
@@ -311,9 +313,12 @@ class CallOpenAiTests(SimpleTestCase):
         }
         for label, response in responses.items():
             response.__enter__.return_value = response
-            with self.subTest(label), mock.patch('plans.ai_trainer.urlopen', return_value=response):
-                with self.assertRaises(AiTrainerError):
-                    call_openai(self.body())
+            with (
+                self.subTest(label),
+                mock.patch('plans.ai_trainer.urlopen', return_value=response),
+                self.assertRaises(AiTrainerError),
+            ):
+                call_openai(self.body())
 
 
 class SettingsTests(SimpleTestCase):
