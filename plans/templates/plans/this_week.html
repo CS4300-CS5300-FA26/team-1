@@ -29,6 +29,19 @@
                 </tbody>
               </table>
             </div>
+            {% if day.action %}
+              <div class="cluster mt-3">
+                {% if day.action.status %}<span class="badge">{{ day.action.status }}</span>{% endif %}
+                {% if day.action.post %}
+                  <form method="post" action="{{ day.action.url }}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn--primary btn--sm">{{ day.action.label }}<span class="visually-hidden">: {{ day.day }}, {{ day.name }}</span></button>
+                  </form>
+                {% else %}
+                  <a class="btn btn--secondary btn--sm" href="{{ day.action.url }}">{{ day.action.label }}<span class="visually-hidden">: {{ day.day }}, {{ day.name }}</span></a>
+                {% endif %}
+              </div>
+            {% endif %}
           {% else %}
             <p>Rest day</p>
           {% endif %}
@@ -61,6 +74,7 @@
       </section>
     {% endif %}
     <div class="cluster mt-5">
+      {% if history_url %}<a class="btn btn--secondary" href="{{ history_url }}">Workout history</a>{% endif %}
       <a class="btn btn--secondary" href="{% url 'nutrition' %}">Nutrition</a>
       <a class="btn btn--secondary" href="{% url 'dashboard' %}">Dashboard</a>
     </div>

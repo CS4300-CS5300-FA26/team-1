@@ -1,5 +1,6 @@
-"""Workout plans and sessions for the views: the stored weekly plan, starting and logging a workout, and history.
+"""Doing the workouts of the weekly plan: starting a training day, logging its sets, and history.
 
+The week's split comes from the `plans` app (plans.WeeklyPlan, ADR-012); this module never makes or changes a plan.
 Every function takes the user and only reads or writes that user's rows (AGENTS.md "Authorization").
 """
 
@@ -13,186 +14,67 @@ from django.db import IntegrityError, transaction
 from django.db.models import DecimalField, ExpressionWrapper, F, Max, Sum
 from django.utils import timezone
 
-from core.models import UserProfile
+from plans.models import WeeklyPlan
+from plans.services import week_start_for
 
-from .domain import DAY_NAMES, DAYS_PER_WEEK_CHOICES, DEFAULT_DAYS
-from .models import (
-    Exercise,
-    LoggedSet,
-    PlannedExercise,
-    PlannedWorkout,
-    WorkoutPlan,
-    WorkoutPreference,
-    WorkoutSession,
-)
-from .planner import PlanInputs, plan_week
-
-# Bump when the planner's rules change, so stored plans made by older rules are remade.
-PLANNER_VERSION = 1
+from .domain import MINUTES, Target, parse_target
+from .exercise_links import catalog_id_for
+from .models import Exercise, LoggedSet, WorkoutSession
 
 
-def monday_of(day: date) -> date:
-    return day - timedelta(days=day.weekday())
+class NotATrainingDay(ValueError):
+    """The day asked for is a rest day, or not a day of the plan."""
 
 
-def days_per_week(user: User, profile: UserProfile) -> int:
-    """The user's chosen training days, else the default for their experience level."""
-    chosen = WorkoutPreference.objects.filter(user=user).values_list('days_per_week', flat=True).first()
-    return chosen if chosen in DAYS_PER_WEEK_CHOICES else DEFAULT_DAYS.get(profile.experience_level, 3)
+def current_weekly_plan(user: User, today: date | None = None) -> WeeklyPlan | None:
+    """This week's saved plan, or None. Never makes one: the plans app does that when This Week is opened."""
+    week_start = week_start_for(today or timezone.localdate())
+    return WeeklyPlan.objects.filter(user=user, week_start=week_start).first()
 
 
-def plan_inputs(user: User, profile: UserProfile) -> dict:
-    """What a plan is made from, as stored on it. When this changes, the stored plan is remade."""
-    return {
-        'goal': profile.goal,
-        'experience': profile.experience_level,
-        'equipment': sorted(profile.equipment),
-        'days': days_per_week(user, profile),
-        'version': PLANNER_VERSION,
-    }
+def training_day(plan: WeeklyPlan, day: int) -> dict:
+    """The plan's entry for weekday `day` (0 = Monday), if it has exercises."""
+    days = plan.data.get('days') or []
+    if not 0 <= day < len(days) or not days[day].get('exercises'):
+        raise NotATrainingDay(day)
+    return days[day]
 
 
-def set_days_per_week(user: User, days: int) -> None:
-    if days not in DAYS_PER_WEEK_CHOICES:
-        raise ValueError(f'Unsupported training days: {days}')
-    WorkoutPreference.objects.update_or_create(user=user, defaults={'days_per_week': days})
-
-
-# --- The weekly plan ------------------------------------------------------------------------------------------------
-
-
-def current_plan(user: User, profile: UserProfile, today: date | None = None) -> WorkoutPlan:
-    """This week's plan, made the first time it's asked for and reused all week.
-
-    It is remade when what it was made from changes (goal, experience, equipment, training days, planner rules) or
-    when one of its exercises has left the catalog.
-    """
-    week_start = monday_of(today or timezone.localdate())
-    inputs = plan_inputs(user, profile)
-    plan = WorkoutPlan.objects.filter(user=user, week_start=week_start).first()
-    if plan is not None and plan.inputs == inputs and not _has_retired_exercise(plan):
-        return plan
-    return _make_plan(user, week_start, inputs, seed=plan.seed if plan else week_start.toordinal())
-
-
-def new_plan(user: User, profile: UserProfile, today: date | None = None) -> WorkoutPlan:
-    """Replace this week's plan with a different selection of exercises."""
-    week_start = monday_of(today or timezone.localdate())
-    existing = WorkoutPlan.objects.filter(user=user, week_start=week_start).first()
-    seed = existing.seed + 1 if existing else week_start.toordinal()
-    return _make_plan(user, week_start, plan_inputs(user, profile), seed=seed)
-
-
-def _has_retired_exercise(plan: WorkoutPlan) -> bool:
-    return PlannedExercise.objects.filter(workout__plan=plan, exercise__is_active=False).exists()
-
-
-def _make_plan(user: User, week_start: date, inputs: dict, seed: int) -> WorkoutPlan:
-    catalog = dict(Exercise.objects.filter(is_active=True).values_list('source_id', 'pk'))
-    days = plan_week(
-        PlanInputs(
-            goal=inputs['goal'],
-            experience=inputs['experience'],
-            equipment=tuple(inputs['equipment']),
-            days=inputs['days'],
-            seed=seed,
-        ),
-        catalog,
-    )
-    try:
-        with transaction.atomic():
-            # Sessions already logged against the old plan survive it (their link to it is cleared).
-            WorkoutPlan.objects.filter(user=user, week_start=week_start).delete()
-            plan = WorkoutPlan.objects.create(user=user, week_start=week_start, inputs=inputs, seed=seed)
-            for day in days:
-                workout = PlannedWorkout.objects.create(plan=plan, day=day.day, title=day.title)
-                PlannedExercise.objects.bulk_create(
-                    PlannedExercise(
-                        workout=workout,
-                        position=position,
-                        exercise_id=item.exercise_id,
-                        sets=item.prescription.sets,
-                        reps_min=item.prescription.reps_min,
-                        reps_max=item.prescription.reps_max,
-                        rest_seconds=item.prescription.rest_seconds,
-                        minutes=item.prescription.minutes,
-                    )
-                    for position, item in enumerate(day.items, start=1)
-                )
-    except IntegrityError:
-        # Another request made this week's plan at the same moment; use theirs.
-        return WorkoutPlan.objects.get(user=user, week_start=week_start)
-    return plan
-
-
-@dataclass(frozen=True)
-class DayOverview:
-    index: int
-    name: str
-    date: date
-    is_today: bool
-    workout: PlannedWorkout | None
-    session: WorkoutSession | None
-
-    @property
-    def status(self) -> str:
-        if self.workout is None:
-            return 'rest'
-        if self.session is None:
-            return 'planned'
-        return 'done' if self.session.is_complete else 'in_progress'
-
-
-def week_overview(plan: WorkoutPlan, today: date | None = None) -> list[DayOverview]:
-    today = today or timezone.localdate()
-    workouts = {
-        workout.day: workout for workout in plan.workouts.prefetch_related('exercises__exercise').order_by('day')
-    }
-    sessions = {
-        session.planned_workout_id: session
-        for session in WorkoutSession.objects.filter(planned_workout__plan=plan, user=plan.user)
-    }
-    overview = []
-    for index, name in enumerate(DAY_NAMES):
-        workout = workouts.get(index)
-        overview.append(
-            DayOverview(
-                index=index,
-                name=name,
-                date=plan.week_start + timedelta(days=index),
-                is_today=plan.week_start + timedelta(days=index) == today,
-                workout=workout,
-                session=sessions.get(workout.pk) if workout else None,
-            )
-        )
-    return overview
-
-
-def training_days(user: User, week_start: date) -> frozenset[int] | None:
-    """Which weekdays (0 = Monday) the user trains that week, for macro targets (D-4: rest days vs training days).
-
-    Reads the stored plan and never makes one. `None` means the user has no plan that week yet.
-    """
-    plan = WorkoutPlan.objects.filter(user=user, week_start=monday_of(week_start)).first()
-    if plan is None:
-        return None
-    return frozenset(plan.workouts.values_list('day', flat=True))
-
-
-# --- Doing a workout ------------------------------------------------------------------------------------------------
-
-
-def start_session(user: User, workout: PlannedWorkout, today: date | None = None) -> WorkoutSession:
-    """The session for a planned workout: the one already started, or a new one. Safe to call twice."""
-    today = today or timezone.localdate()
+def start_session(user: User, plan: WeeklyPlan, day: int, today: date | None = None) -> WorkoutSession:
+    """The session for one training day of the user's plan: the one already started, or a new one. Safe to call
+    twice."""
+    if plan.user_id != user.pk:
+        raise NotATrainingDay(day)  # never start a session on someone else's plan
+    entry = training_day(plan, day)
     try:
         with transaction.atomic():
             session, _ = WorkoutSession.objects.get_or_create(
-                planned_workout=workout, defaults={'user': user, 'title': workout.title, 'performed_on': today}
+                weekly_plan=plan,
+                day=day,
+                defaults={
+                    'user': user,
+                    'title': str(entry.get('name') or 'Workout')[:60],
+                    'exercises': [
+                        {
+                            'name': str(item['name'])[:100],
+                            'sets': item.get('sets', 1),
+                            'reps': str(item.get('reps', '')),
+                        }
+                        for item in entry['exercises']
+                    ],
+                    'performed_on': today or timezone.localdate(),
+                },
             )
     except IntegrityError:
-        session = WorkoutSession.objects.get(planned_workout=workout)
+        session = WorkoutSession.objects.get(weekly_plan=plan, day=day)
     return session
+
+
+def sessions_by_day(user: User, plan: WeeklyPlan) -> dict[int, WorkoutSession]:
+    return {session.day: session for session in WorkoutSession.objects.filter(user=user, weekly_plan=plan)}
+
+
+# --- Logging a workout ----------------------------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -200,50 +82,66 @@ class SetRow:
     number: int
     reps: int | None
     weight_lb: Decimal | None
+    seconds: int | None
     minutes: int | None
 
 
 @dataclass(frozen=True)
 class ExerciseLog:
-    planned: PlannedExercise
+    position: int
+    name: str
+    target: Target
+    catalog: Exercise | None
     rows: list[SetRow]
     last_weight_lb: Decimal | None
 
 
 def session_log(session: WorkoutSession) -> list[ExerciseLog]:
-    """Each exercise of the session's planned workout with a row per planned set, filled in from what's logged.
+    """Each exercise of the session with a row per planned set, filled in from what's logged.
 
     Empty weights start from the last weight the user logged for that exercise, so the next workout needs few edits.
     """
-    if session.planned_workout is None:
-        return []
-    planned = list(session.planned_workout.exercises.select_related('exercise'))
-    logged: dict[tuple[int, int], LoggedSet] = {(s.exercise_id, s.set_number): s for s in session.sets.all()}
-    last_weights = last_weights_for(session.user, [p.exercise_id for p in planned], before=session)
+    exercises = [item for item in session.exercises if isinstance(item, dict) and item.get('name')]
+    logged = {(s.position, s.set_number): s for s in session.sets.all()}
+    names = [item['name'] for item in exercises]
+    last_weights = last_weights_for(session.user, names, before=session)
+    ids = {name: catalog_id_for(name) for name in names}
+    catalog = {e.source_id: e for e in Exercise.objects.filter(source_id__in=[i for i in ids.values() if i])}
+
     result = []
-    for item in planned:
+    for position, item in enumerate(exercises, start=1):
+        target = parse_target(item.get('sets', 1), item.get('reps', ''))
+        name = item['name']
         rows = []
-        for number in range(1, item.sets + 1):
-            saved = logged.get((item.exercise_id, number))
+        for number in range(1, target.sets + 1):
+            saved = logged.get((position, number))
             rows.append(
                 SetRow(
                     number=number,
                     reps=saved.reps if saved else None,
-                    weight_lb=saved.weight_lb if saved else last_weights.get(item.exercise_id),
+                    weight_lb=saved.weight_lb if saved else last_weights.get(name),
+                    seconds=saved.seconds if saved else None,
                     minutes=saved.minutes if saved else None,
                 )
             )
-        result.append(ExerciseLog(planned=item, rows=rows, last_weight_lb=last_weights.get(item.exercise_id)))
+        result.append(
+            ExerciseLog(
+                position=position,
+                name=name,
+                target=target,
+                catalog=catalog.get(ids[name] or ''),
+                rows=rows,
+                last_weight_lb=last_weights.get(name) if target.kind != MINUTES else None,
+            )
+        )
     return result
 
 
-def last_weights_for(
-    user: User, exercise_ids: Iterable[int], before: WorkoutSession | None = None
-) -> dict[int, Decimal]:
-    """The heaviest weight in the user's most recent session for each exercise (their own sets only)."""
-    weights: dict[int, Decimal] = {}
-    for exercise_id in exercise_ids:
-        sets = LoggedSet.objects.filter(session__user=user, exercise_id=exercise_id, weight_lb__isnull=False)
+def last_weights_for(user: User, names: Iterable[str], before: WorkoutSession | None = None) -> dict[str, Decimal]:
+    """The heaviest weight in the user's most recent session for each exercise name (their own sets only)."""
+    weights: dict[str, Decimal] = {}
+    for name in set(names):
+        sets = LoggedSet.objects.filter(session__user=user, exercise_name=name, weight_lb__isnull=False)
         if before is not None:
             sets = sets.exclude(session=before)
         latest = (
@@ -252,30 +150,32 @@ def last_weights_for(
         if latest is not None:
             best = sets.filter(session=latest).aggregate(best=Max('weight_lb'))['best']
             if best is not None:
-                weights[exercise_id] = best
+                weights[name] = best
     return weights
 
 
+# (position, set number) -> (reps, weight, seconds, minutes)
+Entries = Mapping[tuple[int, int], tuple[int | None, Decimal | None, int | None, int | None]]
+
+
 @transaction.atomic
-def save_session(
-    session: WorkoutSession,
-    entries: Mapping[tuple[int, int], tuple[int | None, Decimal | None, int | None]],
-    finish: bool,
-) -> None:
-    """Store the sets the user filled in. `entries` maps (exercise id, set number) to (reps, weight, minutes); a set
-    with neither reps nor minutes is not stored (and a stored one the user cleared is removed)."""
-    for (exercise_id, number), (reps, weight, minutes) in entries.items():
-        if not reps and not minutes:
-            LoggedSet.objects.filter(session=session, exercise_id=exercise_id, set_number=number).delete()
+def save_session(session: WorkoutSession, entries: Entries, names: Mapping[int, str], finish: bool) -> None:
+    """Store the sets the user filled in. A set with no amount is not stored (and a stored one the user cleared is
+    removed). `names` maps each position to its exercise name."""
+    for (position, number), (reps, weight, seconds, minutes) in entries.items():
+        if not reps and not seconds and not minutes:
+            LoggedSet.objects.filter(session=session, position=position, set_number=number).delete()
             continue
         LoggedSet.objects.update_or_create(
             session=session,
-            exercise_id=exercise_id,
+            position=position,
             set_number=number,
             defaults={
+                'exercise_name': names[position],
                 'reps': reps or None,
                 'weight_lb': weight if reps else None,
-                'minutes': None if reps else minutes,
+                'seconds': None if reps else (seconds or None),
+                'minutes': None if reps or seconds else minutes,
             },
         )
     if finish and session.completed_at is None:
@@ -294,21 +194,25 @@ class WeekSummary:
     volume_lb: Decimal
 
 
+def planned_workouts(plan: WeeklyPlan) -> int:
+    return sum(1 for day in plan.data.get('days') or [] if day.get('exercises'))
+
+
 def weekly_summaries(user: User, weeks: int = 8, today: date | None = None) -> list[WeekSummary]:
     """Consistency (workouts completed against planned) and volume (reps x weight lifted) for the last `weeks`
     weeks, newest first. Weeks with no plan count what was done against 0 planned."""
-    this_monday = monday_of(today or timezone.localdate())
+    this_monday = week_start_for(today or timezone.localdate())
     first_monday = this_monday - timedelta(weeks=weeks - 1)
 
     planned = {
-        plan.week_start: plan.workouts.count()
-        for plan in WorkoutPlan.objects.filter(user=user, week_start__gte=first_monday)
+        plan.week_start: planned_workouts(plan)
+        for plan in WeeklyPlan.objects.filter(user=user, week_start__gte=first_monday)
     }
     completed: dict[date, int] = {}
     for performed_on in WorkoutSession.objects.filter(
         user=user, completed_at__isnull=False, performed_on__gte=first_monday
     ).values_list('performed_on', flat=True):
-        week = monday_of(performed_on)
+        week = week_start_for(performed_on)
         completed[week] = completed.get(week, 0) + 1
     volume: dict[date, Decimal] = {}
     lifted = (
@@ -326,7 +230,7 @@ def weekly_summaries(user: User, weeks: int = 8, today: date | None = None) -> l
     )
     for row in lifted:
         if row['total'] is not None:
-            week = monday_of(row['session__performed_on'])
+            week = week_start_for(row['session__performed_on'])
             volume[week] = volume.get(week, Decimal(0)) + row['total']
 
     return [

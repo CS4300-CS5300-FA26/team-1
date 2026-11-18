@@ -6,7 +6,7 @@
 {% endblock %}
 {% block body %}
   <div class="card card--wide">
-    <p class="eyebrow mb-0">{% if day_name %}{{ day_name }}, {% endif %}{{ session.performed_on|date:"F j" }}</p>
+    <p class="eyebrow mb-0">{{ day_name }}&rsquo;s workout &middot; started {{ session.performed_on|date:"l, F j" }}</p>
     <h1 class="card__title">{{ session.title }}</h1>
     {% if session.is_complete %}<p><span class="status-badge status-badge--saved">Finished</span></p>{% endif %}
 
@@ -19,8 +19,8 @@
     </div>
 
     {% if not blocks %}
-      <p class="mt-4">This workout's plan was replaced, so there is nothing left to log. Your finished sets are in your history.</p>
-      <a class="btn btn--secondary" href="{% url 'workouts_history' %}">Progress and history</a>
+      <p class="mt-4">This workout has no exercises to log. Your finished workouts are in your history.</p>
+      <a class="btn btn--secondary" href="{% url 'workouts_history' %}">Workout history</a>
     {% else %}
       <form method="post" class="mt-4" novalidate>
         {% csrf_token %}
@@ -31,49 +31,53 @@
         {% endif %}
         <ol class="stack">
           {% for block in blocks %}
-            {% with planned=block.log.planned %}
+            {% with log=block.log %}
               <li class="panel">
-                <h2 class="h3 mb-0">{{ planned.exercise.name|capfirst }}</h2>
+                <h2 class="h3 mb-0">{{ log.name }}</h2>
                 <p class="text-muted text-sm">
-                  {% if planned.is_timed %}{{ planned.minutes }} minutes at an easy, steady pace
-                  {% else %}{{ planned.sets }} sets of {{ planned.rep_range }} reps{% if planned.rest_seconds %}, rest {{ planned.rest_seconds }} seconds{% endif %}{% endif %}
-                  {% if block.log.last_weight_lb %}&middot; last time {{ block.log.last_weight_lb|floatformat:"-1" }} lb{% endif %}
+                  {{ log.target.describe }}{% if log.target.rest_seconds %}, rest {{ log.target.rest_seconds }} seconds{% endif %}
+                  {% if log.last_weight_lb %}&middot; last time {{ log.last_weight_lb|floatformat:"-1" }} lb{% endif %}
                 </p>
-                <details class="disclosure mb-3">
-                  <summary class="disclosure__summary">How to do it</summary>
-                  <div class="disclosure__body">
-                    <p class="text-muted text-sm">Targets {{ planned.exercise.target }}{% if planned.exercise.secondary_muscles %}; also works {{ planned.exercise.secondary_muscles|join:", " }}{% endif %}.</p>
-                    <ol class="steps">
-                      {% for step in planned.exercise.steps %}<li class="steps__item">{{ step }}</li>{% endfor %}
-                    </ol>
-                  </div>
-                </details>
+                {% if log.catalog and log.catalog.steps %}
+                  <details class="disclosure mb-3">
+                    <summary class="disclosure__summary">How to do it<span class="visually-hidden">: {{ log.name }}</span></summary>
+                    <div class="disclosure__body">
+                      <p class="text-muted text-sm">Targets {{ log.catalog.target }}{% if log.catalog.secondary_muscles %}; also works {{ log.catalog.secondary_muscles|join:", " }}{% endif %}.</p>
+                      <ol class="steps">
+                        {% for step in log.catalog.steps %}<li class="steps__item">{{ step }}</li>{% endfor %}
+                      </ol>
+                    </div>
+                  </details>
+                {% endif %}
                 <div class="stack stack--sm">
                   {% for row in block.rows %}
                     <div class="set-row">
-                      <p class="set-row__label mb-0">{% if planned.is_timed %}Done{% else %}Set {{ row.number }}{% endif %}</p>
+                      <p class="set-row__label mb-0">{% if row.minutes %}Done{% else %}Set {{ row.number }}{% endif %}</p>
                       {% if row.minutes %}
                         <div class="form-field">
-                          <label for="{{ row.minutes.id_for_label }}">Minutes<span class="visually-hidden"> for {{ planned.exercise.name }}</span></label>
+                          <label for="{{ row.minutes.id_for_label }}">Minutes<span class="visually-hidden"> for {{ log.name }}</span></label>
                           {{ row.minutes }}{{ row.minutes.errors }}
                         </div>
-                      {% else %}
-                        {% if row.reps %}
-                          <div class="form-field">
-                            <label for="{{ row.reps.id_for_label }}">Reps<span class="visually-hidden"> for {{ planned.exercise.name }}, set {{ row.number }}</span></label>
-                            {{ row.reps }}{{ row.reps.errors }}
-                          </div>
-                          <div class="form-field">
-                            <label for="{{ row.weight.id_for_label }}">Weight (lb)<span class="visually-hidden"> for {{ planned.exercise.name }}, set {{ row.number }}</span></label>
-                            {{ row.weight }}{{ row.weight.errors }}
-                          </div>
-                        {% endif %}
+                      {% elif row.seconds %}
+                        <div class="form-field">
+                          <label for="{{ row.seconds.id_for_label }}">Seconds held<span class="visually-hidden"> for {{ log.name }}, set {{ row.number }}</span></label>
+                          {{ row.seconds }}{{ row.seconds.errors }}
+                        </div>
+                      {% elif row.reps %}
+                        <div class="form-field">
+                          <label for="{{ row.reps.id_for_label }}">Reps<span class="visually-hidden"> for {{ log.name }}, set {{ row.number }}</span></label>
+                          {{ row.reps }}{{ row.reps.errors }}
+                        </div>
+                        <div class="form-field">
+                          <label for="{{ row.weight.id_for_label }}">Weight (lb)<span class="visually-hidden"> for {{ log.name }}, set {{ row.number }}</span></label>
+                          {{ row.weight }}{{ row.weight.errors }}
+                        </div>
                       {% endif %}
                     </div>
                   {% endfor %}
                 </div>
-                {% if planned.rest_seconds %}
-                  <button type="button" class="btn btn--ghost btn--sm mt-3" data-rest-start="{{ planned.rest_seconds }}" hidden>Start {{ planned.rest_seconds }} second rest<span class="visually-hidden"> after {{ planned.exercise.name }}</span></button>
+                {% if log.target.rest_seconds %}
+                  <button type="button" class="btn btn--ghost btn--sm mt-3" data-rest-start="{{ log.target.rest_seconds }}" hidden>Start {{ log.target.rest_seconds }} second rest<span class="visually-hidden"> after {{ log.name }}</span></button>
                 {% endif %}
               </li>
             {% endwith %}
@@ -82,7 +86,7 @@
         <div class="cluster mt-5">
           <button type="submit" name="action" value="save" class="btn btn--secondary">Save progress</button>
           <button type="submit" name="action" value="finish" class="btn btn--primary">Finish workout</button>
-          <a class="btn btn--ghost" href="{% url 'workouts_this_week' %}">Back to this week</a>
+          <a class="btn btn--ghost" href="{% url 'this_week' %}">Back to this week</a>
         </div>
       </form>
     {% endif %}

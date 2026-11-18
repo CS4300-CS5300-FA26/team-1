@@ -215,6 +215,8 @@ NUTRITION_MACRO_TARGETS_PROVIDER = 'plans.macro_targets.PlanMacroTargets'
 NUTRITION_GROCERY_PRICE_SOURCE = 'grocery.prices.StoredGroceryPrices'
 # D-3 Workout Split Generation: the "This Week" page (plans app, ADR-012), linked from the "unavailable" notice.
 NUTRITION_WORKOUTS_LINK = {'url_name': 'this_week', 'text': 'Open This Week'}
+# Exercise tracking (ADR-014): Start / Continue buttons on This Week for each training day of the saved plan.
+PLANS_WORKOUT_TRACKER = 'workouts.tracker.SessionTracker'
 
 
 # Internationalization

@@ -7,8 +7,11 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
 
+from plans.generator import EXERCISES
+from plans.starter import starter_plan
+
 from .catalog_loader import CATALOG_FILE, CatalogError, equipment_class, load_catalog, read_catalog, slim_catalog
-from .foundation import POOLS
+from .exercise_links import CATALOG_IDS
 from .models import Exercise
 
 UPSTREAM = [
@@ -67,16 +70,25 @@ class CommittedCatalogTests(TestCase):
             self.assertTrue(exercise.steps, exercise.source_id)
             self.assertTrue(exercise.equipment_class, exercise.source_id)
 
-    def test_the_planner_pools_only_name_real_active_exercises_of_the_right_equipment(self):
-        by_id = {e.source_id: e for e in Exercise.objects.filter(is_active=True)}
-        for slot, classes in POOLS.items():
-            for equipment, ids in classes.items():
-                for source_id in ids:
-                    with self.subTest(slot=slot, equipment=equipment, id=source_id):
-                        self.assertIn(source_id, by_id)
-                        # A treadmill walk is filed under machines upstream but is cardio equipment to the user.
-                        if slot != 'cardio':
-                            self.assertEqual(by_id[source_id].equipment_class, equipment)
+    def test_every_link_names_a_real_active_exercise(self):
+        active = set(Exercise.objects.filter(is_active=True).values_list('source_id', flat=True))
+        for name, source_id in CATALOG_IDS.items():
+            if source_id is not None:
+                with self.subTest(name=name):
+                    self.assertIn(source_id, active)
+
+
+class ExerciseLinkTests(TestCase):
+    """The plans generator's exercise names and exercise_links.py must not drift apart."""
+
+    def test_every_exercise_the_plan_can_use_is_listed(self):
+        names = {name for options in EXERCISES.values() for _, name in options}
+        names |= {exercise['name'] for day in starter_plan()['days'] for exercise in day['exercises']}
+        self.assertEqual(names - set(CATALOG_IDS), set())
+
+    def test_nothing_is_listed_that_the_plan_never_uses(self):
+        names = {name for options in EXERCISES.values() for _, name in options}
+        self.assertEqual(set(CATALOG_IDS) - names, set())
 
 
 class SlimCatalogTests(TestCase):

@@ -1,285 +1,236 @@
 from datetime import date, timedelta
 from decimal import Decimal
-from unittest import mock
 
-from django.contrib.auth.models import User
 from django.db import IntegrityError
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 
 from core.models import UserProfile
+from plans.models import WeeklyPlan
+from plans.services import get_weekly_plan, switch_split
 
 from . import services
-from .models import Exercise, LoggedSet, PlannedExercise, PlannedWorkout, WorkoutPlan, WorkoutSession
+from .domain import MINUTES, REPS, SECONDS, parse_target
+from .models import LoggedSet, WorkoutSession
 from .test_helpers import onboarded_user
 
 MONDAY = date(2026, 11, 2)  # a Monday
 
 
-def profile_of(user: User) -> UserProfile:
-    return UserProfile.objects.get(user=user)
+def saved_plan(user, today=MONDAY) -> WeeklyPlan:
+    """The user's weekly plan from the plans app, saved the way opening This Week saves it."""
+    get_weekly_plan(UserProfile.objects.get(user=user), today)
+    return WeeklyPlan.objects.get(user=user, week_start=services.week_start_for(today))
 
 
-class PlanTests(TestCase):
-    def setUp(self):
-        self.user = onboarded_user()
-        self.profile = profile_of(self.user)
-
-    def test_the_first_visit_makes_a_plan_for_the_week_and_later_visits_reuse_it(self):
-        plan = services.current_plan(self.user, self.profile, today=MONDAY + timedelta(days=3))
-        self.assertEqual(plan.week_start, MONDAY)
-        again = services.current_plan(self.user, self.profile, today=MONDAY)
-        self.assertEqual(plan.pk, again.pk)
-        self.assertEqual(WorkoutPlan.objects.count(), 1)
-
-    def test_a_beginner_gets_three_training_days_by_default(self):
-        plan = services.current_plan(self.user, self.profile, today=MONDAY)
-        self.assertEqual(list(plan.workouts.values_list('day', flat=True)), [0, 2, 4])
-
-    def test_each_experience_level_has_its_default_days(self):
-        for level, days in (('intermediate', 4), ('advanced', 5)):
-            user = onboarded_user(username=level, experience=level)
-            plan = services.current_plan(user, profile_of(user), today=MONDAY)
-            self.assertEqual(plan.workouts.count(), days)
-
-    def test_the_chosen_training_days_win_and_remake_the_plan(self):
-        first = services.current_plan(self.user, self.profile, today=MONDAY)
-        services.set_days_per_week(self.user, 5)
-        second = services.current_plan(self.user, self.profile, today=MONDAY)
-        self.assertNotEqual(first.pk, second.pk)
-        self.assertEqual(second.workouts.count(), 5)
-        self.assertEqual(WorkoutPlan.objects.count(), 1)
-
-    def test_unsupported_training_days_are_refused(self):
-        with self.assertRaises(ValueError):
-            services.set_days_per_week(self.user, 7)
-
-    def test_the_plan_is_remade_when_equipment_changes(self):
-        services.current_plan(self.user, self.profile, today=MONDAY)
-        self.profile.equipment = ['dumbbells']
-        self.profile.save()
-        plan = services.current_plan(self.user, self.profile, today=MONDAY)
-        self.assertEqual(plan.inputs['equipment'], ['dumbbells'])
-        classes = set(
-            PlannedExercise.objects.filter(workout__plan=plan).values_list('exercise__equipment_class', flat=True)
-        )
-        self.assertIn('dumbbells', classes)
-
-    def test_a_new_plan_picks_different_exercises(self):
-        self.profile.equipment = ['dumbbells', 'bands']
-        self.profile.save()
-
-        def names(plan):
-            return list(PlannedExercise.objects.filter(workout__plan=plan).values_list('exercise_id', flat=True))
-
-        first = services.current_plan(self.user, self.profile, today=MONDAY)
-        first_names = names(first)
-        second = services.new_plan(self.user, self.profile, today=MONDAY)
-        self.assertNotEqual(first_names, names(second))
-        self.assertEqual(WorkoutPlan.objects.count(), 1)
-
-    def test_a_plan_with_a_retired_exercise_is_remade(self):
-        plan = services.current_plan(self.user, self.profile, today=MONDAY)
-        retired = PlannedExercise.objects.filter(workout__plan=plan)[0].exercise
-        Exercise.objects.filter(pk=retired.pk).update(is_active=False)
-        remade = services.current_plan(self.user, self.profile, today=MONDAY)
-        self.assertNotEqual(plan.pk, remade.pk)
-        self.assertFalse(PlannedExercise.objects.filter(workout__plan=remade, exercise=retired).exists())
-
-    def test_plans_are_per_user(self):
-        other = onboarded_user(username='other')
-        services.current_plan(self.user, self.profile, today=MONDAY)
-        services.current_plan(other, profile_of(other), today=MONDAY)
-        self.assertEqual(WorkoutPlan.objects.filter(user=self.user).count(), 1)
-        self.assertEqual(WorkoutPlan.objects.filter(user=other).count(), 1)
-
-    def test_every_planned_exercise_is_an_active_catalog_exercise_in_the_users_equipment(self):
-        plan = services.current_plan(self.user, self.profile, today=MONDAY)
-        for item in PlannedExercise.objects.filter(workout__plan=plan).select_related('exercise'):
-            self.assertTrue(item.exercise.is_active)
-            self.assertEqual(item.exercise.equipment_class, 'none')
-
-    def test_training_days_for_macro_targets_reads_without_making_a_plan(self):
-        self.assertIsNone(services.training_days(self.user, MONDAY))
-        self.assertEqual(WorkoutPlan.objects.count(), 0)
-        services.current_plan(self.user, self.profile, today=MONDAY)
-        self.assertEqual(services.training_days(self.user, MONDAY + timedelta(days=2)), frozenset({0, 2, 4}))
-
-    def test_the_overview_has_seven_days_with_rest_days(self):
-        plan = services.current_plan(self.user, self.profile, today=MONDAY)
-        overview = services.week_overview(plan, today=MONDAY + timedelta(days=2))
-        self.assertEqual(
-            [d.status for d in overview], ['planned', 'rest', 'planned', 'rest', 'planned', 'rest', 'rest']
-        )
-        self.assertEqual([d.is_today for d in overview], [False, False, True, False, False, False, False])
+def first_training_day(plan: WeeklyPlan) -> int:
+    return next(index for index, day in enumerate(plan.data['days']) if day['exercises'])
 
 
-class SessionTests(TestCase):
+class TargetTests(SimpleTestCase):
+    def test_a_rep_range(self):
+        target = parse_target(3, '8-12')
+        self.assertEqual((target.kind, target.sets, target.low, target.high), (REPS, 3, 8, 12))
+        self.assertEqual(target.describe(), '3 sets of 8-12 reps')
+        self.assertEqual(target.rest_seconds, 90)
+
+    def test_lighter_sets_rest_less(self):
+        self.assertEqual(parse_target(3, '15-20').rest_seconds, 60)
+
+    def test_a_hold_in_seconds(self):
+        target = parse_target(3, '30-45 sec')
+        self.assertEqual((target.kind, target.low, target.high), (SECONDS, 30, 45))
+        self.assertEqual(target.describe(), '3 sets of 30-45 seconds')
+        self.assertEqual(target.rest_seconds, 45)
+
+    def test_cardio_in_minutes_is_one_block_with_no_rest(self):
+        target = parse_target(1, '20 min')
+        self.assertEqual((target.kind, target.sets, target.low), (MINUTES, 1, 20))
+        self.assertIsNone(target.rest_seconds)
+        self.assertEqual(target.describe(), '20 min at a steady pace')
+
+    def test_a_single_number_and_an_unknown_format_are_still_reps(self):
+        self.assertEqual((parse_target(2, '10').low, parse_target(2, '10').high), (10, 10))
+        odd = parse_target(2, 'to failure')
+        self.assertEqual((odd.kind, odd.low, odd.sets), (REPS, None, 2))
+        self.assertEqual(odd.describe(), '2 sets of to failure reps')
+
+    def test_sets_are_at_least_one(self):
+        self.assertEqual(parse_target(0, '8-12').sets, 1)
+
+
+class StartSessionTests(TestCase):
     def setUp(self):
         self.user = onboarded_user(equipment=['dumbbells'])
-        self.profile = profile_of(self.user)
-        self.plan = services.current_plan(self.user, self.profile, today=MONDAY)
-        self.workout = self.plan.workouts.all()[0]
+        self.plan = saved_plan(self.user)
+        self.day = first_training_day(self.plan)
 
-    def test_starting_twice_gives_one_session(self):
-        first = services.start_session(self.user, self.workout, today=MONDAY)
-        second = services.start_session(self.user, self.workout, today=MONDAY)
+    def test_copies_the_days_workout_from_the_weekly_plan(self):
+        session = services.start_session(self.user, self.plan, self.day, today=MONDAY)
+        entry = self.plan.data['days'][self.day]
+        self.assertEqual(session.title, entry['name'])
+        self.assertEqual([e['name'] for e in session.exercises], [e['name'] for e in entry['exercises']])
+        self.assertEqual((session.weekly_plan, session.day, session.performed_on), (self.plan, self.day, MONDAY))
+
+    def test_starting_twice_gives_the_same_session(self):
+        first = services.start_session(self.user, self.plan, self.day)
+        second = services.start_session(self.user, self.plan, self.day)
         self.assertEqual(first.pk, second.pk)
-        self.assertEqual((first.title, first.performed_on, first.user), (self.workout.title, MONDAY, self.user))
+        self.assertEqual(WorkoutSession.objects.count(), 1)
 
-    def log(self, session, reps=10, weight='25'):
-        entries = {
-            (log.planned.exercise_id, 1): (reps, Decimal(weight) if not log.planned.is_timed else None, None)
-            for log in services.session_log(session)
-            if not log.planned.is_timed
-        }
-        services.save_session(session, entries, finish=False)
+    def test_the_database_allows_one_session_per_day_of_a_plan(self):
+        services.start_session(self.user, self.plan, self.day)
+        with self.assertRaises(IntegrityError):
+            WorkoutSession.objects.create(
+                user=self.user, weekly_plan=self.plan, day=self.day, title='Again', performed_on=MONDAY
+            )
 
-    def test_the_log_has_a_row_per_planned_set(self):
-        session = services.start_session(self.user, self.workout, today=MONDAY)
-        logs = services.session_log(session)
-        self.assertEqual(len(logs), self.workout.exercises.count())
-        for log in logs:
-            self.assertEqual([row.number for row in log.rows], list(range(1, log.planned.sets + 1)))
+    def test_a_rest_day_or_a_day_outside_the_week_cannot_be_started(self):
+        rest = next(index for index, day in enumerate(self.plan.data['days']) if not day['exercises'])
+        for day in (rest, 7, -1):
+            with self.subTest(day=day), self.assertRaises(services.NotATrainingDay):
+                services.start_session(self.user, self.plan, day)
 
-    def test_saving_stores_sets_and_clearing_removes_them(self):
-        session = services.start_session(self.user, self.workout, today=MONDAY)
-        item = self.workout.exercises.all()[0]
-        services.save_session(session, {(item.exercise_id, 1): (8, Decimal('30.5'), None)}, finish=False)
-        saved = LoggedSet.objects.get(session=session)
-        self.assertEqual((saved.reps, saved.weight_lb), (8, Decimal('30.5')))
-        services.save_session(session, {(item.exercise_id, 1): (None, Decimal('30'), None)}, finish=False)
+    def test_another_users_plan_cannot_be_started(self):
+        stranger = onboarded_user(username='stranger')
+        with self.assertRaises(services.NotATrainingDay):
+            services.start_session(stranger, self.plan, self.day)
+
+    def test_switching_the_split_later_leaves_a_started_workout_alone(self):
+        session = services.start_session(self.user, self.plan, self.day, today=MONDAY)
+        before = list(session.exercises)
+        switch_split(UserProfile.objects.get(user=self.user), 'push_pull_legs', today=MONDAY)
+        session.refresh_from_db()
+        self.assertEqual(session.exercises, before)
+
+    def test_current_weekly_plan_reads_but_never_makes_a_plan(self):
+        other = onboarded_user(username='new')
+        self.assertIsNone(services.current_weekly_plan(other, MONDAY))
+        self.assertFalse(WeeklyPlan.objects.filter(user=other).exists())
+        self.assertEqual(services.current_weekly_plan(self.user, MONDAY + timedelta(days=4)), self.plan)
+
+
+class LoggingTests(TestCase):
+    def setUp(self):
+        self.user = onboarded_user(equipment=['dumbbells'], goal='lose_weight')
+        self.plan = saved_plan(self.user)
+        self.day = first_training_day(self.plan)
+        self.session = services.start_session(self.user, self.plan, self.day, today=MONDAY)
+
+    def logs(self):
+        return services.session_log(self.session)
+
+    def test_one_row_per_planned_set_and_the_right_kind_for_each_exercise(self):
+        kinds = {log.name: log.target.kind for log in self.logs()}
+        for item in self.session.exercises:
+            log = next(entry for entry in self.logs() if entry.name == item['name'])
+            self.assertEqual(len(log.rows), log.target.sets)
+        # lose_weight days end with cardio in minutes; the plan's core work is a timed hold.
+        self.assertIn(MINUTES, kinds.values())
+
+    def test_saves_reps_and_weight_and_clears_a_set_that_is_emptied(self):
+        names = {log.position: log.name for log in self.logs()}
+        services.save_session(self.session, {(1, 1): (10, Decimal('25'), None, None)}, names, finish=False)
+        saved = LoggedSet.objects.get(session=self.session)
+        self.assertEqual((saved.position, saved.exercise_name, saved.reps, saved.weight_lb), (1, names[1], 10, 25))
+        services.save_session(self.session, {(1, 1): (None, None, None, None)}, names, finish=False)
         self.assertFalse(LoggedSet.objects.exists())
 
-    def test_saving_again_updates_rather_than_duplicates(self):
-        session = services.start_session(self.user, self.workout, today=MONDAY)
-        item = self.workout.exercises.all()[0]
-        services.save_session(session, {(item.exercise_id, 1): (8, None, None)}, finish=False)
-        services.save_session(session, {(item.exercise_id, 1): (9, None, None)}, finish=False)
-        self.assertEqual(list(LoggedSet.objects.values_list('reps', flat=True)), [9])
+    def test_seconds_and_minutes_never_carry_a_weight(self):
+        names = {log.position: log.name for log in self.logs()}
+        services.save_session(
+            self.session, {(1, 1): (None, Decimal('20'), 40, None), (2, 1): (None, None, None, 15)}, names, False
+        )
+        hold, cardio = LoggedSet.objects.order_by('position')
+        self.assertEqual((hold.seconds, hold.weight_lb, hold.minutes), (40, None, None))
+        self.assertEqual((cardio.minutes, cardio.weight_lb, cardio.seconds), (15, None, None))
 
-    def test_finishing_marks_it_complete_once(self):
-        session = services.start_session(self.user, self.workout, today=MONDAY)
-        item = self.workout.exercises.all()[0]
-        services.save_session(session, {(item.exercise_id, 1): (8, None, None)}, finish=True)
-        session.refresh_from_db()
-        stamp = session.completed_at
-        self.assertIsNotNone(stamp)
-        services.save_session(session, {}, finish=True)
-        session.refresh_from_db()
-        self.assertEqual(session.completed_at, stamp)
+    def test_finishing_marks_the_session_done_once(self):
+        names = {log.position: log.name for log in self.logs()}
+        services.save_session(self.session, {(1, 1): (8, None, None, None)}, names, finish=True)
+        done_at = WorkoutSession.objects.get(pk=self.session.pk).completed_at
+        self.assertIsNotNone(done_at)
+        services.save_session(self.session, {}, names, finish=True)
+        self.assertEqual(WorkoutSession.objects.get(pk=self.session.pk).completed_at, done_at)
 
-    def test_cardio_is_logged_in_minutes(self):
-        self.profile.goal = 'lose_weight'
-        self.profile.save()
-        plan = services.current_plan(self.user, self.profile, today=MONDAY)
-        workout = plan.workouts.all()[0]
-        session = services.start_session(self.user, workout, today=MONDAY)
-        cardio = next(log for log in services.session_log(session) if log.planned.is_timed)
-        services.save_session(session, {(cardio.planned.exercise_id, 1): (None, Decimal('20'), 12)}, finish=False)
-        saved = LoggedSet.objects.get(session=session)
-        self.assertEqual((saved.minutes, saved.reps, saved.weight_lb), (12, None, None))
+    def test_the_last_weight_is_offered_next_time_for_the_same_exercise(self):
+        first = self.logs()[0]
+        services.save_session(
+            self.session,
+            {(1, 1): (8, Decimal('30'), None, None), (1, 2): (8, Decimal('35'), None, None)},
+            {1: first.name},
+            finish=True,
+        )
+        next_week = saved_plan(self.user, MONDAY + timedelta(weeks=1))
+        later = services.start_session(self.user, next_week, first_training_day(next_week), MONDAY + timedelta(weeks=1))
+        log = next((entry for entry in services.session_log(later) if entry.name == first.name), None)
+        if log is not None:  # the split rotates week to week, so check only when the exercise comes back
+            self.assertEqual(log.last_weight_lb, Decimal('35'))
+            self.assertEqual(log.rows[0].weight_lb, Decimal('35'))
+        self.assertEqual(services.last_weights_for(self.user, [first.name]), {first.name: Decimal('35')})
 
-    def test_weights_start_from_the_last_session_and_only_the_users_own(self):
-        first = services.start_session(self.user, self.workout, today=MONDAY)
-        self.log(first, weight='40')
-        first.completed_at = first.started_at
-        first.save()
-        second_workout = self.plan.workouts.order_by('day')[1]
-        # The same exercise in a later session is prefilled from the heavier earlier one.
-        item = self.workout.exercises.all()[0]
-        PlannedExercise.objects.filter(workout=second_workout, position=1).update(exercise=item.exercise)
-        second = services.start_session(self.user, second_workout, today=MONDAY + timedelta(days=2))
-        row = next(log for log in services.session_log(second) if log.planned.exercise_id == item.exercise_id)
-        self.assertEqual(row.rows[0].weight_lb, Decimal('40.0'))
+    def test_another_users_weights_are_never_offered(self):
+        first = self.logs()[0]
+        services.save_session(self.session, {(1, 1): (8, Decimal('99'), None, None)}, {1: first.name}, finish=True)
+        stranger = onboarded_user(username='stranger', equipment=['dumbbells'], goal='lose_weight')
+        self.assertEqual(services.last_weights_for(stranger, [first.name]), {})
 
-        stranger = onboarded_user(username='stranger')
-        other_plan = services.current_plan(stranger, profile_of(stranger), today=MONDAY)
-        other_workout = other_plan.workouts.all()[0]
-        PlannedExercise.objects.filter(workout=other_workout, position=1).update(exercise=item.exercise)
-        theirs = services.start_session(stranger, other_workout, today=MONDAY)
-        row = next(log for log in services.session_log(theirs) if log.planned.exercise_id == item.exercise_id)
-        self.assertIsNone(row.rows[0].weight_lb)
+    def test_known_exercises_link_to_their_catalog_steps(self):
+        WorkoutSession.objects.filter(pk=self.session.pk).update(
+            exercises=[
+                {'name': 'Goblet Squat', 'sets': 3, 'reps': '8-12'},
+                {'name': 'Plank', 'sets': 3, 'reps': '30 sec'},
+            ]
+        )
+        self.session.refresh_from_db()
+        goblet, plank = self.logs()
+        self.assertEqual(goblet.catalog.source_id, '1760')
+        self.assertIsNone(plank.catalog)
 
-    def test_a_session_outlives_the_plan_it_came_from(self):
-        session = services.start_session(self.user, self.workout, today=MONDAY)
-        self.log(session)
-        services.new_plan(self.user, self.profile, today=MONDAY)
-        session.refresh_from_db()
-        self.assertIsNone(session.planned_workout)
-        self.assertEqual(session.title, self.workout.title)
-        self.assertTrue(session.sets.exists())
-        self.assertEqual(services.session_log(session), [])
-        self.assertEqual(PlannedWorkout.objects.filter(pk=self.workout.pk).count(), 0)
+    def test_a_malformed_exercise_entry_is_skipped(self):
+        WorkoutSession.objects.filter(pk=self.session.pk).update(exercises=['nonsense', {'sets': 3}])
+        self.session.refresh_from_db()
+        self.assertEqual(self.logs(), [])
+
+    def test_the_database_rejects_a_set_with_two_amounts(self):
+        with self.assertRaises(IntegrityError):
+            LoggedSet.objects.create(
+                session=self.session, position=1, exercise_name='x', set_number=1, reps=5, minutes=5
+            )
 
 
-class ProgressTests(TestCase):
+class HistoryTests(TestCase):
     def setUp(self):
         self.user = onboarded_user(equipment=['dumbbells'])
-        self.profile = profile_of(self.user)
+        self.plan = saved_plan(self.user)
+        self.day = first_training_day(self.plan)
 
-    def finished_session(self, plan, day_offset, weight, reps=10):
-        workout = plan.workouts.order_by('day')[0]
-        session = WorkoutSession.objects.create(
-            user=self.user,
-            planned_workout=None,
-            title=workout.title,
-            performed_on=plan.week_start + timedelta(days=day_offset),
-            completed_at=plan.created_at,
-        )
-        exercise = workout.exercises.all()[0].exercise
-        LoggedSet.objects.create(session=session, exercise=exercise, set_number=1, reps=reps, weight_lb=weight)
-        LoggedSet.objects.create(session=session, exercise=exercise, set_number=2, reps=reps, weight_lb=weight)
+    def finish(self, reps=10, weight='20'):
+        session = services.start_session(self.user, self.plan, self.day, today=MONDAY)
+        name = services.session_log(session)[0].name
+        services.save_session(session, {(1, 1): (reps, Decimal(weight), None, None)}, {1: name}, finish=True)
         return session
 
-    def test_weekly_summaries_count_completed_workouts_and_volume(self):
-        this_week = services.current_plan(self.user, self.profile, today=MONDAY)
-        last_week = services.current_plan(self.user, self.profile, today=MONDAY - timedelta(days=7))
-        self.finished_session(this_week, 0, Decimal('50'))
-        self.finished_session(last_week, 1, Decimal('40'))
-        self.finished_session(last_week, 2, Decimal('40'), reps=5)
-        weeks = services.weekly_summaries(self.user, weeks=3, today=MONDAY)
-        self.assertEqual(
-            [w.week_start for w in weeks], [MONDAY, MONDAY - timedelta(days=7), MONDAY - timedelta(days=14)]
-        )
-        self.assertEqual((weeks[0].completed, weeks[0].planned, weeks[0].volume_lb), (1, 3, Decimal('1000')))
-        self.assertEqual((weeks[1].completed, weeks[1].volume_lb), (2, Decimal('1200')))
-        self.assertEqual((weeks[2].completed, weeks[2].planned, weeks[2].volume_lb), (0, 0, Decimal('0')))
+    def test_weekly_summary_counts_planned_done_and_volume(self):
+        self.finish(reps=10, weight='20')
+        this_week = services.weekly_summaries(self.user, today=MONDAY + timedelta(days=2))[0]
+        self.assertEqual(this_week.week_start, MONDAY)
+        self.assertEqual(this_week.planned, services.planned_workouts(self.plan))
+        self.assertEqual((this_week.completed, this_week.volume_lb), (1, Decimal('200')))
 
-    def test_unfinished_sessions_and_other_users_do_not_count(self):
-        plan = services.current_plan(self.user, self.profile, today=MONDAY)
-        unfinished = self.finished_session(plan, 0, Decimal('50'))
-        unfinished.completed_at = None
-        unfinished.save()
-        stranger = onboarded_user(username='stranger')
-        theirs = services.current_plan(stranger, profile_of(stranger), today=MONDAY)
-        WorkoutSession.objects.create(user=stranger, title='x', performed_on=MONDAY, completed_at=theirs.created_at)
-        mine = services.weekly_summaries(self.user, weeks=1, today=MONDAY)[0]
-        self.assertEqual((mine.completed, mine.volume_lb), (0, Decimal('0')))
+    def test_unfinished_workouts_are_not_counted(self):
+        services.start_session(self.user, self.plan, self.day, today=MONDAY)
+        self.assertEqual(services.weekly_summaries(self.user, today=MONDAY)[0].completed, 0)
         self.assertEqual(services.recent_sessions(self.user), [])
 
-    def test_session_totals(self):
-        plan = services.current_plan(self.user, self.profile, today=MONDAY)
-        session = self.finished_session(plan, 0, Decimal('50'))
-        self.assertEqual(services.session_totals(session), (2, Decimal('1000')))
+    def test_recent_sessions_and_totals_are_the_users_own(self):
+        session = self.finish()
+        stranger = onboarded_user(username='stranger')
+        self.assertEqual(services.recent_sessions(self.user), [session])
+        self.assertEqual(services.recent_sessions(stranger), [])
+        self.assertEqual(services.session_totals(session), (1, Decimal('200')))
 
-
-class RaceTests(TestCase):
-    """Two requests can reach the same code at once; the database constraint decides and the loser reuses the winner."""
-
-    def setUp(self):
-        self.user = onboarded_user()
-        self.profile = profile_of(self.user)
-
-    def test_losing_the_race_to_make_a_plan_uses_the_existing_one(self):
-        plan = services.current_plan(self.user, self.profile, today=MONDAY)
-        with mock.patch.object(WorkoutPlan.objects, 'create', side_effect=IntegrityError):
-            result = services.new_plan(self.user, self.profile, today=MONDAY)
-        self.assertEqual(result.pk, plan.pk)
-        self.assertEqual(WorkoutPlan.objects.count(), 1)
-
-    def test_losing_the_race_to_start_a_session_uses_the_existing_one(self):
-        workout = services.current_plan(self.user, self.profile, today=MONDAY).workouts.all()[0]
-        session = services.start_session(self.user, workout, today=MONDAY)
-        with mock.patch.object(WorkoutSession.objects, 'get_or_create', side_effect=IntegrityError):
-            result = services.start_session(self.user, workout, today=MONDAY)
-        self.assertEqual(result.pk, session.pk)
+    def test_eight_weeks_newest_first(self):
+        weeks = services.weekly_summaries(self.user, today=MONDAY)
+        self.assertEqual(len(weeks), 8)
+        self.assertEqual(weeks[1].week_start, MONDAY - timedelta(weeks=1))
+        self.assertEqual(weeks[1].planned, 0)

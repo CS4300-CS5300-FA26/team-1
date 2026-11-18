@@ -8,7 +8,8 @@ from core.models import UserProfile
 
 from .forms import SplitChoiceForm
 from .generator import SPLIT_LABELS, available_splits, split_of
-from .services import MAX_SPLIT_SWITCHES, SwitchResult, get_weekly_plan, switch_split
+from .services import MAX_SPLIT_SWITCHES, SwitchResult, get_weekly_plan, switch_split, week_start_for
+from .tracking import WorkoutLinks, workout_links
 
 
 def _load_plan(request, today):
@@ -27,7 +28,12 @@ def this_week(request):
     if loaded is None:
         return redirect('onboarding')
     plan, is_starter = loaded
-    days = [{**day, 'is_today': index == today.weekday()} for index, day in enumerate(plan['days'])]
+    # The starter plan isn't saved, so there is nothing to start a workout from (ADR-014).
+    links = WorkoutLinks() if is_starter else workout_links(request.user, week_start_for(today), plan['days'])
+    days = [
+        {**day, 'is_today': index == today.weekday(), 'action': links.days.get(index)}
+        for index, day in enumerate(plan['days'])
+    ]
     trained = sum(1 for day in days if day['exercises'])
     split_key = None if is_starter else split_of(plan)
     return render(
@@ -41,6 +47,7 @@ def this_week(request):
             'split_label': SPLIT_LABELS.get(split_key or ''),
             'split_choices': [(key, SPLIT_LABELS[key]) for key in available_splits(trained)],
             'switches_left': max(0, MAX_SPLIT_SWITCHES - plan.get('switches', 0)),
+            'history_url': links.history_url,
         },
     )
 

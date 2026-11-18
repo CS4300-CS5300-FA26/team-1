@@ -42,7 +42,7 @@
                 <p class="h3 mb-0">{{ item.session.title }}</p>
                 <p class="text-muted text-sm mb-0">{{ item.sets }} set{{ item.sets|pluralize }}{% if item.volume %} &middot; {{ item.volume|floatformat:"0g" }} lb lifted{% endif %}</p>
               </div>
-              {% if item.session.planned_workout_id %}
+              {% if item.session.exercises %}
                 <a class="btn btn--secondary btn--sm" href="{% url 'workouts_session' item.session.pk %}">View<span class="visually-hidden"> {{ item.session.title }}</span></a>
               {% endif %}
             </div>
@@ -50,10 +50,10 @@
         {% endfor %}
       </ul>
     {% else %}
-      <p>No finished workouts yet. Start one from This Week and it will show up here.</p>
+      <p>No finished workouts yet. Start one from This Week and it will show up here once you finish it.</p>
     {% endif %}
     <div class="cluster mt-5">
-      <a class="btn btn--primary" href="{% url 'workouts_this_week' %}">Back to this week</a>
+      <a class="btn btn--primary" href="{% url 'this_week' %}">Back to this week</a>
     </div>
   </div>
 {% endblock %}
