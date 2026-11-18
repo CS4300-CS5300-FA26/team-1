@@ -21,6 +21,7 @@ conscious students. The application offers personalized workout splits, meal-pre
 * **Production Host:** GKE Autopilot on Google Cloud, `us-central1` (see [ADR-003](docs/adrs/adr-003.md))
 * **Infrastructure as Code:** Terraform (`terraform_scripts/`), state in a versioned GCS bucket
 * **Docker Image:** multi-stage build on `python:3.12-slim` with uv, running Gunicorn as a non-root user (UID 10001) with a read-only code tree (see `Dockerfile`)
+* **AI trainer:** OpenAI Chat Completions chooses the exercises in each weekly plan; optional, and off without an API key (see [ADR-014](docs/adrs/adr-014.md))
 * **Code quality:** ruff (lint and format), mypy with django-stubs (types), bandit and CodeQL (security scans), all enforced in CI
 
 ## Getting Started
@@ -43,6 +44,9 @@ SQLite is the default. To develop against PostgreSQL like production, set the `D
 To try Spotify linking and "Log in / Sign up with Spotify" locally, set the four `SPOTIFY_*` variables in `.env` (see
 `.env.example` and [Spotify integration](#spotify-integration)) and open the app at `http://127.0.0.1:8000`, not
 `localhost`: Spotify rejects `localhost` redirect URIs, and the session cookie must belong to the same host.
+
+To try the AI trainer locally, set `OPENAI_API_KEY` (and `OPENAI_MODEL`, `OPENAI_REASONING_EFFORT`) in your own `.env`, never
+in code or in `.env.example` (see [ADR-014](docs/adrs/adr-014.md)). With no key, plans come from the rule-based generator.
 
 ## Common Commands
 * `uv run python manage.py runserver` [Starts the Django development server]
@@ -123,9 +127,10 @@ Auth lives in the `accounts` app and uses Django's built-in `User` model, sessio
 | `/onboarding/` | `onboarding` | Login required | Onboarding questionnaire (story D-2). Users who already finished it are sent to `/dashboard/` |
 | `/dashboard/` | `dashboard` | Login required | Profile summary. Users who haven't finished onboarding are sent to `/onboarding/` |
 | `/users/` | `user_profile` | Login required | The signed-in user's own profile only, with the Spotify section: "Link to Spotify", or "Spotify connected" with the Spotify name, a live connection status, and "Disconnect Spotify" |
-| `/plans/this-week/` | `this_week` | Login required (onboarded users) | This week's workout plan and daily macro targets ([ADR-012](docs/adrs/adr-012.md)): seven days, Monday first, with each training day's exercises, sets, and reps, rest days, today marked, and today's calories, protein, carbs, and fat. Generated from the onboarding profile on the first visit of the week and saved, so it stays the same all week; a starter plan (not saved) is shown if generation fails |
 | `/plans/workout/` | `workout` | Login required (onboarded users) | Today's workout screen ([ADR-014](docs/adrs/adr-014.md)): today's exercises and a "Start today's workout" button; once started, the music result: the playlist now playing, a "Link Spotify for music" button, or why it couldn't play with an "Open in Spotify" link. Rest days say so |
 | `/plans/workout/start/` | `start_workout` | Login required, `POST` only; the Spotify part is rate limited | Start today's workout and play a Spotify playlist found for it on the user's active device ([ADR-014](docs/adrs/adr-014.md)). The workout starts whatever Spotify answers; the result is kept in the session and the user is redirected to `/plans/workout/` |
+| `/plans/this-week/` | `this_week` | Login required (onboarded users) | This week's workout plan and daily macro targets ([ADR-012](docs/adrs/adr-012.md)): seven days, Monday first, with each training day's exercises, sets, and reps, rest days, today marked, and today's calories, protein, carbs, and fat. Generated from the onboarding profile on the first visit of the week and saved, so it stays the same all week, and the workout split rotates each week ([ADR-013](docs/adrs/adr-013.md)) and an AI trainer chooses the exercises when it is switched on ([ADR-014](docs/adrs/adr-014.md)); a starter plan (not saved) is shown if generation fails |
+| `/plans/this-week/split/` | `change_split` | Login required (onboarded users), POST only | Switches this week's split to the one chosen, or to the next in rotation ("Switch it up"), up to 3 times a week; macro targets stay the same ([ADR-013](docs/adrs/adr-013.md)) |
 | `/plans/nutrition/` | `nutrition` | Login required (onboarded users) | The daily macro targets from this week's plan, the same ones the Meal Plan aims at |
 | `/meal-plan/` | `meal_plan` | Login required (onboarded users) | This week's meal plan (story D-5, [ADR-008](docs/adrs/adr-008.md)): a week strip to pick a day, that day's meals (chosen in onboarding) as cards with portion, kcal, and macros, each recipe's weighed ingredients and steps opening in place, the day's totals against its targets, the estimated grocery cost and an over-budget notice once grocery prices are connected (D-6), a notice for each fallback in use, and a "temporarily unavailable" state. `?day=` selects a day; `meal_plan.js` switches days without a reload |
 | `/meal-plan/new/` | `meal_plan_new` | Login required, `POST` only | Replace this week's plan with a different one |
@@ -139,7 +144,9 @@ Auth lives in the `accounts` app and uses Django's built-in `User` model, sessio
 The Gherkin scenarios live in [`features/user_auth.feature`](features/user_auth.feature) (successful registration, email
 already registered, wrong password) and [`features/onboarding.feature`](features/onboarding.feature) (complete
 onboarding, missing required answer, returning user skips onboarding), and [`features/weekly_plan.feature`](features/weekly_plan.feature) (see my plan, see my macro targets, plan generator
-down, and the meal plan aiming at my macro targets), and [`features/meal_plan.feature`](features/meal_plan.feature)
+down, and the meal plan aiming at my macro targets), [`features/workout_variety.feature`](features/workout_variety.feature)
+(a new split each week, picking or switching a split, the weekly switch limit, and splits that fit my equipment), [`features/workout_variety_ai.feature`](features/workout_variety_ai.feature)
+(the AI trainer builds my week, invalid or unavailable AI falls back, nothing personal is sent), and [`features/meal_plan.feature`]
 (plan within budget, budget too low, recipe service unavailable, plus the no-macro-targets and no-prices fallbacks), and
 [`features/grocery_list.feature`](features/grocery_list.feature) (ingredients combined, empty week, plus a missing-prices fallback), and
 [`features/spotify.feature`](features/spotify.feature) (link succeeds, user declines, unlink, log in with Spotify, sign up then set a password, the password prompt at every
@@ -148,8 +155,8 @@ log in never matching on email). Step
 definitions are in `features/steps/`. Nothing calls the network: the connectors to D-4 and D-6 use the stand-ins in
 `nutrition/testing.py`, Spotify's HTTP endpoints are replaced by `spotify.testing.FakeSpotify`, and the recipe catalog is loaded into the test database after migrations.
 Django tests are in `accounts/tests.py` (registration, login, logout), `core/test_onboarding.py` (onboarding, dashboard,
-and the login redirect), `core/tests.py` (models, health checks, and access control), `plans/tests.py` and `plans/test_macro_targets.py` (generator,
-starter fallback, saved weeks, the This Week and Nutrition pages, and the meal plan connector), and `nutrition/test_*.py` (meal
+and the login redirect), `core/tests.py` (models, health checks, and access control), `plans/tests.py`, `plans/test_workout_variety.py`, `plans/test_ai_trainer.py`, and `plans/test_macro_targets.py` (generator,
+starter fallback, saved weeks, split rotation and switching, the AI trainer, the This Week and Nutrition pages, and the meal plan connector), and `nutrition/test_*.py` (meal
 planner and pricing, recipe catalog and loader, connectors and fallbacks, Meal Plan page) and `grocery/test_*.py` (combining
 and amounts, costs, the Grocery List page, and the price file) and `spotify/test_*.py` (state checks, link/login/signup rules, token refresh and relink, encryption at
 rest, configuration, the status endpoint). Browser tests for the Meal Plan page and the Spotify flows are in `e2e/` (see Common Commands).
@@ -172,6 +179,7 @@ uv run python manage.py behave  # Gherkin scenarios
 | Redirects | The `next` parameter is only followed if it points at this site (no open redirects) |
 | Access control | `/onboarding/`, `/dashboard/`, `/users/`, and the plan, meal plan, and grocery pages require login and read only the signed-in user's own data; `/users/` previously listed every user's profile and now shows only the signed-in user's own |
 | Spotify sign-in | OAuth 2.0 Authorization Code flow on the server ([ADR-010](docs/adrs/adr-010.md)): a random, single-use, 10-minute `state` in the session; flows start with a CSRF-protected `POST`; accounts are matched on the Spotify user id only, never on the (unverified) email, and a refused sign-up gets a generic message that doesn't confirm whether an email has an account; the production access log omits query strings, so OAuth codes aren't logged; tokens are encrypted at rest with Fernet, never logged, and never sent to the browser; log in / sign up with Spotify and the connection test are rate limited |
+| AI trainer | The OpenAI key is read only on the server (`.env` locally, a mounted secret in production), sent only in the `Authorization` header, and never put in a page, log line, or error message; tests are given no key; each user is rate limited; nothing personal is sent, and the answer is validated against our own exercise library before it is saved ([ADR-014](docs/adrs/adr-014.md)) |
 
 ### Known gaps (planned follow-ups)
 * **Rate limiting is in place for login and registration** ([ADR-006](docs/adrs/adr-006.md)), but the
@@ -187,6 +195,13 @@ uv run python manage.py behave  # Gherkin scenarios
 
 * **Weekly plan and macro targets** ([ADR-012](docs/adrs/adr-012.md)): onboarding doesn't ask for age or sex, so the
   calorie estimate assumes age 25 and a sex-neutral constant; a profile change applies from the next week's plan.
+  Switching split keeps the week's saved macro targets, and full body is only offered to 3-day plans
+  ([ADR-013](docs/adrs/adr-013.md)).
+
+* **AI trainer** ([ADR-014](docs/adrs/adr-014.md)): off unless `OPENAI_API_KEY` is set. It only chooses exercises from our
+  own library, so variety is limited until the library grows, and the first visit of a week (or a split switch) can wait
+  up to 15 seconds for OpenAI before falling back to the rule-based plan. The production secret isn't set up yet, so
+  production uses the rule-based plan.
 
 * **Password hashing** uses Django's default; Argon2 is a possible upgrade (needs the `argon2-cffi` dependency).
 
@@ -309,3 +324,4 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 | Claude | Caleb Harris | Claude Code added the Gateway redirect from `fitpro.rockymountaintechlab.com` to `fitpro-app.tech`, removed the old host from the app routes and Django host settings, and recorded it in ADR-011 |
 | Claude | Caleb Harris | Claude Code applied the PR #36 review: connected the weekly plan's macro targets to the meal plan (`plans.macro_targets.PlanMacroTargets` and its tests, a Gherkin scenario, the pinned fallback tests), added `plans` to coverage, wrote ADR-012, and updated the README routes and docs; then kept the Daily Values until a week's plan is saved, linked the unavailable notice to This Week, and removed the finished connector note from AGENTS.md |
 | Claude | Savannah Harmony Swan | Claude Code implemented the workout playlist story: Spotify playlist search and start playback in `spotify/client.py`, `start_workout_music` and its rate limit, the `/plans/workout/` screen and start button, `features/workout_music.feature`, unit tests, ADR-014, and these README updates |
+| Claude | Nathan Galay | Claude (chat) implemented week-to-week workout variety (split styles, weekly rotation, switching, ADR-013) and the AI trainer that chooses exercises through OpenAI (`plans.ai_trainer`, the throttle scope and settings, tests, Gherkin scenarios, and ADR-014) |

@@ -44,6 +44,7 @@ def this_week(request):
             'is_starter': is_starter,
             'split_key': split_key,
             'split_label': SPLIT_LABELS.get(split_key or ''),
+            'ai_built': not is_starter and plan.get('source') == 'ai',
             'split_choices': [(key, SPLIT_LABELS[key]) for key in available_splits(trained)],
             'switches_left': max(0, MAX_SPLIT_SWITCHES - plan.get('switches', 0)),
         },

@@ -19,6 +19,7 @@ REGISTER_IP = 'register-ip'  # registration attempts from one IP
 SPOTIFY_AUTH_IP = 'spotify-auth-ip'  # Spotify log-in or sign-up flows started from one IP
 SPOTIFY_STATUS_USER = 'spotify-status'  # Spotify connection checks by one user
 SPOTIFY_PLAYBACK_USER = 'spotify-playback'  # workout playlists started by one user
+AI_TRAINER_USER = 'ai-trainer'  # AI trainer (OpenAI) calls by one user (ADR-014)
 
 THROTTLED_MESSAGE = 'Too many attempts. Please wait a while and try again.'
 
@@ -163,4 +164,10 @@ def acquire_spotify_playback(user_id):
     wait = acquire((SPOTIFY_PLAYBACK_USER, _digest(str(user_id)), 'spotify_playback'))
     if wait:
         logger.warning('Workout playlist start throttled for user=%s', _safe_for_log(user_id))
+       return wait
+def acquire_ai_trainer(user_id):
+    """Count a call to the AI trainer, which costs money. Returns 0 or the seconds to wait."""
+    wait = acquire((AI_TRAINER_USER, _digest(str(user_id)), 'ai_trainer'))
+    if wait:
+        logger.warning('AI trainer throttled for user=%s', _safe_for_log(user_id))
     return wait
