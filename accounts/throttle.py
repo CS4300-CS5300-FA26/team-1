@@ -164,7 +164,9 @@ def acquire_spotify_playback(user_id):
     wait = acquire((SPOTIFY_PLAYBACK_USER, _digest(str(user_id)), 'spotify_playback'))
     if wait:
         logger.warning('Workout playlist start throttled for user=%s', _safe_for_log(user_id))
-       return wait
+    return wait
+
+
 def acquire_ai_trainer(user_id):
     """Count a call to the AI trainer, which costs money. Returns 0 or the seconds to wait."""
     wait = acquire((AI_TRAINER_USER, _digest(str(user_id)), 'ai_trainer'))
