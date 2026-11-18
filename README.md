@@ -47,8 +47,10 @@ To try Spotify linking and "Log in / Sign up with Spotify" locally, set the four
 ## Common Commands
 * `uv run python manage.py runserver` [Starts the Django development server]
 * `uv run python manage.py makemigrations` [Creates new database migrations]
-* `uv run python manage.py migrate` [Applies database migrations, then reloads the recipe catalog]
+* `uv run python manage.py migrate` [Applies database migrations, then reloads the recipe and exercise catalogs]
 * `uv run python manage.py load_recipe_catalog` [Reloads recipes from `nutrition/data/recipe_catalog.json`; `--file` loads another file]
+* `uv run python manage.py load_exercise_catalog` [Reloads exercises from `workouts/data/exercise_catalog.json`; `--file` loads another file]
+* `uv run python manage.py build_exercise_catalog path/to/exercises.json` [Rebuilds that catalog from the upstream dataset: English text only, no images or video ([ADR-014](docs/adrs/adr-014.md))]
 * `uv run python manage.py test` [Runs Django tests]
 * `uv run python manage.py behave` [Runs the Gherkin acceptance scenarios in `features/`]
 * `E2E=1 uv run python manage.py test e2e` [Runs the Playwright browser tests in `e2e/`; run `uv run playwright install chromium` once first]
@@ -91,7 +93,7 @@ colours, so contrast and dark mode stay correct.
 | Buttons | `btn` plus `btn--primary`, `btn--secondary`, `btn--ghost`, or `btn--danger`; modifiers `btn--sm`, `btn--block`. Use `<button>` for actions and `<a class="btn">` for navigation |
 | Forms | `form`, `form-field`, `form-label`, `form-input`, `form-help`, `form-error`, `form-fieldset`, `choice-list`, `choice`. `{% include "core/_form_fields.html" %}` renders a whole Django form with these classes and keeps Django's `aria-describedby` / `aria-invalid` wiring |
 | Feedback | `alert` plus `alert--error`, `alert--success`, `alert--warning`, or `alert--info` (add `role="alert"` or `role="status"`) |
-| Content | `hero`, `hero__lede`, `data-list` (on a `<dl>`), `badge`, `connection-pill` with `connection-pill__dot` / `connection-pill__name` (a linked service and its health; set `data-state` to `off`, `unknown`, `checking` (pulsing grey), `ok` (green), or `error` (red), and always say the state in text too), `media-list` with `media` / `media__thumb` / `media__body` / `media__eyebrow` / `media__title` / `media__meta` (rows of thumbnail + text; add `media--link` and `aria-current="true"` for a selectable row), `day-picker` (step through or jump to a day of the week; `day-picker__name` / `__date` / `__today` stack the weekday, date, and a "Today" label), `split` (list beside details), `panel` / `panel--sticky` (a side panel that stays in view and scrolls on its own), `toolbar`, `meal-stack` / `meal-card` with `meal-card__header` / `__heading` / `__title` / `__meta` / `__recipe` (a planned meal with its recipe in a `disclosure` underneath), `split--main-first` with `split__main` / `split__aside` (summary above the main content on phones, beside it on wide screens), `macro-list` / `macro-list__row` / `macro-list__meter` (grams against targets), `stat--start`, `alert__list` (bullets inside an alert), `food-image` (course-tinted placeholder art), `chip-list` / `chip`, `macro-grid`, `tabs` (with `meal_plan.js`), `ingredient-grid` (add `ingredient-grid--weighed` with an `ingredient-grid__amount` per item for a weight at the end of each line), `steps`, `status-badge`, `eyebrow` |
+| Content | `hero`, `hero__lede`, `data-list` (on a `<dl>`), `badge`, `connection-pill` with `connection-pill__dot` / `connection-pill__name` (a linked service and its health; set `data-state` to `off`, `unknown`, `checking` (pulsing grey), `ok` (green), or `error` (red), and always say the state in text too), `media-list` with `media` / `media__thumb` / `media__body` / `media__eyebrow` / `media__title` / `media__meta` (rows of thumbnail + text; add `media--link` and `aria-current="true"` for a selectable row), `day-picker` (step through or jump to a day of the week; `day-picker__name` / `__date` / `__today` stack the weekday, date, and a "Today" label), `split` (list beside details), `panel` / `panel--sticky` (a side panel that stays in view and scrolls on its own), `toolbar`, `meal-stack` / `meal-card` with `meal-card__header` / `__heading` / `__title` / `__meta` / `__recipe` (a planned meal with its recipe in a `disclosure` underneath), `split--main-first` with `split__main` / `split__aside` (summary above the main content on phones, beside it on wide screens), `macro-list` / `macro-list__row` / `macro-list__meter` (grams against targets), `stat--start`, `alert__list` (bullets inside an alert), `food-image` (course-tinted placeholder art), `chip-list` / `chip`, `macro-grid`, `tabs` (with `meal_plan.js`), `set-row` / `set-row__label` (one set to log: label, then reps and weight fields in a row), `ingredient-grid` (add `ingredient-grid--weighed` with an `ingredient-grid__amount` per item for a weight at the end of each line), `steps`, `status-badge`, `eyebrow` |
 | Report and charts | `report-section`, `hero-figure` (one per page), `meter` (one value against a limit), `bar` / `bar-list` (SVG bars; widths as SVG attributes), `stat-row` / `stat-tile`, `data-table` inside `table-scroll` (focusable, labelled region), `disclosure-list` / `disclosure`, `messages` (Django messages, rendered by `base.html`), `stat` / `stat__value` / `stat__label` (a headline number) |
 | Utilities | `text-muted`, `text-center`, `text-sm`, `h3` (h3 size on another heading level), `mt-0`, `mb-0`, `mt-3`, `mt-4`, `mt-5`, `visually-hidden` |
 
@@ -132,6 +134,12 @@ Auth lives in the `accounts` app and uses Django's built-in `User` model, sessio
 | `/spotify/disconnect/` | `spotify_unlink` | Login required, `POST` only | Delete the Spotify link and tokens; refused if Spotify is the user's only way to log in |
 | `/spotify/status/` | `spotify_status` | Login required, rate limited | JSON connection test for the profile page (`GET /v1/me` through the token helper); never returns tokens. Over the limit it answers 429 with `Retry-After` and `state: rate_limited`, which the page shows as "not checked" without the reconnect help |
 | `/grocery-list/` | `grocery_list` | Login required (onboarded users) | This week's grocery list (story D-6, [ADR-009](docs/adrs/adr-009.md)): the meal plan's ingredients combined (rice on Monday and Wednesday is listed once, in cups), with the amount to buy, an estimated cost per item and for the week, an over-budget notice, a note on how the list was made, and the unmeasured pantry items. With no meal plan this week, it asks the user to create one first. It reads only the signed-in user's own plan and never creates one |
+| `/workouts/` | `workouts_this_week` | Login required (onboarded users) | Workouts This Week (story D-3 and exercise tracking, [ADR-014](docs/adrs/adr-014.md)): the weekly split built from the user's goal, experience, and equipment, with rest days, each day's exercises, a Start or Continue button, and a form for 3, 4, or 5 training days. This overlaps `/plans/this-week/`; the team has yet to decide which page owns D-3 |
+| `/workouts/new/` | `workouts_new` | Login required, `POST` only | Replace this week's workout plan with a different selection of exercises |
+| `/workouts/preferences/` | `workouts_preferences` | Login required, `POST` only | Save the number of training days a week and remake the plan |
+| `/workouts/start/<id>/` | `workouts_start` | Login required, `POST` only, own workouts of the current week | Start (or go back to) the session for a planned workout |
+| `/workouts/session/<id>/` | `workouts_session` | Login required, own sessions only (others get 404) | Log a workout: how-to steps, reps and weight per set (minutes for cardio), a rest timer, save or finish |
+| `/workouts/history/` | `workouts_history` | Login required | Progress: workouts done against planned and total volume for the last 8 weeks, and recently finished workouts |
 
 ### Acceptance scenarios
 The Gherkin scenarios live in [`features/user_auth.feature`](features/user_auth.feature) (successful registration, email
@@ -140,6 +148,7 @@ onboarding, missing required answer, returning user skips onboarding), and [`fea
 down, and the meal plan aiming at my macro targets), and [`features/meal_plan.feature`](features/meal_plan.feature)
 (plan within budget, budget too low, recipe service unavailable, plus the no-macro-targets and no-prices fallbacks), and
 [`features/grocery_list.feature`](features/grocery_list.feature) (ingredients combined, empty week, plus a missing-prices fallback), and
+[`features/workouts.feature`](features/workouts.feature) (a split that fits the equipment, no equipment, choosing training days, logging and finishing a workout, finishing empty, privacy), and
 [`features/spotify.feature`](features/spotify.feature) (link succeeds, user declines, unlink, log in with Spotify, sign up then set a password, the password prompt at every
 Spotify sign-in for a Spotify-only account, and
 log in never matching on email). Step
@@ -148,7 +157,7 @@ definitions are in `features/steps/`. Nothing calls the network: the connectors 
 Django tests are in `accounts/tests.py` (registration, login, logout), `core/test_onboarding.py` (onboarding, dashboard,
 and the login redirect), `core/tests.py` (models, health checks, and access control), `plans/tests.py` and `plans/test_macro_targets.py` (generator,
 starter fallback, saved weeks, the This Week and Nutrition pages, and the meal plan connector), and `nutrition/test_*.py` (meal
-planner and pricing, recipe catalog and loader, connectors and fallbacks, Meal Plan page) and `grocery/test_*.py` (combining
+planner and pricing, recipe catalog and loader, connectors and fallbacks, Meal Plan page) and `workouts/test_*.py` (exercise catalog and loader, planner, plans and sessions, progress, pages and access control) and `grocery/test_*.py` (combining
 and amounts, costs, the Grocery List page, and the price file) and `spotify/test_*.py` (state checks, link/login/signup rules, token refresh and relink, encryption at
 rest, configuration, the status endpoint). Browser tests for the Meal Plan page and the Spotify flows are in `e2e/` (see Common Commands).
 
@@ -169,6 +178,7 @@ uv run python manage.py behave  # Gherkin scenarios
 | Logout | `POST` only, so a third-party page cannot log a user out with a link or image |
 | Redirects | The `next` parameter is only followed if it points at this site (no open redirects) |
 | Access control | `/onboarding/`, `/dashboard/`, `/users/`, and the plan, meal plan, and grocery pages require login and read only the signed-in user's own data; `/users/` previously listed every user's profile and now shows only the signed-in user's own |
+| Workout data | Every `/workouts/` page requires login and finds plans and sessions through the signed-in user, so another member's workout is a 404; starting, saving, regenerating, and changing days are `POST` with CSRF. Posted set values are accepted only for the rows the workout has, and reps, weight, and minutes are bounded in the form and by database `CHECK` constraints ([ADR-014](docs/adrs/adr-014.md)) |
 | Spotify sign-in | OAuth 2.0 Authorization Code flow on the server ([ADR-010](docs/adrs/adr-010.md)): a random, single-use, 10-minute `state` in the session; flows start with a CSRF-protected `POST`; accounts are matched on the Spotify user id only, never on the (unverified) email, and a refused sign-up gets a generic message that doesn't confirm whether an email has an account; the production access log omits query strings, so OAuth codes aren't logged; tokens are encrypted at rest with Fernet, never logged, and never sent to the browser; log in / sign up with Spotify and the connection test are rate limited |
 
 ### Known gaps (planned follow-ups)
@@ -186,6 +196,8 @@ uv run python manage.py behave  # Gherkin scenarios
 * **Weekly plan and macro targets** ([ADR-012](docs/adrs/adr-012.md)): onboarding doesn't ask for age or sex, so the
   calorie estimate assumes age 25 and a sex-neutral constant; a profile change applies from the next week's plan.
 
+* **Workouts (D-3 and tracking)** ([ADR-014](docs/adrs/adr-014.md)): the plan is rule-based, with no AI agent, and it doesn't yet adjust from logged results beyond prefilling the last weight. Exercises are hand-picked from the catalog and the sets, reps, and rest rules haven't been reviewed by a trainer. There is no exercise swapping or catalog browsing, no images or video (the dataset's Gym visual media isn't licensed to us), and "today" and the week boundary use the server's time zone (UTC). It overlaps the `plans` app's This Week page ([ADR-012](docs/adrs/adr-012.md)); the meal plan's "unavailable" notice and the dashboard still link to that page.
+
 * **Password hashing** uses Django's default; Argon2 is a possible upgrade (needs the `argon2-cffi` dependency).
 
 ## Spotify integration
@@ -202,6 +214,9 @@ control playback. The `spotify` app uses Spotify's OAuth 2.0 Authorization Code 
   it, and each one has to be added under *User Management* in the dashboard first.
 * **For later features:** call `spotify.services.get_access_token(user)` for a valid access token (it refreshes and
   handles revocation). Never read `SpotifyAccount.access_token` directly, and never log or render a token.
+
+## Third-party data
+* **Exercise catalog** (`workouts/data/exercise_catalog.json`): exercise names, muscles, and instruction text from the exercises dataset, MIT License, Copyright (c) 2026 Hasan Emir Yıldırım ([licence text](workouts/data/LICENSE-exercise-data.txt)). The dataset's images and videos belong to [Gym visual](https://gymvisual.com/) and are not covered by that licence. They are not in this repository, and the catalog leaves them out ([ADR-014](docs/adrs/adr-014.md)).
 
 ## Contributing
 * Read [AGENTS.md](AGENTS.md) first: it is the team's working agreement (security rules, code standards, ADRs, frontend theme and accessibility, workflow) for humans and AI coding tools alike.
@@ -302,3 +317,4 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 | Claude | Caleb Harris | Claude Code planned the move to `fitpro-app.tech`: ADR-011 (two-step, no-downtime cutover), the ADR-004 update note, and the README, deployment doc, tfvars example, and architecture diagram updates; and switched Spotify on in production (secret mounts and ConfigMap values) |
 | Claude | Caleb Harris | Claude Code added the Gateway redirect from `fitpro.rockymountaintechlab.com` to `fitpro-app.tech`, removed the old host from the app routes and Django host settings, and recorded it in ADR-011 |
 | Claude | Caleb Harris | Claude Code applied the PR #36 review: connected the weekly plan's macro targets to the meal plan (`plans.macro_targets.PlanMacroTargets` and its tests, a Gherkin scenario, the pinned fallback tests), added `plans` to coverage, wrote ADR-012, and updated the README routes and docs; then kept the Daily Values until a week's plan is saved, linked the unavailable notice to This Week, and removed the finished connector note from AGENTS.md |
+| Claude | Fletcher McMeans | Claude built the `workouts` app for story D-3 and exercise tracking: a text-only exercise catalog from the exercises dataset with a loader and build command, a rule-based weekly split planner with hand-picked exercise pools, stored plans, the Workouts This Week page, workout logging with a rest timer, and progress pages, unit/Gherkin tests, and ADR-014; then rebased it onto `main` |

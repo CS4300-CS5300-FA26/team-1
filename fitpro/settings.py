@@ -70,6 +70,7 @@ INSTALLED_APPS = [
     'nutrition',
     'grocery',
     'spotify',
+    'workouts',
 ]
 
 # behave-django runs the Gherkin scenarios in features/ (`manage.py behave`). It is a dev

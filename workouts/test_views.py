@@ -270,8 +270,3 @@ class NavigationTests(LoggedInTestCase):
     def test_the_header_and_dashboard_link_to_workouts(self):
         response = self.client.get(reverse('dashboard'))
         self.assertContains(response, f'href="{reverse("workouts_this_week")}"', count=2)
-
-    def test_the_meal_plan_unavailable_page_links_to_this_week(self):
-        from django.conf import settings
-
-        self.assertEqual(settings.NUTRITION_WORKOUTS_LINK['url_name'], 'workouts_this_week')

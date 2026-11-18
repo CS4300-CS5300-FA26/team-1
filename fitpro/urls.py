@@ -34,4 +34,5 @@ urlpatterns = [
     path('plans/', include('plans.urls')),
     path('', include('nutrition.urls')),
     path('', include('grocery.urls')),
+    path('', include('workouts.urls')),
 ]

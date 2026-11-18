@@ -28,7 +28,7 @@ dev = [
 ]
 
 [tool.coverage.run]
-source = ["core", "fitpro", "accounts", "plans", "nutrition", "grocery", "spotify"]
+source = ["core", "fitpro", "accounts", "plans", "nutrition", "grocery", "spotify", "workouts"]
 omit = ["*/asgi.py", "*/wsgi.py", "*/migrations/*", "*/tests.py", "*/test_*.py"]
 
 [tool.coverage.report]
