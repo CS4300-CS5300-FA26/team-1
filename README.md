@@ -39,7 +39,7 @@ conscious students. The application offers personalized workout splits, meal-pre
 SQLite is the default. To develop against PostgreSQL like production, set the `DB_*` variables in `.env` (see
 [`docs/configurations/project_initial_setup.md`](docs/configurations/project_initial_setup.md)).
 > [!tip]
-> In DevEdu, port 8000 isn't available, so do this instead: `uv run python manage.py runserver 0.0.0.0:3000`
+> In DevEdu, port 8000 isn't available, so do this instead: ``uv run python manage.py runserver 0.0.0.0:3000
 
 To try Spotify linking and "Log in / Sign up with Spotify" locally, set the four `SPOTIFY_*` variables in `.env` (see
 `.env.example` and [Spotify integration](#spotify-integration)) and open the app at `http://127.0.0.1:8000`, not
