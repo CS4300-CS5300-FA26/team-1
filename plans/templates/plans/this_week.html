@@ -10,6 +10,9 @@
     {% if split_label %}
       <p>Split this week: <span class="badge">{{ split_label }}</span></p>
     {% endif %}
+    {% if ai_built %}
+      <p class="text-muted">Our AI trainer chose the exercises in this plan and we checked them against your equipment.</p>
+    {% endif %}
     {% include "plans/_macros.html" %}
     <div class="stack mt-5">
       {% for day in days %}

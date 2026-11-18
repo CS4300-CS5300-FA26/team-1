@@ -177,6 +177,7 @@ AUTH_THROTTLE = {
     'register': (10, 60 * 60),  # registration attempts per IP
     'spotify_auth': (20, 15 * 60),  # "Log in / Sign up with Spotify" flows started per IP (ADR-010)
     'spotify_status': (30, 5 * 60),  # Spotify connection checks per user; each one calls Spotify's API
+    'ai_trainer': (10, 60 * 60),  # AI trainer calls per user per hour; each one costs money (ADR-014)
 }
 
 
@@ -202,6 +203,16 @@ SPOTIFY_SCOPES = [
     'user-modify-playback-state',
     'user-read-currently-playing',
 ]
+
+# AI trainer (ADR-014): OpenAI chooses the exercises in each weekly plan. The key is a secret. It lives only in .env
+# locally and in Secret Manager in production, is read only here, and is never sent to the browser or logged.
+# Leave it empty to switch the AI trainer off; plans then come from the rule-based generator alone.
+# Tests and scenarios never get a key, so they can't call OpenAI.
+OPENAI_API_KEY = '' if TESTING else read_secret('openai-api-key', 'OPENAI_API_KEY', default='')
+OPENAI_MODEL = env('OPENAI_MODEL', default='gpt-6-luna') or 'gpt-6-luna'
+# How hard a reasoning model such as gpt-6-luna thinks before answering: none, low, medium, high, xhigh, or max.
+# "low" is quick enough for a page to wait on. Leave it empty for models that don't take this setting.
+OPENAI_REASONING_EFFORT = env('OPENAI_REASONING_EFFORT', default='low')
 
 
 # Meal planning (story D-5, ADR-008). The meal plan talks to the features built alongside it through connectors,
