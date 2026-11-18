@@ -39,7 +39,7 @@ conscious students. The application offers personalized workout splits, meal-pre
 SQLite is the default. To develop against PostgreSQL like production, set the `DB_*` variables in `.env` (see
 [`docs/configurations/project_initial_setup.md`](docs/configurations/project_initial_setup.md)).
 > [!tip]
-> In DevEdu, port 8000 isn't available, so do this instead: `uv run python manage.py runserver 0.0.0.0:3000`
+> In DevEdu, port 8000 isn't available, so do this instead: ``uv run python manage.py runserver 0.0.0.0:3000
 
 To try Spotify linking and "Log in / Sign up with Spotify" locally, set the four `SPOTIFY_*` variables in `.env` (see
 `.env.example` and [Spotify integration](#spotify-integration)) and open the app at `http://127.0.0.1:8000`, not
@@ -127,6 +127,8 @@ Auth lives in the `accounts` app and uses Django's built-in `User` model, sessio
 | `/onboarding/` | `onboarding` | Login required | Onboarding questionnaire (story D-2). Users who already finished it are sent to `/dashboard/` |
 | `/dashboard/` | `dashboard` | Login required | Profile summary. Users who haven't finished onboarding are sent to `/onboarding/` |
 | `/users/` | `user_profile` | Login required | The signed-in user's own profile only, with the Spotify section: "Link to Spotify", or "Spotify connected" with the Spotify name, a live connection status, and "Disconnect Spotify" |
+| `/plans/workout/` | `workout` | Login required (onboarded users) | Today's workout screen ([ADR-015](docs/adrs/adr-015.md)): today's exercises and a "Start today's workout" button; once started, the music result: the playlist now playing, a "Link Spotify for music" button, or why it couldn't play with an "Open in Spotify" link. Rest days say so |
+| `/plans/workout/start/` | `start_workout` | Login required, `POST` only; the Spotify part is rate limited | Start today's workout and play a Spotify playlist found for it on the user's active device ([ADR-014](docs/adrs/adr-014.md)). The workout starts whatever Spotify answers; the result is kept in the session and the user is redirected to `/plans/workout/` |
 | `/plans/this-week/` | `this_week` | Login required (onboarded users) | This week's workout plan and daily macro targets ([ADR-012](docs/adrs/adr-012.md)): seven days, Monday first, with each training day's exercises, sets, and reps, rest days, today marked, and today's calories, protein, carbs, and fat. Generated from the onboarding profile on the first visit of the week and saved, so it stays the same all week, and the workout split rotates each week ([ADR-013](docs/adrs/adr-013.md)) and an AI trainer chooses the exercises when it is switched on ([ADR-014](docs/adrs/adr-014.md)); a starter plan (not saved) is shown if generation fails |
 | `/plans/this-week/split/` | `change_split` | Login required (onboarded users), POST only | Switches this week's split to the one chosen, or to the next in rotation ("Switch it up"), up to 3 times a week; macro targets stay the same ([ADR-013](docs/adrs/adr-013.md)) |
 | `/plans/nutrition/` | `nutrition` | Login required (onboarded users) | The daily macro targets from this week's plan, the same ones the Meal Plan aims at |
@@ -217,6 +219,10 @@ control playback. The `spotify` app uses Spotify's OAuth 2.0 Authorization Code 
   it, and each one has to be added under *User Management* in the dashboard first.
 * **For later features:** call `spotify.services.get_access_token(user)` for a valid access token (it refreshes and
   handles revocation). Never read `SpotifyAccount.access_token` directly, and never log or render a token.
+**Workout playlist** ([ADR-014](docs/adrs/adr-014.md)): playback only works for Spotify **Premium** accounts with a
+  Spotify app open on some device; everyone else gets an "Open in Spotify" link. The playlist is the first public
+  playlist Spotify's search returns for the workout's name, not one built for the user, and starting a workout isn't
+  recorded anywhere yet.
 
 ## Contributing
 * Read [AGENTS.md](AGENTS.md) first: it is the team's working agreement (security rules, code standards, ADRs, frontend theme and accessibility, workflow) for humans and AI coding tools alike.
@@ -317,4 +323,5 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 | Claude | Caleb Harris | Claude Code planned the move to `fitpro-app.tech`: ADR-011 (two-step, no-downtime cutover), the ADR-004 update note, and the README, deployment doc, tfvars example, and architecture diagram updates; and switched Spotify on in production (secret mounts and ConfigMap values) |
 | Claude | Caleb Harris | Claude Code added the Gateway redirect from `fitpro.rockymountaintechlab.com` to `fitpro-app.tech`, removed the old host from the app routes and Django host settings, and recorded it in ADR-011 |
 | Claude | Caleb Harris | Claude Code applied the PR #36 review: connected the weekly plan's macro targets to the meal plan (`plans.macro_targets.PlanMacroTargets` and its tests, a Gherkin scenario, the pinned fallback tests), added `plans` to coverage, wrote ADR-012, and updated the README routes and docs; then kept the Daily Values until a week's plan is saved, linked the unavailable notice to This Week, and removed the finished connector note from AGENTS.md |
+| Claude | Savannah Harmony Swan | Claude Code implemented the workout playlist story: Spotify playlist search and start playback in `spotify/client.py`, `start_workout_music` and its rate limit, the `/plans/workout/` screen and start button, `features/workout_music.feature`, unit tests, ADR-015, and these README updates |
 | Claude | Nathan Galay | Claude (chat) implemented week-to-week workout variety (split styles, weekly rotation, switching, ADR-013) and the AI trainer that chooses exercises through OpenAI (`plans.ai_trainer`, the throttle scope and settings, tests, Gherkin scenarios, and ADR-014) |

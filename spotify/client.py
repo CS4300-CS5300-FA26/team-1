@@ -10,6 +10,7 @@ Nothing here logs a token, a code, or a response body. Errors carry Spotify's sh
 import base64
 import json
 import logging
+import re
 from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -22,11 +23,23 @@ logger = logging.getLogger('spotify')
 AUTHORIZE_URL = 'https://accounts.spotify.com/authorize'
 TOKEN_URL = 'https://accounts.spotify.com/api/token'  # noqa: S105  # nosec B105: an endpoint URL, not a secret
 ME_URL = 'https://api.spotify.com/v1/me'
+SEARCH_URL = 'https://api.spotify.com/v1/search'
+PLAY_URL = 'https://api.spotify.com/v1/me/player/play'
 TIMEOUT_SECONDS = 10
+
+# Spotify ids are base-62. Checking keeps anything else out of the URIs and links built from them.
+_SPOTIFY_ID = re.compile(r'[A-Za-z0-9]{1,64}')
 
 
 class SpotifyError(Exception):
-    """Spotify answered with something we can't use."""
+    """Spotify answered with something we can't use.
+
+    `reason` is the Web API's short reason code when it sent one (for example PREMIUM_REQUIRED or NO_ACTIVE_DEVICE).
+    """
+
+    def __init__(self, message: str = '', reason: str = ''):
+        super().__init__(message)
+        self.reason = reason
 
 
 class SpotifyUnavailable(SpotifyError):
@@ -60,6 +73,23 @@ class Profile:
     id: str
     display_name: str
     email: str
+
+
+@dataclass(frozen=True)
+class Playlist:
+    """A playlist found by search. Built only from a validated id, so its URI and link are always well formed."""
+
+    id: str
+    name: str
+
+    @property
+    def uri(self) -> str:
+        return f'spotify:playlist:{self.id}'
+
+    @property
+    def url(self) -> str:
+        """The playlist on open.spotify.com, which opens the Spotify app or web player."""
+        return f'https://open.spotify.com/playlist/{self.id}'
 
 
 def authorize_url(state: str, scopes: list[str]) -> str:
@@ -100,6 +130,41 @@ def current_user(access_token: str) -> Profile:
         display_name=display_name if isinstance(display_name, str) else '',
         email=email.strip().lower() if isinstance(email, str) else '',
     )
+
+
+def search_playlist(access_token: str, query: str) -> Playlist | None:
+    """The first playlist Spotify's search returns for `query`, or None if there is none.
+
+    https://developer.spotify.com/documentation/web-api/reference/search
+    """
+    url = f'{SEARCH_URL}?{urlencode({"q": query, "type": "playlist", "limit": 5})}'
+    data = _send(Request(url, headers={'Authorization': f'Bearer {access_token}'}))  # noqa: S310 (fixed https URL)
+    playlists = data.get('playlists')
+    items = playlists.get('items') if isinstance(playlists, dict) else None
+    # Spotify has been seen to put null entries in search results, so skip anything that isn't a usable playlist.
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict):
+            continue
+        playlist_id, name = item.get('id'), item.get('name')
+        if isinstance(playlist_id, str) and _SPOTIFY_ID.fullmatch(playlist_id) and isinstance(name, str) and name:
+            return Playlist(id=playlist_id, name=name)
+    return None
+
+
+def start_playback(access_token: str, context_uri: str) -> None:
+    """Play `context_uri` on the user's active Spotify device.
+
+    Spotify only allows this for Premium accounts (403, reason PREMIUM_REQUIRED) and answers 404 (NO_ACTIVE_DEVICE)
+    when no device is active. Both come back as SpotifyError with `reason` set.
+    https://developer.spotify.com/documentation/web-api/reference/start-a-users-playback
+    """
+    request = Request(  # noqa: S310 (fixed https URL)
+        PLAY_URL,
+        data=json.dumps({'context_uri': context_uri}).encode(),
+        headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'},
+        method='PUT',
+    )
+    _send(request)
 
 
 def _token_request(form: dict[str, str]) -> Tokens:
@@ -151,14 +216,17 @@ def _http_error(exc: HTTPError) -> SpotifyError:
     error = body.get('error') if isinstance(body, dict) else None
     # Token endpoint errors are {"error": "invalid_grant", ...}; Web API errors are {"error": {"status", "message"}}.
     code = error if isinstance(error, str) else ''
+    # Player errors add a reason, e.g. {"error": {"status": 403, "message": "...", "reason": "PREMIUM_REQUIRED"}}.
+    reason = error.get('reason') if isinstance(error, dict) else None
     url = exc.url.split('?')[0] if exc.url else ''
-    # The error code comes from the network, so keep only printable characters (no CR/LF log injection).
+    # These come from the network, so keep only printable characters (no CR/LF log injection).
     safe_code = ''.join(ch for ch in code[:40] if ch.isprintable())
-    logger.warning('Spotify request to %s failed with HTTP %s %s', url, exc.code, safe_code)
+    safe_reason = ''.join(ch for ch in reason[:40] if ch.isprintable()) if isinstance(reason, str) else ''
+    logger.warning('Spotify request to %s failed with HTTP %s %s', url, exc.code, safe_code or safe_reason)
     if code == 'invalid_grant':
         return InvalidGrant('Spotify rejected the grant.')
     if exc.code == 401:
         return SpotifyUnauthorized('Spotify rejected the access token.')
     if exc.code == 429 or exc.code >= 500:
-        return SpotifyUnavailable(f'Spotify answered HTTP {exc.code}.')
-    return SpotifyError(f'Spotify answered HTTP {exc.code}.')
+        return SpotifyUnavailable(f'Spotify answered HTTP {exc.code}.', reason=safe_reason)
+    return SpotifyError(f'Spotify answered HTTP {exc.code}.', reason=safe_reason)
