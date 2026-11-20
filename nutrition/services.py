@@ -3,6 +3,8 @@
 * `current_meal_plan`: this week's plan for a user. The stored plan is reused while what it was made from (budget,
   meals, daily targets, whether prices are connected) is unchanged; otherwise a new one is made and stored.
 * `new_meal_plan`: replace this week's plan with a different one.
+* `saved_meal_plan`: this week's stored plan if it still matches what it would be made from, and never a new one.
+  The Meal Plan page tries it first, so it only asks for a plan to be made (rate limited, ADR-016) when needed.
 * `stored_week_plan`: for D-6 (grocery list) and other features: the stored plan, read-only. None when the user has
   no plan this week (D-6's "Empty week" scenario).
 
@@ -37,7 +39,11 @@ PRICES_NOT_CONNECTED = 'not_connected'  # no prices at all (D-6 not connected ye
 
 @dataclass(frozen=True)
 class MealPlanResult:
-    """This week's plan and how it was made, for the page. `plan` is None when recipes are unavailable."""
+    """This week's plan and how it was made, for the page.
+
+    `plan` is None when recipes are unavailable, or when `not_saved`: no stored plan matches the user's current
+    settings and making one was not allowed (`saved_meal_plan`).
+    """
 
     week_start: date
     plan: WeekPlan | None
@@ -45,10 +51,11 @@ class MealPlanResult:
     prices: str = PRICES_NOT_CONNECTED
     budget: Decimal | None = None
     cost: Decimal | None = None
+    not_saved: bool = False
 
     @property
     def unavailable(self) -> bool:
-        return self.plan is None
+        return self.plan is None and not self.not_saved
 
     @property
     def budget_applied(self) -> bool:
@@ -79,6 +86,11 @@ def new_meal_plan(user, meals, budget: Decimal | None, today: date | None = None
     return _meal_plan(user, tuple(meals), budget, week_start(today), regenerate=True)
 
 
+def saved_meal_plan(user, meals, budget: Decimal | None, today: date | None = None) -> MealPlanResult:
+    """Like `current_meal_plan`, but never runs the planner: `not_saved` instead of making a missing or stale plan."""
+    return _meal_plan(user, tuple(meals), budget, week_start(today), regenerate=False, generate=False)
+
+
 def stored_week_plan(user, monday: date | None = None) -> WeekPlan | None:
     """The user's stored plan for the week starting `monday` (this week by default), or None if there isn't one.
 
@@ -95,7 +107,9 @@ def stored_week_plan(user, monday: date | None = None) -> WeekPlan | None:
     return _load(stored, recipes)
 
 
-def _meal_plan(user, meals: tuple[str, ...], budget: Decimal | None, monday: date, regenerate: bool) -> MealPlanResult:
+def _meal_plan(
+    user, meals: tuple[str, ...], budget: Decimal | None, monday: date, regenerate: bool, generate: bool = True
+) -> MealPlanResult:
     budget = max(budget, Decimal(0)) if budget is not None else None
     targets, personal = _targets(user, monday)
     try:
@@ -113,6 +127,8 @@ def _meal_plan(user, meals: tuple[str, ...], budget: Decimal | None, monday: dat
     plan = None
     if stored is not None and stored.inputs == inputs and not regenerate:
         plan = _load(stored, {r.id: r for r in recipes})
+    if plan is None and not generate:
+        return MealPlanResult(week_start=monday, plan=None, not_saved=True)
     if plan is None:
         avoid = _load_ids(stored) if regenerate and stored is not None else set()
         try:

@@ -5,6 +5,7 @@ the onboarding questionnaire after login is tested in core/test_onboarding.py.
 """
 
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from unittest import mock, skipUnless
@@ -20,7 +21,7 @@ from core.models import UserProfile
 
 from .forms import LoginForm, RegisterForm
 from .models import ThrottleCounter
-from .throttle import acquire
+from .throttle import MEAL_PLAN_RUNNING_ALL, MEAL_PLAN_RUNNING_USER, acquire, meal_plan_slot
 
 User = get_user_model()
 PASSWORD = 'Tr4ining-Plan-2026!'
@@ -422,6 +423,88 @@ class ThrottleConcurrencyTests(TransactionTestCase):
             results = list(pool.map(lambda _: attempt(), range(20)))
         self.assertEqual(results.count(0), limit)
         self.assertEqual(ThrottleCounter.objects.get(scope='login-id', key='k').count, limit)
+
+
+MEAL_PLAN_SLOTS = {'per_user': 1, 'total': 2, 'lease_seconds': 120, 'retry_after': 15}
+
+
+@override_settings(MEAL_PLAN_CONCURRENCY=MEAL_PLAN_SLOTS)
+class MealPlanSlotTests(TestCase):
+    """In-flight limit on "new meal plan" runs (ADR-016). The view-level tests are in nutrition/test_views.py."""
+
+    def running(self, scope):
+        row = ThrottleCounter.objects.filter(scope=scope).first()
+        return row.count if row else 0
+
+    def test_one_run_per_user_at_a_time(self):
+        with meal_plan_slot(1) as first:
+            with meal_plan_slot(1) as second:
+                self.assertTrue(first)
+                self.assertFalse(second)
+            self.assertEqual(self.running(MEAL_PLAN_RUNNING_USER), 1)
+        self.assertEqual(self.running(MEAL_PLAN_RUNNING_USER), 0)
+        with meal_plan_slot(1) as again:
+            self.assertTrue(again)
+
+    def test_runs_in_progress_are_capped_for_everyone(self):
+        with meal_plan_slot(1) as first, meal_plan_slot(2) as second, meal_plan_slot(3) as third:
+            self.assertEqual((first, second, third), (True, True, False))
+            # The third user's own slot is given back at once, not held while it waits.
+            self.assertEqual(self.running(MEAL_PLAN_RUNNING_ALL), 2)
+        self.assertEqual(self.running(MEAL_PLAN_RUNNING_ALL), 0)
+        self.assertEqual(ThrottleCounter.objects.filter(scope=MEAL_PLAN_RUNNING_USER, count__gt=0).count(), 0)
+
+    def test_slots_are_given_back_when_the_run_fails(self):
+        with self.assertRaises(RuntimeError), meal_plan_slot(1):
+            raise RuntimeError('planner crashed')
+        self.assertEqual(self.running(MEAL_PLAN_RUNNING_USER), 0)
+        self.assertEqual(self.running(MEAL_PLAN_RUNNING_ALL), 0)
+
+    def test_slots_left_by_a_killed_worker_free_up_after_the_lease(self):
+        # A worker killed mid-run (Gunicorn timeout, OOM, pod eviction) never reaches its `finally`.
+        ThrottleCounter.objects.create(scope=MEAL_PLAN_RUNNING_ALL, key=MEAL_PLAN_RUNNING_ALL, count=2)
+        with meal_plan_slot(1) as started:
+            self.assertFalse(started)
+        ThrottleCounter.objects.filter(scope=MEAL_PLAN_RUNNING_ALL).update(
+            window_started=timezone.now() - timedelta(seconds=MEAL_PLAN_SLOTS['lease_seconds'] + 1)
+        )
+        with meal_plan_slot(1) as started:
+            self.assertTrue(started)
+            self.assertEqual(self.running(MEAL_PLAN_RUNNING_ALL), 1)
+
+    def test_the_lease_is_longer_than_gunicorns_timeout(self):
+        # The lease may only free a slot once its holder must be dead; Gunicorn kills a worker after --timeout.
+        cmd = (settings.BASE_DIR / 'Dockerfile').read_text()
+        timeout = int(cmd.split('"--timeout", "')[1].split('"')[0])
+        self.assertGreater(settings.MEAL_PLAN_CONCURRENCY['lease_seconds'], timeout)
+
+
+@skipUnless(connection.vendor == 'postgresql', 'parallel connections need PostgreSQL; SQLite serializes writes itself')
+@override_settings(MEAL_PLAN_CONCURRENCY=MEAL_PLAN_SLOTS)
+class MealPlanSlotConcurrencyTests(TransactionTestCase):
+    def test_parallel_requests_for_one_user_get_one_slot(self):
+        barrier, finish = threading.Barrier(10), threading.Event()
+
+        def attempt():
+            try:
+                barrier.wait()
+                with meal_plan_slot(1) as started:
+                    if started:
+                        finish.wait(10)  # hold the slot until every other attempt has answered
+                    return started
+            finally:
+                connection.close()
+
+        with ThreadPoolExecutor(max_workers=10) as pool:
+            futures = [pool.submit(attempt) for _ in range(10)]
+            # Every attempt but the one holding the slot answers while it is still held.
+            deadline = time.monotonic() + 10
+            while sum(f.done() for f in futures) < 9 and time.monotonic() < deadline:
+                time.sleep(0.01)
+            finish.set()
+            results = [f.result(10) for f in futures]
+        self.assertEqual(results.count(True), 1)
+        self.assertEqual(ThrottleCounter.objects.get(scope=MEAL_PLAN_RUNNING_USER).count, 0)
 
 
 class SetPasswordTests(TestCase):

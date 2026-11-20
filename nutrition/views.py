@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 from urllib.parse import urlencode
@@ -14,11 +15,12 @@ from accounts import throttle
 from core.models import UserProfile
 
 from .domain import DAY_NAMES, MEALS
-from .services import current_meal_plan, new_meal_plan
+from .services import MealPlanResult, current_meal_plan, new_meal_plan, saved_meal_plan
 from .targets import DAILY_VALUES, DAILY_VALUES_KCAL
 
 DAY_KEYS = tuple(name.lower() for name in DAY_NAMES)
 NEW_PLAN_THROTTLED_MESSAGE = "You've asked for a lot of new meal plans. Please wait a while and try again."
+NEW_PLAN_BUSY_MESSAGE = 'A new meal plan is already being made. Please wait a moment and try again.'
 
 
 def _profile(request):
@@ -57,11 +59,25 @@ def meal_plan(request):
 
     Every day is in the page; without JavaScript the day links reload with ?day=, and meal_plan.js switches days in
     place instead. Recipes open inline (<details>), so choosing a meal never moves the page.
+
+    Showing the saved plan is never limited. Making one, when there is no saved plan this week or the meal settings
+    changed since it was made, runs the planner, so it is limited like "Generate a new meal plan" (ADR-016).
     """
     profile = _profile(request)
     if not profile.onboarding_completed:
         return redirect('onboarding')
-    result = current_meal_plan(request.user, profile.meal_keys(), profile.weekly_food_budget)
+    meals, budget = profile.meal_keys(), profile.weekly_food_budget
+    saved = saved_meal_plan(request.user, meals, budget)
+    if not saved.not_saved:
+        return _render_plan(request, saved)
+    result, refusal = _run_planner(request.user, lambda: current_meal_plan(request.user, meals, budget))
+    if result is None:
+        return _refused(request, refusal, saved)
+    return _render_plan(request, result)
+
+
+def _render_plan(request, result: MealPlanResult, status: int = 200):
+    """The Meal Plan page for `result`. Only renders: whether the planner runs is up to the caller."""
     context: dict[str, Any] = {'result': result, 'workouts_link': settings.NUTRITION_WORKOUTS_LINK}
     if result.plan is not None:
         plan = result.plan
@@ -93,7 +109,7 @@ def meal_plan(request):
             daily_values=DAILY_VALUES,
             daily_values_kcal=DAILY_VALUES_KCAL,
         )
-    return render(request, 'nutrition/meal_plan.html', context)
+    return render(request, 'nutrition/meal_plan.html', context, status=status)
 
 
 @login_required
@@ -101,21 +117,15 @@ def meal_plan(request):
 def meal_plan_new(request):
     """Replace this week's plan with a different one.
 
-    Rate limited per user (ADR-016): each request runs the planner, which takes a sync Gunicorn worker for the whole
-    search, so a few parallel requests could otherwise hold every worker.
+    Runs the planner, so it is limited (`_run_planner`, ADR-016).
     """
     profile = _profile(request)
     if not profile.onboarding_completed:
         return redirect('onboarding')
-    retry_after = throttle.acquire_meal_plan(request.user.pk)
-    if retry_after:
-        # Show the current week's plan with the reason, as a 429 so clients and logs see the limit.
-        messages.error(request, NEW_PLAN_THROTTLED_MESSAGE)
-        response = meal_plan(request)
-        response.status_code = 429
-        response['Retry-After'] = str(retry_after)
-        return response
-    result = new_meal_plan(request.user, profile.meal_keys(), profile.weekly_food_budget)
+    meals, budget = profile.meal_keys(), profile.weekly_food_budget
+    result, refusal = _run_planner(request.user, lambda: new_meal_plan(request.user, meals, budget))
+    if result is None:
+        return _refused(request, refusal, saved_meal_plan(request.user, meals, budget))
     if result.unavailable:
         messages.error(request, "We couldn't make a new meal plan right now. Please try again later.")
     else:
@@ -125,3 +135,33 @@ def meal_plan_new(request):
         query['day'] = request.POST['day']
     url = reverse('meal_plan')
     return redirect(f'{url}?{urlencode(query)}' if query else url)
+
+
+def _run_planner(user, run: Callable[[], MealPlanResult]) -> tuple[MealPlanResult | None, tuple[str, int]]:
+    """Call `run`, which runs the planner, if the limits allow. Returns (result, _) or (None, (message, retry_after)).
+
+    Every planner run takes a sync Gunicorn worker for the whole search, so every way of starting one comes through
+    here and is limited twice (ADR-016): runs in progress at once, per user and for everyone (`meal_plan_slot`), so a
+    burst of parallel requests can't hold every worker; and plans made per user per hour (`acquire_meal_plan`). A
+    request refused for a busy slot isn't counted against the hour.
+    """
+    with throttle.meal_plan_slot(user.pk) as started:
+        if not started:
+            return None, (NEW_PLAN_BUSY_MESSAGE, settings.MEAL_PLAN_CONCURRENCY['retry_after'])
+        retry_after = throttle.acquire_meal_plan(user.pk)
+        if retry_after:
+            return None, (NEW_PLAN_THROTTLED_MESSAGE, retry_after)
+        return run(), ('', 0)
+
+
+def _refused(request, refusal: tuple[str, int], saved: MealPlanResult):
+    """A refused planner run: the saved plan with the reason, as a 429 so clients and logs see the limit.
+
+    `saved` comes from `saved_meal_plan`, which never runs the planner, so a refused request does no planning even
+    when the saved plan is missing or no longer matches the user's settings.
+    """
+    message, retry_after = refusal
+    messages.error(request, message)
+    response = _render_plan(request, saved, status=429)
+    response['Retry-After'] = str(retry_after)
+    return response
