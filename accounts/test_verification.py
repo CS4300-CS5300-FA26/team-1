@@ -129,11 +129,16 @@ class ResendTests(ConfirmationTestCase):
                 self.assertRedirects(self.resend(email), reverse('verify_email_sent'))
         self.assertEqual(mail.outbox, [])
 
-    def test_a_failed_send_shows_the_generic_error(self):
+    def test_a_failed_send_gets_the_usual_page_and_is_logged(self):
+        # A different answer only when we tried to send would reveal which addresses have sign-ups (ADR-018).
         self.register()
-        with mock.patch('accounts.emails.send_account_email', return_value=False):
+        with (
+            mock.patch('accounts.emails.send_account_email', return_value=False),
+            self.assertLogs('accounts.security', 'WARNING') as logs,
+        ):
             response = self.resend()
-        self.assertContains(response, 'Something went wrong on our end', status_code=503)
+        self.assertRedirects(response, reverse('verify_email_sent'))
+        self.assertIn('not sent', logs.output[0])
 
     def test_requests_are_limited_per_ip(self):
         limit = settings.AUTH_THROTTLE['email_request'][0]
@@ -172,5 +177,5 @@ class RecipientLimitTests(ConfirmationTestCase):
     def test_sign_ups_count_against_the_per_address_limit(self):
         self.register()
         response = self.client.post(reverse('resend_verification'), {'email': EMAIL})
-        self.assertEqual(response.status_code, 503)
+        self.assertRedirects(response, reverse('verify_email_sent'))  # the same page as for any address
         self.assertEqual(len(mail.outbox), 1)

@@ -1,3 +1,4 @@
+import logging
 from typing import cast
 
 from django.contrib import messages
@@ -23,6 +24,8 @@ from core.models import UserProfile
 from . import emails, services, throttle
 from .forms import EmailRequestForm, LoginForm, RegisterForm
 from .tokens import email_verification_token
+
+logger = logging.getLogger('accounts.security')
 
 # Created in migration accounts/0002_unique_email_index.
 EMAIL_UNIQUE_INDEX = 'auth_user_email_lower_uniq'
@@ -161,7 +164,12 @@ def verify_email(request, uidb64, token):
 
 
 def resend_verification(request):
-    """Send the confirmation link again to an unconfirmed sign-up."""
+    """Send the confirmation link again to an unconfirmed sign-up.
+
+    Answers the same way whether or not the address has an unconfirmed sign-up, and whether or not the email went out:
+    a different answer only when we tried to send would reveal which addresses have accounts (ADR-018). Failures are
+    logged instead.
+    """
     form = EmailRequestForm(request.POST or None)
     if request.method == 'POST':
         response = _email_request_throttled(request, form, 'accounts/resend_verification.html')
@@ -172,8 +180,7 @@ def resend_verification(request):
             user = User.objects.filter(email__iexact=form.cleaned_data['email'], is_active=False).first()
             via_spotify = user is not None and _has_spotify(user)
             if user is not None and not emails.send_verification_email(request, user, via_spotify=via_spotify):
-                form.add_error(None, emails.EMAIL_NOT_SENT_MESSAGE)
-                return render(request, 'accounts/resend_verification.html', {'form': form}, status=503)
+                logger.warning('Confirmation link for user %s not sent; showing the usual page', user.pk)
             return redirect('verify_email_sent')
     return render(request, 'accounts/resend_verification.html', {'form': form})
 
@@ -185,6 +192,10 @@ class PasswordResetView(FormView):
 
     Unlike Django's default, accounts without a password (Spotify sign-ups) and unconfirmed accounts can reset too:
     proving control of the inbox is what matters, and for an unconfirmed account it also confirms the email.
+
+    Answers the same way whether or not the address has an account, and whether or not the email went out: a
+    different answer only when we tried to send would reveal which addresses have accounts (ADR-018). Failures are
+    logged instead.
     """
 
     form_class = EmailRequestForm
@@ -200,8 +211,7 @@ class PasswordResetView(FormView):
         services.prune_unconfirmed_accounts()
         user = User.objects.filter(email__iexact=form.cleaned_data['email']).first()
         if user is not None and not emails.send_password_reset_email(self.request, user):
-            form.add_error(None, emails.EMAIL_NOT_SENT_MESSAGE)
-            return self.render_to_response(self.get_context_data(form=form), status=503)
+            logger.warning('Password reset link for user %s not sent; showing the usual page', user.pk)
         return redirect(self.success_url)
 
 

@@ -1,8 +1,9 @@
 """Account email: sign-up confirmation, "you already have an account", and password reset (ADR-017, ADR-018).
 
-Views call these and show `EMAIL_NOT_SENT_MESSAGE` (HTTP 503) when one returns False. Every failure looks the same to
-the user: the per-recipient limit, an exhausted quota, Resend being down, or missing configuration. The reason is
-logged instead, by `core.mail` for send failures and by `accounts.throttle` for the per-recipient limit.
+Each returns False when the email wasn't sent: the per-recipient limit, an exhausted quota, Resend being down, or
+missing configuration. Sign-up shows `EMAIL_NOT_SENT_MESSAGE` (HTTP 503) then; "forgot password" and "resend
+confirmation" show their usual page, because they only send when an account exists and an error would reveal it
+(ADR-018). The reason is logged, by `core.mail` for send failures and by `accounts.throttle` for the limit.
 
 Links are built from the request, so they use the host the person is on. ALLOWED_HOSTS limits that to our own
 hostnames, which stops a forged Host header from putting someone else's domain in a link.

@@ -54,11 +54,26 @@ class RequestTests(ResetTestCase):
         self.assertRedirects(response, reverse('password_reset_done'))
         self.assertEqual(mail.outbox, [])
 
-    def test_a_failed_send_shows_the_generic_error(self):
+    def test_a_failed_send_gets_the_usual_page_and_is_logged(self):
         self.make_user()
-        with mock.patch('accounts.emails.send_account_email', return_value=False):
+        with (
+            mock.patch('accounts.emails.send_account_email', return_value=False),
+            self.assertLogs('accounts.security', 'WARNING') as logs,
+        ):
             response = self.request_reset()
-        self.assertContains(response, 'Something went wrong on our end', status_code=503)
+        self.assertRedirects(response, reverse('password_reset_done'))
+        self.assertIn('not sent', logs.output[0])
+        self.assertNotIn(EMAIL, logs.output[0])
+
+    def test_a_used_up_recipient_limit_does_not_reveal_the_account(self):
+        # PR review: an address with an account answered 503 once its limit was used up, while an unknown address got
+        # the normal page, so tripping the limit told an attacker which addresses have accounts.
+        self.make_user()
+        for _ in range(settings.AUTH_THROTTLE['email_recipient'][0]):
+            self.request_reset()
+        registered, unknown = self.request_reset(), self.request_reset('nobody@example.com')
+        self.assertEqual((registered.status_code, registered['Location']), (unknown.status_code, unknown['Location']))
+        self.assertEqual(self.client.get(registered['Location']).content, self.client.get(unknown['Location']).content)
 
     def test_requests_are_limited_per_ip(self):
         for _ in range(settings.AUTH_THROTTLE['email_request'][0]):
