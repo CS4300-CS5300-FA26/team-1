@@ -222,6 +222,11 @@ def acquire_email_recipient(address):
     return wait
 
 
+def release_email_recipient(address):
+    """Give back the attempt for an email that wasn't sent, so failures don't use up the address's limit."""
+    refund(EMAIL_RECIPIENT, _digest(address.strip().lower()))
+
+
 def acquire_email_request(ip):
     """Count a "forgot password" or "resend confirmation" request. Returns 0 or the seconds to wait."""
     wait = acquire((EMAIL_REQUEST_IP, _digest(ip), 'email_request'))

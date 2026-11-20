@@ -73,6 +73,15 @@ class RecipientLimitTests(TestCase):
         self.assertEqual(len(counter.key), 64)
         self.assertNotIn('sam', counter.key)
 
+    def test_failed_sends_do_not_use_up_the_limit(self):
+        # PR review: five transient failures used to block the address for an hour, though the page says to try again.
+        with mock.patch('accounts.emails.EmailMultiAlternatives.send', side_effect=EmailNotSent('unreachable')):
+            for _ in range(self.limit + 2):
+                self.assertFalse(send_account_email(ADDRESS, 'Hi', 'Hello'))
+        self.assertEqual(ThrottleCounter.objects.get(scope='email-recipient').count, 0)
+        self.assertTrue(send_account_email(ADDRESS, 'Hi', 'Hello'))
+        self.assertEqual(len(mail.outbox), 1)
+
     @override_settings(AUTH_THROTTLE={**settings.AUTH_THROTTLE, 'email_recipient': (1, 60 * 60)})
     def test_a_blocked_send_never_reaches_the_mailer(self):
         send_account_email(ADDRESS, 'Hi', 'Hello')

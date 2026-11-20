@@ -34,7 +34,9 @@ def send_account_email(to: str, subject: str, text: str, html: str | None = None
     """Send one email to one address. Returns True if the mailer accepted it, False otherwise.
 
     Counts against `AUTH_THROTTLE['email_recipient']` before sending, so a form can't be used to flood one inbox or
-    use up the day's quota quickly.
+    use up the day's quota quickly. The count is given back when the send fails (quota, outage, timeout), because
+    nothing reached the inbox and the page asks the person to try again later. A timeout may hide a send Resend did
+    accept, so in that rare case an address can get one email over the limit.
     """
     if throttle.acquire_email_recipient(to):
         return False
@@ -44,6 +46,7 @@ def send_account_email(to: str, subject: str, text: str, html: str | None = None
     try:
         message.send()
     except EmailNotSent:
+        throttle.release_email_recipient(to)
         return False
     return True
 
