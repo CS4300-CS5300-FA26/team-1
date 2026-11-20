@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from accounts import throttle
 from core.models import UserProfile
 
 from .domain import DAY_NAMES, MEALS
@@ -17,6 +18,7 @@ from .services import current_meal_plan, new_meal_plan
 from .targets import DAILY_VALUES, DAILY_VALUES_KCAL
 
 DAY_KEYS = tuple(name.lower() for name in DAY_NAMES)
+NEW_PLAN_THROTTLED_MESSAGE = "You've asked for a lot of new meal plans. Please wait a while and try again."
 
 
 def _profile(request):
@@ -97,10 +99,22 @@ def meal_plan(request):
 @login_required
 @require_POST
 def meal_plan_new(request):
-    """Replace this week's plan with a different one."""
+    """Replace this week's plan with a different one.
+
+    Rate limited per user (ADR-016): each request runs the planner, which takes a sync Gunicorn worker for the whole
+    search, so a few parallel requests could otherwise hold every worker.
+    """
     profile = _profile(request)
     if not profile.onboarding_completed:
         return redirect('onboarding')
+    retry_after = throttle.acquire_meal_plan(request.user.pk)
+    if retry_after:
+        # Show the current week's plan with the reason, as a 429 so clients and logs see the limit.
+        messages.error(request, NEW_PLAN_THROTTLED_MESSAGE)
+        response = meal_plan(request)
+        response.status_code = 429
+        response['Retry-After'] = str(retry_after)
+        return response
     result = new_meal_plan(request.user, profile.meal_keys(), profile.weekly_food_budget)
     if result.unavailable:
         messages.error(request, "We couldn't make a new meal plan right now. Please try again later.")

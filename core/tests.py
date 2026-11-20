@@ -86,3 +86,18 @@ class OnboardingAndProfileAccessTests(TestCase):
         response = self.client.get(reverse('user_profile'))
         self.assertContains(response, 'ownerbob')
         self.assertNotContains(response, 'strangeralice')
+
+
+class StrictTransportSecurityTests(TestCase):
+    """Security assessment F-4: production sent no Strict-Transport-Security header (ADR-016)."""
+
+    def test_https_responses_send_hsts_for_this_host_only(self):
+        response = self.client.get(reverse('login'), secure=True)
+        self.assertEqual(response['Strict-Transport-Security'], 'max-age=3600')
+
+    def test_plain_http_responses_do_not(self):
+        # Browsers ignore HSTS over plain HTTP; health checks and local runs are plain HTTP.
+        self.assertNotIn('Strict-Transport-Security', self.client.get(reverse('login')))
+
+    def test_health_checks_never_send_it(self):
+        self.assertNotIn('Strict-Transport-Security', self.client.get('/livez/', secure=True))

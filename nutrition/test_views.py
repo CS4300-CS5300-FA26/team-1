@@ -1,7 +1,9 @@
 """Tests for the Meal Plan page (story D-5) and its "generate a new plan" action."""
 
 from decimal import Decimal
+from unittest import mock
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -197,6 +199,47 @@ class NewPlanTests(TestCase):
         self.client.force_login(make_user())
         response = self.client.post(reverse('meal_plan_new'), {'day': 'https://evil.example'})
         self.assertRedirects(response, reverse('meal_plan'), fetch_redirect_response=False)
+
+
+@override_settings(AUTH_THROTTLE={**settings.AUTH_THROTTLE, 'meal_plan': (2, 60 * 60)})
+class NewPlanThrottleTests(TestCase):
+    """Security assessment F-1: one account could hold every Gunicorn worker by asking for new plans in parallel."""
+
+    def setUp(self):
+        self.user = make_user()
+        self.client.force_login(self.user)
+
+    def use_up_the_limit(self):
+        for _ in range(2):
+            self.assertEqual(self.client.post(reverse('meal_plan_new')).status_code, 302)
+
+    def test_new_plans_are_limited_per_user(self):
+        self.use_up_the_limit()
+        before = WeeklyMealPlan.objects.values_list('seed', 'created_at').get(user=self.user)
+        response = self.client.post(reverse('meal_plan_new'), {'day': 'friday'})
+        self.assertEqual(response.status_code, 429)
+        self.assertIn('Retry-After', response)
+        self.assertContains(
+            response,
+            'You&#x27;ve asked for a lot of new meal plans. Please wait a while and try again.',
+            status_code=429,
+        )
+        self.assertEqual(WeeklyMealPlan.objects.values_list('seed', 'created_at').get(user=self.user), before)
+
+    def test_a_blocked_request_does_not_run_the_planner(self):
+        self.use_up_the_limit()
+        with mock.patch('nutrition.views.new_meal_plan') as planner:
+            self.assertEqual(self.client.post(reverse('meal_plan_new')).status_code, 429)
+        planner.assert_not_called()
+
+    def test_the_limit_is_per_user(self):
+        self.use_up_the_limit()
+        self.client.force_login(make_user('alex'))
+        self.assertEqual(self.client.post(reverse('meal_plan_new')).status_code, 302)
+
+    def test_viewing_the_plan_is_not_limited(self):
+        self.use_up_the_limit()
+        self.assertEqual(self.client.get(reverse('meal_plan')).status_code, 200)
 
 
 class TemplateFilterTests(TestCase):

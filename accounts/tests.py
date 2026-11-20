@@ -308,9 +308,17 @@ class LoginThrottleTests(TestCase):
         self.fail_times(4)
 
     def test_one_ip_is_blocked_after_spraying_many_identifiers(self):
-        for i in range(20):
+        for i in range(settings.AUTH_THROTTLE['login_ip'][0]):
             self.log_in(f'user{i}@example.com')
         self.assertEqual(self.log_in('another@example.com').status_code, 429)
+
+    def test_failures_by_others_on_a_shared_ip_do_not_lock_out_a_correct_password(self):
+        # Security assessment F-2: 20 failed logins from one IP (a campus NAT) used to block every login from it,
+        # including the right password. The IP-wide limit now sits well above that (ADR-016).
+        for i in range(20):
+            self.assertEqual(self.log_in(f'classmate{i}@example.com').status_code, 200)
+        self.assertEqual(self.log_in(password=PASSWORD).status_code, 302)
+        self.assertGreater(settings.AUTH_THROTTLE['login_ip'][0], 4 * settings.AUTH_THROTTLE['login'][0])
 
     def test_throttle_table_stores_hashes_not_identifiers(self):
         self.log_in()
@@ -369,12 +377,28 @@ class RegisterThrottleTests(TestCase):
         )
 
     def test_registration_attempts_are_limited_per_ip(self):
-        for n in range(10):
+        limit = settings.AUTH_THROTTLE['register'][0]
+        for n in range(limit):
             self.assertEqual(self.register(n).status_code, 200)
-        response = self.register(11)
+        response = self.register(limit + 1)
         self.assertEqual(response.status_code, 429)
         self.assertIn('Retry-After', response)
-        self.assertEqual(self.register(12, REMOTE_ADDR='10.0.0.9').status_code, 200)
+        self.assertEqual(self.register(limit + 2, REMOTE_ADDR='10.0.0.9').status_code, 200)
+
+    def test_a_class_can_sign_up_from_one_shared_ip(self):
+        # Security assessment F-2: the 11th sign-up from one IP in an hour used to be refused, which blocks a class
+        # registering together on campus Wi-Fi (ADR-016).
+        for n in range(15):
+            response = Client().post(
+                reverse('register'),
+                {
+                    'username': f'student{n}',
+                    'email': f'student{n}@example.com',
+                    'password1': PASSWORD,
+                    'password2': PASSWORD,
+                },
+            )
+            self.assertRedirects(response, reverse('onboarding'), fetch_redirect_response=False)
 
     def test_viewing_the_form_is_not_counted(self):
         for _ in range(15):
