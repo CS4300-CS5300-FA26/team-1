@@ -416,25 +416,46 @@ class RegisterThrottleTests(TestCase):
         row = ThrottleCounter.objects.filter(scope=REGISTER_TAKEN_IP).first()
         return row.count if row else 0
 
+    def use_up_the_probe_budget(self):
+        User.objects.create_user('taken', 'taken@example.com', PASSWORD)
+        for n in range(settings.AUTH_THROTTLE['register_taken'][0]):
+            self.assertContains(self.sign_up(f'prober{n}', 'TAKEN@example.com'), 'already exists')
+
     def test_answers_that_reveal_an_account_keep_the_old_budget(self):
         # Review of PR #61: the form says when an email or username is taken, so raising the registration limit to 50
         # gave probing for accounts 5 times the budget. Those answers have their own limit, as before ADR-016.
-        User.objects.create_user('taken', 'taken@example.com', PASSWORD)
-        limit = settings.AUTH_THROTTLE['register_taken'][0]
-        self.assertLess(limit, settings.AUTH_THROTTLE['register'][0])
-        for n in range(limit):
-            response = self.sign_up(f'prober{n}', 'TAKEN@example.com')
-            self.assertContains(response, 'already exists')
-        response = self.sign_up('newcomer', 'newcomer@example.com')
+        self.assertLess(settings.AUTH_THROTTLE['register_taken'][0], settings.AUTH_THROTTLE['register'][0])
+        self.use_up_the_probe_budget()
+        response = self.sign_up('another-prober', 'taken@example.com')
         self.assertEqual(response.status_code, 429)
         self.assertIn('Retry-After', response)
         self.assertNotContains(response, 'already exists', status_code=429)
-        self.assertFalse(User.objects.filter(username='newcomer').exists())
+        self.assertContains(self.sign_up('prober', 'taken@example.com', REMOTE_ADDR='10.0.0.9'), 'already exists')
+
+    def test_new_accounts_can_still_sign_up_once_the_probe_budget_is_used_up(self):
+        # Review of PR #61: reserving a probe on every POST refused valid new accounts once 10 answers had said
+        # "taken". Only answers that would reveal an account are counted now.
+        self.use_up_the_probe_budget()
         self.assertRedirects(
-            self.sign_up('newcomer', 'newcomer@example.com', REMOTE_ADDR='10.0.0.9'),
-            reverse('onboarding'),
-            fetch_redirect_response=False,
+            self.sign_up('newcomer', 'newcomer@example.com'), reverse('onboarding'), fetch_redirect_response=False
         )
+
+    def test_once_the_probe_budget_is_used_up_a_bad_password_gets_the_same_page_either_way(self):
+        # A plain 429 here would be a yes/no answer: a taken email with a bad password would get 429, a free one 200.
+        self.use_up_the_probe_budget()
+
+        def errors_for(email):
+            response = self.client.post(
+                reverse('register'),
+                {'username': 'probe', 'email': email, 'password1': PASSWORD, 'password2': 'different'},
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertNotContains(response, 'already exists')
+            return response.context['form'].errors
+
+        self.assertEqual(errors_for('taken@example.com'), errors_for('free@example.com'))
+        self.assertIn('password2', errors_for('taken@example.com'))
+        self.assertNotContains(self.client.post(reverse('register'), {'username': 'taken'}), 'already exists')
 
     def test_a_taken_username_counts_as_a_probe(self):
         User.objects.create_user('taken', 'taken@example.com', PASSWORD)

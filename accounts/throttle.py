@@ -147,22 +147,24 @@ def release_login(identifier, ip):
 
 
 def acquire_register(ip):
-    """Count a registration attempt, and reserve a probe. Returns 0 or the seconds to wait.
-
-    The form says when a username or email is taken, so each answer can reveal that an account exists. Those answers
-    have their own, lower limit (ADR-016): every attempt reserves one up front, so parallel requests can't race past
-    it, and `release_register_probe` gives it back when the answer revealed nothing.
-    """
-    key = _digest(ip)
-    wait = acquire((REGISTER_IP, key, 'register'), (REGISTER_TAKEN_IP, key, 'register_taken'))
+    """Count a registration attempt. Returns 0 or the seconds to wait."""
+    wait = acquire((REGISTER_IP, _digest(ip), 'register'))
     if wait:
         logger.warning('Registration throttled for ip=%s', _safe_for_log(ip))
     return wait
 
 
-def release_register_probe(ip):
-    """The registration answer revealed no existing account: give back the probe `acquire_register` reserved."""
-    refund(REGISTER_TAKEN_IP, _digest(ip))
+def acquire_register_probe(ip):
+    """Count a registration answer about to say a username or email is taken. Returns 0 or the seconds to wait.
+
+    Each such answer tells the caller an account exists, so they have their own, lower limit (ADR-016). Only answers
+    that would reveal one are counted, so sign-ups that reveal nothing are never refused by it. Counting before the
+    answer is sent, under `acquire`'s row lock, means parallel probes can't all be answered.
+    """
+    wait = acquire((REGISTER_TAKEN_IP, _digest(ip), 'register_taken'))
+    if wait:
+        logger.warning('Registration answers revealing accounts throttled for ip=%s', _safe_for_log(ip))
+    return wait
 
 
 def acquire_spotify_auth(ip):
