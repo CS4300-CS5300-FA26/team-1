@@ -1,17 +1,25 @@
 """Tests for the Meal Plan page (story D-5) and its "generate a new plan" action."""
 
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
-from unittest import mock
+from unittest import mock, skipUnless
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.db import connection
+from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from core.models import UserProfile
 
 from .models import WeeklyMealPlan
+from .planner import build_week_plan
+from .services import MealPlanResult, week_start
 from .templatetags.meal_plan import servings
+from .views import DAY_KEYS
 
 User = get_user_model()
 PASSWORD = 'Tr4ining-Plan-2026!'
@@ -232,6 +240,47 @@ class NewPlanThrottleTests(TestCase):
             self.assertEqual(self.client.post(reverse('meal_plan_new')).status_code, 429)
         planner.assert_not_called()
 
+    def test_a_blocked_request_keeps_the_day_the_user_was_looking_at(self):
+        # Review of PR #61: the refused page read the day from the query string, but the form posts it.
+        self.use_up_the_limit()
+        other_day = DAY_KEYS[(timezone.localdate().weekday() + 3) % 7]
+        response = self.client.post(reverse('meal_plan_new'), {'day': other_day})
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.context['selected_day_key'], other_day)
+        self.assertContains(response, f'data-day-link="{other_day}"', status_code=429)
+
+    def test_a_blocked_request_shows_the_saved_plan_without_planning(self):
+        self.use_up_the_limit()
+        with mock.patch('nutrition.services.build_week_plan') as planner:
+            response = self.client.post(reverse('meal_plan_new'))
+        planner.assert_not_called()
+        self.assertEqual(response.status_code, 429)
+        self.assertIsNotNone(response.context['result'].plan)
+
+    def test_a_blocked_request_does_not_plan_when_the_settings_changed(self):
+        # The page used to be rendered by current_meal_plan, which makes a plan when the saved one is stale.
+        self.use_up_the_limit()
+        UserProfile.objects.filter(user=self.user).update(planned_meals=['dinner'])
+        before = WeeklyMealPlan.objects.values_list('seed', 'inputs').get(user=self.user)
+        with mock.patch('nutrition.services.build_week_plan') as planner:
+            response = self.client.post(reverse('meal_plan_new'))
+        planner.assert_not_called()
+        self.assertEqual(response.status_code, 429)
+        self.assertTrue(response.context['result'].not_saved)
+        self.assertIn("There's no saved meal plan for your current meal settings yet.", page_text(response))
+        self.assertNotIn('temporarily unavailable', page_text(response))
+        self.assertEqual(WeeklyMealPlan.objects.values_list('seed', 'inputs').get(user=self.user), before)
+
+    def test_a_blocked_request_does_not_plan_when_there_is_no_saved_plan(self):
+        self.use_up_the_limit()
+        WeeklyMealPlan.objects.filter(user=self.user).delete()
+        with mock.patch('nutrition.services.build_week_plan') as planner:
+            response = self.client.post(reverse('meal_plan_new'))
+        planner.assert_not_called()
+        self.assertEqual(response.status_code, 429)
+        self.assertContains(response, f'href="{reverse("meal_plan")}"', status_code=429)
+        self.assertFalse(WeeklyMealPlan.objects.filter(user=self.user).exists())
+
     def test_the_limit_is_per_user(self):
         self.use_up_the_limit()
         self.client.force_login(make_user('alex'))
@@ -240,6 +289,179 @@ class NewPlanThrottleTests(TestCase):
     def test_viewing_the_plan_is_not_limited(self):
         self.use_up_the_limit()
         self.assertEqual(self.client.get(reverse('meal_plan')).status_code, 200)
+
+    def test_viewing_the_page_does_not_make_a_plan_once_the_limit_is_used_up(self):
+        # The page makes a plan when the saved one is stale; that used to bypass both limits (ADR-016).
+        self.use_up_the_limit()
+        UserProfile.objects.filter(user=self.user).update(planned_meals=['dinner'])
+        with mock.patch('nutrition.services.build_week_plan') as planner:
+            response = self.client.get(reverse('meal_plan'))
+        planner.assert_not_called()
+        self.assertEqual(response.status_code, 429)
+        self.assertIn('Retry-After', response)
+        self.assertTrue(response.context['result'].not_saved)
+        self.assertIn('asked for a lot of new meal plans', page_text(response))
+
+    def test_switching_meal_settings_back_and_forth_cannot_make_unlimited_plans(self):
+        with mock.patch('nutrition.services.build_week_plan', wraps=build_week_plan) as planner:
+            for meals in (['dinner'], ['lunch'], ['breakfast']):
+                UserProfile.objects.filter(user=self.user).update(planned_meals=meals)
+                response = self.client.get(reverse('meal_plan'))
+        self.assertEqual(planner.call_count, 2)
+        self.assertEqual(response.status_code, 429)
+
+
+MEAL_PLAN_SLOTS = {'per_user': 1, 'total': 2, 'lease_seconds': 120, 'retry_after': 15}
+BUSY = 'A new meal plan is already being made. Please wait a moment and try again.'
+
+
+def signed_in_client(user) -> Client:
+    client = Client()
+    client.force_login(user)
+    return client
+
+
+@override_settings(
+    MEAL_PLAN_CONCURRENCY=MEAL_PLAN_SLOTS, AUTH_THROTTLE={**settings.AUTH_THROTTLE, 'meal_plan': (2, 60 * 60)}
+)
+class NewPlanConcurrencyTests(TestCase):
+    """Review of PR #61: the hourly count let a burst of parallel requests all start the planner and hold every worker.
+
+    Each test sends a request while another is inside the planner, by sending it from the (mocked) planner itself.
+    NewPlanParallelTests below does the same with real parallel requests on PostgreSQL.
+    """
+
+    def setUp(self):
+        self.user = make_user()
+        self.client.force_login(self.user)
+
+    def planner_that_sends(self, *clients):
+        """A stand-in for new_meal_plan that, while "planning", has each client ask for a new plan."""
+        statuses = []
+
+        def plan(user, meals, budget):
+            for client in clients:
+                statuses.append(client.post(reverse('meal_plan_new')))
+            return MealPlanResult(week_start=week_start(), plan=None)
+
+        return plan, statuses
+
+    def test_a_second_request_from_the_same_user_is_refused_while_the_first_is_planning(self):
+        plan, responses = self.planner_that_sends(signed_in_client(self.user))
+        with mock.patch('nutrition.views.new_meal_plan', side_effect=plan) as planner:
+            self.assertEqual(self.client.post(reverse('meal_plan_new')).status_code, 302)
+        self.assertEqual(planner.call_count, 1)
+        self.assertEqual(responses[0].status_code, 429)
+        self.assertEqual(responses[0]['Retry-After'], '15')
+        self.assertContains(responses[0], BUSY, status_code=429)
+
+    def test_planner_runs_in_progress_are_capped_for_everyone(self):
+        second, third = signed_in_client(make_user('alex')), signed_in_client(make_user('kim'))
+        plan, responses = self.planner_that_sends(third)  # kim asks while sam and alex are both planning
+        outer, _ = self.planner_that_sends(second)
+
+        def first_run(user, meals, budget):
+            with mock.patch('nutrition.views.new_meal_plan', side_effect=plan):
+                return outer(user, meals, budget)
+
+        with mock.patch('nutrition.views.new_meal_plan', side_effect=first_run):
+            self.assertEqual(self.client.post(reverse('meal_plan_new')).status_code, 302)
+        self.assertContains(responses[0], BUSY, status_code=429)
+        # Once both runs finish, the slots are free again.
+        self.assertEqual(third.post(reverse('meal_plan_new')).status_code, 302)
+
+    def test_a_refused_request_is_not_counted_against_the_hourly_limit(self):
+        same_user = signed_in_client(self.user)
+        plan, responses = self.planner_that_sends(same_user, same_user, same_user)
+        with mock.patch('nutrition.views.new_meal_plan', side_effect=plan):
+            self.client.post(reverse('meal_plan_new'))
+        self.assertEqual([r.status_code for r in responses], [429, 429, 429])
+        # One run counted so far, so one more fits in the hour (limit 2) before the hourly message.
+        self.assertEqual(self.client.post(reverse('meal_plan_new')).status_code, 302)
+        self.assertContains(self.client.post(reverse('meal_plan_new')), 'asked for a lot of new', status_code=429)
+
+    def test_the_slot_is_given_back_when_the_planner_fails(self):
+        crash = RuntimeError('planner crashed')
+        with mock.patch('nutrition.views.new_meal_plan', side_effect=crash), self.assertRaises(RuntimeError):
+            self.client.post(reverse('meal_plan_new'))
+        self.assertEqual(self.client.post(reverse('meal_plan_new')).status_code, 302)
+
+    def test_viewing_the_page_does_not_make_a_second_plan_while_one_is_being_made(self):
+        same_user = signed_in_client(self.user)
+        views = []
+
+        def plan(user, meals, budget):
+            views.append(same_user.get(reverse('meal_plan')))  # no saved plan yet, so the page would make one
+            return MealPlanResult(week_start=week_start(), plan=None)
+
+        with (
+            mock.patch('nutrition.views.new_meal_plan', side_effect=plan),
+            mock.patch('nutrition.services.build_week_plan') as underlying,
+        ):
+            self.client.post(reverse('meal_plan_new'))
+        underlying.assert_not_called()
+        self.assertContains(views[0], BUSY, status_code=429)
+        self.assertTrue(views[0].context['result'].not_saved)
+
+    def test_a_busy_refusal_does_not_run_the_planner_for_the_page(self):
+        plan, responses = self.planner_that_sends(signed_in_client(self.user))
+        with (
+            mock.patch('nutrition.views.new_meal_plan', side_effect=plan),
+            mock.patch('nutrition.services.build_week_plan') as underlying,
+        ):
+            self.client.post(reverse('meal_plan_new'))
+        underlying.assert_not_called()
+        self.assertTrue(responses[0].context['result'].not_saved)
+
+
+@skipUnless(connection.vendor == 'postgresql', 'parallel connections need PostgreSQL; SQLite serializes writes itself')
+@override_settings(MEAL_PLAN_CONCURRENCY=MEAL_PLAN_SLOTS)
+class NewPlanParallelTests(TransactionTestCase):
+    """Review of PR #61 (P1): real parallel requests, through both ways of starting the planner."""
+
+    def burst(self, send, patched):
+        """Send 12 requests at once, as 3 users with 4 each; `patched` (the planner entry point) blocks until all
+        the refused ones have been answered. Returns the status codes and the users whose runs started."""
+        users = [make_user(name) for name in ('sam', 'alex', 'kim')]
+        clients = [signed_in_client(user) for user in users for _ in range(4)]
+        barrier, finish, lock = threading.Barrier(len(clients)), threading.Event(), threading.Lock()
+        planning: list[int] = []
+
+        def plan(user, meals, budget):
+            with lock:
+                planning.append(user.pk)
+            finish.wait(10)  # stay "in the planner" until every other request has been answered
+            return MealPlanResult(week_start=week_start(), plan=None)
+
+        def ask(client):
+            try:
+                barrier.wait()
+                return send(client).status_code
+            finally:
+                connection.close()
+
+        with mock.patch(patched, side_effect=plan), ThreadPoolExecutor(len(clients)) as pool:
+            futures = [pool.submit(ask, client) for client in clients]
+            deadline = time.monotonic() + 10
+            while sum(f.done() for f in futures) < len(clients) - MEAL_PLAN_SLOTS['total'] and (
+                time.monotonic() < deadline
+            ):
+                time.sleep(0.01)
+            finish.set()
+            statuses = [f.result(10) for f in futures]
+        self.assertEqual(statuses.count(429), len(clients) - MEAL_PLAN_SLOTS['total'])
+        self.assertEqual(len(planning), MEAL_PLAN_SLOTS['total'])
+        self.assertEqual(len(set(planning)), len(planning))  # never two runs for one user
+        return statuses
+
+    def test_a_burst_of_new_plan_requests_never_runs_more_planners_than_the_slots(self):
+        statuses = self.burst(lambda client: client.post(reverse('meal_plan_new')), 'nutrition.views.new_meal_plan')
+        self.assertEqual(statuses.count(302), MEAL_PLAN_SLOTS['total'])
+
+    def test_a_burst_of_first_page_views_never_runs_more_planners_than_the_slots(self):
+        # None of the users has a saved plan, so each view would make one.
+        statuses = self.burst(lambda client: client.get(reverse('meal_plan')), 'nutrition.views.current_meal_plan')
+        self.assertEqual(statuses.count(200), MEAL_PLAN_SLOTS['total'])
 
 
 class TemplateFilterTests(TestCase):

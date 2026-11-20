@@ -19,7 +19,16 @@
       {% endif %}
     </div>
 
-    {% if result.unavailable %}
+    {% if result.not_saved %}
+      {# A refused planner run (ADR-016) with no saved plan for the current settings; nothing was planned. #}
+      <div class="alert alert--info mt-5" role="status">
+        <p class="mb-0"><strong>There's no saved meal plan for your current meal settings yet.</strong>
+          Reload this page to make one once the wait above is over.</p>
+      </div>
+      <div class="cluster mt-5">
+        <a class="btn btn--primary" href="{% url 'meal_plan' %}">Reload meal plan</a>
+      </div>
+    {% elif result.unavailable %}
       <div class="alert alert--warning mt-5" role="status">
         <p class="mb-0"><strong>Meal suggestions are temporarily unavailable.</strong>
           Please check back later. Your workouts aren't affected.</p>

@@ -7,6 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import SetPasswordForm
 from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.shortcuts import redirect, render
 from django.urls import reverse, reverse_lazy
@@ -73,45 +74,52 @@ def register(request):
         return redirect('home')
 
     if request.method == 'POST':
-        ip = throttle.client_ip(request)
-        retry_after = throttle.acquire_register(ip)
+        retry_after = throttle.acquire_register(throttle.client_ip(request))
         if retry_after:
-            form = RegisterForm()
-            form.cleaned_data = {}  # add_error() needs it on a form that was never validated
-            form.add_error(None, throttle.THROTTLED_MESSAGE)
-            response = render(request, 'accounts/register.html', {'form': form}, status=429)
-            response['Retry-After'] = str(retry_after)
-            return response
+            return _register_throttled(request, retry_after)
 
         # Before validation, so an expired sign-up no longer holds its username or email.
         services.prune_unconfirmed_accounts()
 
     form = RegisterForm(request.POST or None)
-    if request.method == 'POST' and form.is_valid():
-        email = form.cleaned_data['email']
-        user = None
-        if not User.objects.filter(email__iexact=email).exists():
-            try:
-                user = _create_unconfirmed_account(form)
-            except IntegrityError as exc:
-                # Lost a race with another sign-up; the database caught the duplicate. A taken email is handled like
-                # any existing one below. PostgreSQL and SQLite both put the violated constraint's name in the message.
-                if 'username' in str(exc) and EMAIL_UNIQUE_INDEX not in str(exc):
-                    form.add_error('username', USERNAME_TAKEN_MESSAGE)
-                    return render(request, 'accounts/register.html', {'form': form})
-                if EMAIL_UNIQUE_INDEX not in str(exc):
-                    raise
-        if user is None:
-            sent = emails.send_account_exists_email(request, email)
-        else:
-            sent = emails.send_verification_email(request, user)
-            if not sent:
-                user.delete()  # nobody can confirm it, so don't let it hold the username and email
+    if request.method != 'POST':
+        return render(request, 'accounts/register.html', {'form': form})
+    user = None
+    if form.is_valid() and not User.objects.filter(email__iexact=form.cleaned_data['email']).exists():
+        try:
+            user = _create_unconfirmed_account(form)
+        except IntegrityError as exc:
+            # Lost a race with another sign-up; the database caught the duplicate. A taken email is handled like any
+            # registered one below; a taken username is reported like the form's own check. PostgreSQL and SQLite
+            # both put the violated constraint's name in the message.
+            if EMAIL_UNIQUE_INDEX in str(exc):
+                pass
+            elif 'username' in str(exc):
+                form.add_error('username', ValidationError(USERNAME_TAKEN_MESSAGE, code='unique'))
+            else:
+                raise
+    if reveals_an_account(form):
+        retry_after = throttle.acquire_register_probe(throttle.client_ip(request))
+        if retry_after:
+            # Out of answers that reveal accounts (ADR-016). Say nothing about taken usernames. With other errors,
+            # show just those: the same page an unused username would get, so a deliberately bad password can't turn
+            # this refusal into a yes/no answer. With none, refuse like any other throttle.
+            hide_account_errors(form)
+            if not form.errors:
+                return _register_throttled(request, retry_after)
+    if form.errors:
+        return render(request, 'accounts/register.html', {'form': form})
+
+    if user is None:
+        sent = emails.send_account_exists_email(request, form.cleaned_data['email'])
+    else:
+        sent = emails.send_verification_email(request, user)
         if not sent:
-            form.add_error(None, emails.EMAIL_NOT_SENT_MESSAGE)
-            return render(request, 'accounts/register.html', {'form': form}, status=503)
-        return redirect('verify_email_sent')
-    return render(request, 'accounts/register.html', {'form': form})
+            user.delete()  # nobody can confirm it, so don't let it hold the username and email
+    if not sent:
+        form.add_error(None, emails.EMAIL_NOT_SENT_MESSAGE)
+        return render(request, 'accounts/register.html', {'form': form}, status=503)
+    return redirect('verify_email_sent')
 
 
 def _create_unconfirmed_account(form):
@@ -243,6 +251,36 @@ def _has_spotify(user) -> bool:
     from spotify.models import SpotifyAccount  # spotify imports accounts, so import here, not at module level
 
     return SpotifyAccount.objects.filter(user=user).exists()
+
+
+def _register_throttled(request, retry_after: int):
+    form = RegisterForm()
+    form.cleaned_data = {}  # add_error() needs it on a form that was never validated
+    form.add_error(None, throttle.THROTTLED_MESSAGE)
+    response = render(request, 'accounts/register.html', {'form': form}, status=429)
+    response['Retry-After'] = str(retry_after)
+    return response
+
+
+# The errors that say a username is taken; Django's UserCreationForm marks them with the "unique" code. Only these
+# count against `register_taken` (ADR-016). The form never says an email is taken (ADR-018).
+ACCOUNT_ERRORS = (('username', 'unique'),)
+
+
+def reveals_an_account(form) -> bool:
+    """Whether the form says a username is taken, which tells the caller that an account exists."""
+    return any(form.has_error(field, code) for field, code in ACCOUNT_ERRORS)
+
+
+def hide_account_errors(form) -> None:
+    """Drop the errors that say a username is taken, keeping every other error."""
+    for field, code in ACCOUNT_ERRORS:
+        errors = form.errors.get(field)
+        if errors is not None:
+            # In place, so the list keeps the field_id Django uses to link errors to their input (aria-describedby).
+            errors.data = [error for error in errors.data if getattr(error, 'code', None) != code]
+            if not errors:
+                del form.errors[field]
 
 
 def after_login_url(user) -> str:

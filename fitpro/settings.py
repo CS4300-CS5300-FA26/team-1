@@ -188,13 +188,30 @@ AUTH_THROTTLE = {
     # carrier NAT), and when an IP counter trips it blocks everyone behind that IP (ADR-016).
     'login_ip': (100, 15 * 60),  # failed logins per IP, any identifier
     'register': (50, 60 * 60),  # registration attempts per IP, counted before validation
+    # Registration answers per IP that said a username is taken, which reveals that an account exists. Emails are never
+    # revealed (ADR-018), but usernames still are, so this keeps the registration limit from before ADR-016.
+    'register_taken': (10, 60 * 60),
     'spotify_auth': (20, 15 * 60),  # "Log in / Sign up with Spotify" flows started per IP (ADR-010)
     'spotify_status': (30, 5 * 60),  # Spotify connection checks per user; each one calls Spotify's API
     'spotify_playback': (10, 5 * 60),  # workout playlists started per user; each one searches and plays on Spotify
     'ai_trainer': (10, 60 * 60),  # AI trainer calls per user per hour; each one costs money (ADR-014)
-    'meal_plan': (10, 60 * 60),  # new meal plans per user per hour; each one runs the CPU-heavy planner (ADR-016)
+    # Meal plans made per user per hour, by "Generate a new meal plan" or by a page view with no saved plan to show;
+    # each one runs the CPU-heavy planner (ADR-016).
+    'meal_plan': (10, 60 * 60),
     'email_recipient': (5, 60 * 60),  # account emails per address per hour; the free plan sends 100 a day (ADR-017)
     'email_request': (20, 60 * 60),  # "forgot password" and "resend confirmation" requests per IP per hour (ADR-018)
+}
+
+# Meal planner runs allowed at the same time (ADR-016), shared by every pod through the database. The hourly limit
+# above caps how many runs one account starts; this caps how many sync Gunicorn workers they can hold at once.
+# Production has 4 (2 pods x 2 workers), so planner runs never hold more than half of them.
+# lease_seconds frees the slots of a worker that died mid-run without giving them back. It must be longer than
+# Gunicorn's --timeout (60 s in the Dockerfile), after which a stuck worker has been killed.
+MEAL_PLAN_CONCURRENCY = {
+    'per_user': 1,  # runs in progress for one user
+    'total': 2,  # runs in progress for everyone
+    'lease_seconds': 120,
+    'retry_after': 15,  # Retry-After (seconds) sent when every slot is in use
 }
 
 

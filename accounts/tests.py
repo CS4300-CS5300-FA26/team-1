@@ -5,6 +5,7 @@ the onboarding questionnaire after login is tested in core/test_onboarding.py.
 """
 
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from unittest import mock, skipUnless
@@ -22,7 +23,7 @@ from core.models import UserProfile
 from .emails import ACCOUNT_EXISTS_SUBJECT, VERIFY_SUBJECT
 from .forms import LoginForm, RegisterForm
 from .models import ThrottleCounter
-from .throttle import acquire
+from .throttle import MEAL_PLAN_RUNNING_ALL, MEAL_PLAN_RUNNING_USER, REGISTER_TAKEN_IP, acquire, meal_plan_slot
 
 User = get_user_model()
 PASSWORD = 'Tr4ining-Plan-2026!'
@@ -418,6 +419,89 @@ class RegisterThrottleTests(TestCase):
         for _ in range(15):
             self.assertEqual(self.client.get(reverse('register')).status_code, 200)
 
+    def sign_up(self, username, email, **extra):
+        return self.client.post(
+            reverse('register'),
+            {'username': username, 'email': email, 'password1': PASSWORD, 'password2': PASSWORD},
+            **extra,
+        )
+
+    def probes_counted(self):
+        row = ThrottleCounter.objects.filter(scope=REGISTER_TAKEN_IP).first()
+        return row.count if row else 0
+
+    def use_up_the_probe_budget(self):
+        # Only taken usernames reveal an account: the page never says an email is taken (ADR-018).
+        User.objects.create_user('taken', 'taken@example.com', PASSWORD)
+        for n in range(settings.AUTH_THROTTLE['register_taken'][0]):
+            self.assertContains(self.sign_up('taken', f'prober{n}@example.com'), 'already exists')
+
+    def test_answers_that_reveal_an_account_keep_the_old_budget(self):
+        # Review of PR #61: the form says when a username is taken, so raising the registration limit to 50 gave
+        # probing for accounts 5 times the budget. Those answers have their own limit, as before ADR-016.
+        self.assertLess(settings.AUTH_THROTTLE['register_taken'][0], settings.AUTH_THROTTLE['register'][0])
+        self.use_up_the_probe_budget()
+        response = self.sign_up('taken', 'another-prober@example.com')
+        self.assertEqual(response.status_code, 429)
+        self.assertIn('Retry-After', response)
+        self.assertNotContains(response, 'already exists', status_code=429)
+        self.assertContains(self.sign_up('taken', 'prober@example.com', REMOTE_ADDR='10.0.0.9'), 'already exists')
+
+    def test_new_accounts_can_still_sign_up_once_the_probe_budget_is_used_up(self):
+        # Review of PR #61: reserving a probe on every POST refused valid new accounts once 10 answers had said
+        # "taken". Only answers that would reveal an account are counted now.
+        self.use_up_the_probe_budget()
+        self.assertRedirects(
+            self.sign_up('newcomer', 'newcomer@example.com'),
+            reverse('verify_email_sent'),
+            fetch_redirect_response=False,
+        )
+
+    def test_once_the_probe_budget_is_used_up_a_bad_password_gets_the_same_page_either_way(self):
+        # A plain 429 here would be a yes/no answer: a taken username with a bad password would get 429, a free one 200.
+        self.use_up_the_probe_budget()
+
+        def errors_for(username):
+            response = self.client.post(
+                reverse('register'),
+                {'username': username, 'email': 'probe@example.com', 'password1': PASSWORD, 'password2': 'different'},
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertNotContains(response, 'already exists')
+            return response.context['form'].errors
+
+        self.assertEqual(errors_for('taken'), errors_for('free'))
+        self.assertIn('password2', errors_for('taken'))
+        self.assertNotContains(self.client.post(reverse('register'), {'username': 'taken'}), 'already exists')
+
+    def test_a_taken_username_counts_as_a_probe(self):
+        User.objects.create_user('taken', 'taken@example.com', PASSWORD)
+        for n in range(settings.AUTH_THROTTLE['register_taken'][0]):
+            self.assertContains(self.sign_up('Taken', f'other{n}@example.com'), 'already exists')
+        self.assertEqual(self.sign_up('Taken', 'last@example.com').status_code, 429)
+
+    def test_answers_that_reveal_nothing_do_not_use_the_probe_budget(self):
+        for n in range(settings.AUTH_THROTTLE['register_taken'][0] + 5):
+            response = self.register(n)  # passwords too short: an error, but not about an existing account
+            self.assertEqual(response.status_code, 200)
+            self.assertNotContains(response, 'already exists')
+        self.assertEqual(self.probes_counted(), 0)
+
+    @override_settings(AUTH_THROTTLE={**settings.AUTH_THROTTLE, 'email_recipient': (100, 60 * 60)})
+    def test_a_taken_email_is_never_a_probe(self):
+        # The owner is emailed and the page is the same as for a new address (ADR-018), so nothing is revealed.
+        User.objects.create_user('taken', 'taken@example.com', PASSWORD)
+        for n in range(settings.AUTH_THROTTLE['register_taken'][0] + 1):
+            response = self.sign_up(f'newcomer{n}', 'TAKEN@example.com')
+            self.assertRedirects(response, reverse('verify_email_sent'), fetch_redirect_response=False)
+        self.assertEqual(self.probes_counted(), 0)
+
+    def test_a_taken_username_caught_by_the_database_counts_as_a_probe(self):
+        User.objects.create_user('taken', 'taken@example.com', PASSWORD)
+        with mock.patch.object(RegisterForm, 'validate_unique', lambda self: None):
+            self.assertContains(self.sign_up('taken', 'racer@example.com'), 'already exists')
+        self.assertEqual(self.probes_counted(), 1)
+
 
 @skipUnless(connection.vendor == 'postgresql', 'row locking needs PostgreSQL; SQLite serializes writes itself')
 class ThrottleConcurrencyTests(TransactionTestCase):
@@ -436,6 +520,88 @@ class ThrottleConcurrencyTests(TransactionTestCase):
             results = list(pool.map(lambda _: attempt(), range(20)))
         self.assertEqual(results.count(0), limit)
         self.assertEqual(ThrottleCounter.objects.get(scope='login-id', key='k').count, limit)
+
+
+MEAL_PLAN_SLOTS = {'per_user': 1, 'total': 2, 'lease_seconds': 120, 'retry_after': 15}
+
+
+@override_settings(MEAL_PLAN_CONCURRENCY=MEAL_PLAN_SLOTS)
+class MealPlanSlotTests(TestCase):
+    """In-flight limit on "new meal plan" runs (ADR-016). The view-level tests are in nutrition/test_views.py."""
+
+    def running(self, scope):
+        row = ThrottleCounter.objects.filter(scope=scope).first()
+        return row.count if row else 0
+
+    def test_one_run_per_user_at_a_time(self):
+        with meal_plan_slot(1) as first:
+            with meal_plan_slot(1) as second:
+                self.assertTrue(first)
+                self.assertFalse(second)
+            self.assertEqual(self.running(MEAL_PLAN_RUNNING_USER), 1)
+        self.assertEqual(self.running(MEAL_PLAN_RUNNING_USER), 0)
+        with meal_plan_slot(1) as again:
+            self.assertTrue(again)
+
+    def test_runs_in_progress_are_capped_for_everyone(self):
+        with meal_plan_slot(1) as first, meal_plan_slot(2) as second, meal_plan_slot(3) as third:
+            self.assertEqual((first, second, third), (True, True, False))
+            # The third user's own slot is given back at once, not held while it waits.
+            self.assertEqual(self.running(MEAL_PLAN_RUNNING_ALL), 2)
+        self.assertEqual(self.running(MEAL_PLAN_RUNNING_ALL), 0)
+        self.assertEqual(ThrottleCounter.objects.filter(scope=MEAL_PLAN_RUNNING_USER, count__gt=0).count(), 0)
+
+    def test_slots_are_given_back_when_the_run_fails(self):
+        with self.assertRaises(RuntimeError), meal_plan_slot(1):
+            raise RuntimeError('planner crashed')
+        self.assertEqual(self.running(MEAL_PLAN_RUNNING_USER), 0)
+        self.assertEqual(self.running(MEAL_PLAN_RUNNING_ALL), 0)
+
+    def test_slots_left_by_a_killed_worker_free_up_after_the_lease(self):
+        # A worker killed mid-run (Gunicorn timeout, OOM, pod eviction) never reaches its `finally`.
+        ThrottleCounter.objects.create(scope=MEAL_PLAN_RUNNING_ALL, key=MEAL_PLAN_RUNNING_ALL, count=2)
+        with meal_plan_slot(1) as started:
+            self.assertFalse(started)
+        ThrottleCounter.objects.filter(scope=MEAL_PLAN_RUNNING_ALL).update(
+            window_started=timezone.now() - timedelta(seconds=MEAL_PLAN_SLOTS['lease_seconds'] + 1)
+        )
+        with meal_plan_slot(1) as started:
+            self.assertTrue(started)
+            self.assertEqual(self.running(MEAL_PLAN_RUNNING_ALL), 1)
+
+    def test_the_lease_is_longer_than_gunicorns_timeout(self):
+        # The lease may only free a slot once its holder must be dead; Gunicorn kills a worker after --timeout.
+        cmd = (settings.BASE_DIR / 'Dockerfile').read_text()
+        timeout = int(cmd.split('"--timeout", "')[1].split('"')[0])
+        self.assertGreater(settings.MEAL_PLAN_CONCURRENCY['lease_seconds'], timeout)
+
+
+@skipUnless(connection.vendor == 'postgresql', 'parallel connections need PostgreSQL; SQLite serializes writes itself')
+@override_settings(MEAL_PLAN_CONCURRENCY=MEAL_PLAN_SLOTS)
+class MealPlanSlotConcurrencyTests(TransactionTestCase):
+    def test_parallel_requests_for_one_user_get_one_slot(self):
+        barrier, finish = threading.Barrier(10), threading.Event()
+
+        def attempt():
+            try:
+                barrier.wait()
+                with meal_plan_slot(1) as started:
+                    if started:
+                        finish.wait(10)  # hold the slot until every other attempt has answered
+                    return started
+            finally:
+                connection.close()
+
+        with ThreadPoolExecutor(max_workers=10) as pool:
+            futures = [pool.submit(attempt) for _ in range(10)]
+            # Every attempt but the one holding the slot answers while it is still held.
+            deadline = time.monotonic() + 10
+            while sum(f.done() for f in futures) < 9 and time.monotonic() < deadline:
+                time.sleep(0.01)
+            finish.set()
+            results = [f.result(10) for f in futures]
+        self.assertEqual(results.count(True), 1)
+        self.assertEqual(ThrottleCounter.objects.get(scope=MEAL_PLAN_RUNNING_USER).count, 0)
 
 
 class SetPasswordTests(TestCase):
