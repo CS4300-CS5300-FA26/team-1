@@ -11,6 +11,7 @@ INVALID_LOGIN_MESSAGE = 'Invalid email or password'
 
 
 EMAIL_TAKEN_MESSAGE = 'An account with this email already exists.'
+EMAIL_TAKEN_CODE = 'email_taken'
 
 
 def no_at_sign(value):
@@ -35,7 +36,7 @@ class RegisterForm(UserCreationForm):
     def clean_email(self):
         email = self.cleaned_data['email'].strip().lower()
         if User.objects.filter(email__iexact=email).exists():
-            raise forms.ValidationError(EMAIL_TAKEN_MESSAGE)
+            raise forms.ValidationError(EMAIL_TAKEN_MESSAGE, code=EMAIL_TAKEN_CODE)
         return email
 
 

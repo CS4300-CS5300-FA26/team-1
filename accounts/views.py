@@ -6,6 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import SetPasswordForm
 from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -14,7 +15,7 @@ from django.views.decorators.debug import sensitive_post_parameters
 from core.models import UserProfile
 
 from . import throttle
-from .forms import EMAIL_TAKEN_MESSAGE, LoginForm, RegisterForm
+from .forms import EMAIL_TAKEN_CODE, EMAIL_TAKEN_MESSAGE, LoginForm, RegisterForm
 
 # Created in migration accounts/0002_unique_email_index.
 EMAIL_UNIQUE_INDEX = 'auth_user_email_lower_uniq'
@@ -61,15 +62,9 @@ def register(request):
         return redirect('home')
 
     if request.method == 'POST':
-        ip = throttle.client_ip(request)
-        retry_after = throttle.acquire_register(ip)
+        retry_after = throttle.acquire_register(throttle.client_ip(request))
         if retry_after:
-            form = RegisterForm()
-            form.cleaned_data = {}  # add_error() needs it on a form that was never validated
-            form.add_error(None, throttle.THROTTLED_MESSAGE)
-            response = render(request, 'accounts/register.html', {'form': form}, status=429)
-            response['Retry-After'] = str(retry_after)
-            return response
+            return _register_throttled(request, retry_after)
 
     form = RegisterForm(request.POST or None)
     user = None
@@ -82,11 +77,20 @@ def register(request):
             # field collided, and let anything else surface instead of mislabelling it.
             # PostgreSQL and SQLite both put the violated constraint's name in the message.
             if EMAIL_UNIQUE_INDEX in str(exc):
-                form.add_error('email', EMAIL_TAKEN_MESSAGE)
+                form.add_error('email', ValidationError(EMAIL_TAKEN_MESSAGE, code=EMAIL_TAKEN_CODE))
             elif 'username' in str(exc):
-                form.add_error('username', USERNAME_TAKEN_MESSAGE)
+                form.add_error('username', ValidationError(USERNAME_TAKEN_MESSAGE, code='unique'))
             else:
                 raise
+    if request.method == 'POST' and reveals_an_account(form):
+        retry_after = throttle.acquire_register_probe(throttle.client_ip(request))
+        if retry_after:
+            # Out of answers that reveal accounts (ADR-016). Say nothing about taken usernames or emails. With other
+            # errors, show just those: the same page an unused username and email would get, so a deliberately bad
+            # password can't turn this refusal into a yes/no answer. With none, refuse like any other throttle.
+            hide_account_errors(form)
+            if not form.errors:
+                return _register_throttled(request, retry_after)
     if user:
         # Every user needs a profile so the onboarding and dashboard views can read it.
         UserProfile.objects.get_or_create(user=user)
@@ -94,6 +98,36 @@ def register(request):
         login(request, user)
         return redirect('onboarding')
     return render(request, 'accounts/register.html', {'form': form})
+
+
+def _register_throttled(request, retry_after: int):
+    form = RegisterForm()
+    form.cleaned_data = {}  # add_error() needs it on a form that was never validated
+    form.add_error(None, throttle.THROTTLED_MESSAGE)
+    response = render(request, 'accounts/register.html', {'form': form}, status=429)
+    response['Retry-After'] = str(retry_after)
+    return response
+
+
+# The errors that say a username or email is taken. Django's UserCreationForm marks a taken username with the "unique"
+# code; RegisterForm marks a taken email with EMAIL_TAKEN_CODE. Only these count against `register_taken` (ADR-016).
+ACCOUNT_ERRORS = (('username', 'unique'), ('email', EMAIL_TAKEN_CODE))
+
+
+def reveals_an_account(form) -> bool:
+    """Whether the form says a username or email is taken, which tells the caller that an account exists."""
+    return any(form.has_error(field, code) for field, code in ACCOUNT_ERRORS)
+
+
+def hide_account_errors(form) -> None:
+    """Drop the errors that say a username or email is taken, keeping every other error."""
+    for field, code in ACCOUNT_ERRORS:
+        errors = form.errors.get(field)
+        if errors is not None:
+            # In place, so the list keeps the field_id Django uses to link errors to their input (aria-describedby).
+            errors.data = [error for error in errors.data if getattr(error, 'code', None) != code]
+            if not errors:
+                del form.errors[field]
 
 
 def after_login_url(user) -> str:

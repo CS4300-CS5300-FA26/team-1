@@ -169,16 +169,44 @@ SECURE_REFERRER_POLICY = 'same-origin'
 SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'
 X_FRAME_OPTIONS = 'DENY'
 
+# HSTS (ADR-016). SecurityMiddleware only sends it on HTTPS requests, so plain-HTTP local runs, the CI smoke test and
+# load balancer health checks never get it. Starts at one hour; raise to a year (31536000) once production has run
+# cleanly with it. includeSubDomains and preload stay off: browsers cache them for every subdomain, and preload is
+# very slow to undo.
+SECURE_HSTS_SECONDS = 60 * 60
+SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+SECURE_HSTS_PRELOAD = False
+
 # Rate limits (ADR-006): (allowed attempts, window in seconds). Once the count inside the
 # window is reached, further attempts get HTTP 429 until old ones age out.
 AUTH_THROTTLE = {
     'login': (5, 15 * 60),  # failed logins per identifier + IP
-    'login_ip': (20, 15 * 60),  # failed logins per IP, any identifier
-    'register': (10, 60 * 60),  # registration attempts per IP
+    # Per-IP limits sit well above the per-identifier one: students often share one public IP (campus Wi-Fi, dorms,
+    # carrier NAT), and when an IP counter trips it blocks everyone behind that IP (ADR-016).
+    'login_ip': (100, 15 * 60),  # failed logins per IP, any identifier
+    'register': (50, 60 * 60),  # registration attempts per IP, counted before validation
+    # Registration answers per IP that said a username or email is taken. Until email verification exists (F-3), this
+    # is the only cap on probing which accounts exist, so it stays at the registration limit before ADR-016.
+    'register_taken': (10, 60 * 60),
     'spotify_auth': (20, 15 * 60),  # "Log in / Sign up with Spotify" flows started per IP (ADR-010)
     'spotify_status': (30, 5 * 60),  # Spotify connection checks per user; each one calls Spotify's API
     'spotify_playback': (10, 5 * 60),  # workout playlists started per user; each one searches and plays on Spotify
     'ai_trainer': (10, 60 * 60),  # AI trainer calls per user per hour; each one costs money (ADR-014)
+    # Meal plans made per user per hour, by "Generate a new meal plan" or by a page view with no saved plan to show;
+    # each one runs the CPU-heavy planner (ADR-016).
+    'meal_plan': (10, 60 * 60),
+}
+
+# Meal planner runs allowed at the same time (ADR-016), shared by every pod through the database. The hourly limit
+# above caps how many runs one account starts; this caps how many sync Gunicorn workers they can hold at once.
+# Production has 4 (2 pods x 2 workers), so planner runs never hold more than half of them.
+# lease_seconds frees the slots of a worker that died mid-run without giving them back. It must be longer than
+# Gunicorn's --timeout (60 s in the Dockerfile), after which a stuck worker has been killed.
+MEAL_PLAN_CONCURRENCY = {
+    'per_user': 1,  # runs in progress for one user
+    'total': 2,  # runs in progress for everyone
+    'lease_seconds': 120,
+    'retry_after': 15,  # Retry-After (seconds) sent when every slot is in use
 }
 
 
@@ -275,9 +303,10 @@ if BEHIND_HTTPS_PROXY:
 # `manage.py check --deploy` warnings that are handled outside Django:
 # - security.W008 (SECURE_SSL_REDIRECT): the GKE Gateway redirects HTTP to HTTPS
 #   (fitpro-redirect HTTPRoute); a Django redirect would break plain-HTTP health checks.
-# - security.W004 (SECURE_HSTS_SECONDS): HSTS is deferred until the permanent domain
-#   is in place, since browsers cache it and it is hard to undo.
-SILENCED_SYSTEM_CHECKS = ['security.W004', 'security.W008']
+# - security.W005 (SECURE_HSTS_INCLUDE_SUBDOMAINS) and security.W021 (SECURE_HSTS_PRELOAD):
+#   HSTS is on for fitpro-app.tech itself (ADR-016); extending it to every subdomain or the
+#   browsers' preload list is a separate, hard-to-undo decision.
+SILENCED_SYSTEM_CHECKS = ['security.W005', 'security.W008', 'security.W021']
 
 
 # Logging: send everything to stdout so Cloud Logging captures it (including
