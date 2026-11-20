@@ -1,0 +1,14 @@
+{% extends "accounts/base_auth.html" %}
+{% block title %}Send the confirmation link again | FitPro{% endblock %}
+{% block content %}
+  <h1 class="card__title">Send the confirmation link again</h1>
+  <p class="card__subtitle">Enter the email you signed up with. If it's waiting to be confirmed, we'll send a new link.</p>
+  <form method="post" class="form" novalidate>
+    {% csrf_token %}
+    {% include "core/_form_fields.html" %}
+    <button type="submit" class="btn btn--primary btn--block">Send link</button>
+  </form>
+  <div class="card__footer">
+    <p>Already confirmed? <a href="{% url 'login' %}">Log in</a> or <a href="{% url 'password_reset' %}">reset your password</a></p>
+  </div>
+{% endblock %}

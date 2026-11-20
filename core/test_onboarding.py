@@ -360,7 +360,7 @@ class LoginRedirectTests(OnboardingTestBase):
 
 
 class RegistrationTests(OnboardingTestBase):
-    def test_new_user_gets_a_profile_and_lands_on_onboarding(self):
+    def test_new_user_gets_a_profile_before_confirming_their_email(self):
         response = self.client.post(
             reverse('register'),
             {
@@ -371,7 +371,7 @@ class RegistrationTests(OnboardingTestBase):
             },
         )
 
-        self.assertRedirects(response, reverse('onboarding'), fetch_redirect_response=False)
+        self.assertRedirects(response, reverse('verify_email_sent'), fetch_redirect_response=False)
         profile = UserProfile.objects.get(user__username='newuser')
         self.assertFalse(profile.onboarding_completed)
 

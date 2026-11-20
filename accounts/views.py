@@ -2,19 +2,26 @@ from typing import cast
 
 from django.contrib import messages
 from django.contrib.auth import login, update_session_auth_hash
+from django.contrib.auth import views as auth_views
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import SetPasswordForm
 from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView
 from django.db import IntegrityError, transaction
 from django.shortcuts import redirect, render
-from django.urls import reverse
+from django.urls import reverse, reverse_lazy
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode
+from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import sensitive_post_parameters
+from django.views.decorators.http import require_http_methods
+from django.views.generic import FormView
 
 from core.models import UserProfile
 
-from . import throttle
-from .forms import EMAIL_TAKEN_MESSAGE, LoginForm, RegisterForm
+from . import emails, services, throttle
+from .forms import EmailRequestForm, LoginForm, RegisterForm
+from .tokens import email_verification_token
 
 # Created in migration accounts/0002_unique_email_index.
 EMAIL_UNIQUE_INDEX = 'auth_user_email_lower_uniq'
@@ -56,7 +63,12 @@ class CustomLoginView(LoginView):
 
 @sensitive_post_parameters('password1', 'password2')  # keep passwords out of error reports
 def register(request):
-    """Create an account, log the new user in, and send them to the onboarding questionnaire."""
+    """Start a sign-up: create an inactive account and email a confirmation link (ADR-018).
+
+    The page never says whether an email already has an account. If it does, its owner gets an email saying so, and
+    the person sees the same "check your email" page either way. Nobody is logged in here; the confirmation link does
+    that, once it proves the person controls the address.
+    """
     if request.user.is_authenticated:
         return redirect('home')
 
@@ -71,29 +83,166 @@ def register(request):
             response['Retry-After'] = str(retry_after)
             return response
 
+        # Before validation, so an expired sign-up no longer holds its username or email.
+        services.prune_unconfirmed_accounts()
+
     form = RegisterForm(request.POST or None)
-    user = None
     if request.method == 'POST' and form.is_valid():
-        try:
-            with transaction.atomic():
-                user = form.save()
-        except IntegrityError as exc:
-            # Lost a race with another sign-up; the database caught the duplicate. Say which
-            # field collided, and let anything else surface instead of mislabelling it.
-            # PostgreSQL and SQLite both put the violated constraint's name in the message.
-            if EMAIL_UNIQUE_INDEX in str(exc):
-                form.add_error('email', EMAIL_TAKEN_MESSAGE)
-            elif 'username' in str(exc):
-                form.add_error('username', USERNAME_TAKEN_MESSAGE)
-            else:
-                raise
-    if user:
+        email = form.cleaned_data['email']
+        user = None
+        if not User.objects.filter(email__iexact=email).exists():
+            try:
+                user = _create_unconfirmed_account(form)
+            except IntegrityError as exc:
+                # Lost a race with another sign-up; the database caught the duplicate. A taken email is handled like
+                # any existing one below. PostgreSQL and SQLite both put the violated constraint's name in the message.
+                if 'username' in str(exc) and EMAIL_UNIQUE_INDEX not in str(exc):
+                    form.add_error('username', USERNAME_TAKEN_MESSAGE)
+                    return render(request, 'accounts/register.html', {'form': form})
+                if EMAIL_UNIQUE_INDEX not in str(exc):
+                    raise
+        if user is None:
+            sent = emails.send_account_exists_email(request, email)
+        else:
+            sent = emails.send_verification_email(request, user)
+            if not sent:
+                user.delete()  # nobody can confirm it, so don't let it hold the username and email
+        if not sent:
+            form.add_error(None, emails.EMAIL_NOT_SENT_MESSAGE)
+            return render(request, 'accounts/register.html', {'form': form}, status=503)
+        return redirect('verify_email_sent')
+    return render(request, 'accounts/register.html', {'form': form})
+
+
+def _create_unconfirmed_account(form):
+    with transaction.atomic():
+        user = form.save(commit=False)
+        user.is_active = False
+        user.save()
         # Every user needs a profile so the onboarding and dashboard views can read it.
         UserProfile.objects.get_or_create(user=user)
-        # login() rotates the session key, which prevents session fixation.
-        login(request, user)
-        return redirect('onboarding')
-    return render(request, 'accounts/register.html', {'form': form})
+    return user
+
+
+def verify_email_sent(request):
+    """ "Check your email", after a sign-up or a request to send the confirmation link again."""
+    return render(request, 'accounts/verify_email_sent.html')
+
+
+@never_cache
+@require_http_methods(['GET', 'POST'])
+def verify_email(request, uidb64, token):
+    """Confirm an email from the link we sent. GET shows a button; only the POST activates the account and logs in.
+
+    The extra click matters because email security scanners open links in messages; a GET that confirmed the account
+    would let a scanner do it.
+    """
+    user = _user_from_uid(uidb64)
+    if user is None or not email_verification_token.check_token(user, token):
+        return render(request, 'accounts/verify_email_invalid.html', status=400)
+    if request.method == 'GET':
+        return render(request, 'accounts/verify_email_confirm.html', {'email': user.email})
+    services.confirm_email(user)
+    # login() rotates the session key, which prevents session fixation.
+    login(request, user, backend='django.contrib.auth.backends.ModelBackend')
+    messages.success(request, 'Your email is confirmed.')
+    if not user.has_usable_password():
+        # Created with "Sign up with Spotify": ask for a password before onboarding, as the Spotify flow does.
+        return redirect('set_password')
+    return redirect(after_login_url(user))
+
+
+def resend_verification(request):
+    """Send the confirmation link again to an unconfirmed sign-up."""
+    form = EmailRequestForm(request.POST or None)
+    if request.method == 'POST':
+        response = _email_request_throttled(request, form, 'accounts/resend_verification.html')
+        if response:
+            return response
+        if form.is_valid():
+            services.prune_unconfirmed_accounts()
+            user = User.objects.filter(email__iexact=form.cleaned_data['email'], is_active=False).first()
+            via_spotify = user is not None and _has_spotify(user)
+            if user is not None and not emails.send_verification_email(request, user, via_spotify=via_spotify):
+                form.add_error(None, emails.EMAIL_NOT_SENT_MESSAGE)
+                return render(request, 'accounts/resend_verification.html', {'form': form}, status=503)
+            return redirect('verify_email_sent')
+    return render(request, 'accounts/resend_verification.html', {'form': form})
+
+
+class PasswordResetView(FormView):
+    """Email a password reset link (Django's reset tokens, sent through Resend).
+
+    A plain FormView rather than Django's PasswordResetView, whose form and email sending are all replaced here.
+
+    Unlike Django's default, accounts without a password (Spotify sign-ups) and unconfirmed accounts can reset too:
+    proving control of the inbox is what matters, and for an unconfirmed account it also confirms the email.
+    """
+
+    form_class = EmailRequestForm
+    template_name = 'accounts/password_reset.html'
+    success_url = reverse_lazy('password_reset_done')
+
+    def post(self, request, *args, **kwargs):
+        form = self.get_form()
+        response = _email_request_throttled(request, form, self.template_name)
+        return response or super().post(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        services.prune_unconfirmed_accounts()
+        user = User.objects.filter(email__iexact=form.cleaned_data['email']).first()
+        if user is not None and not emails.send_password_reset_email(self.request, user):
+            form.add_error(None, emails.EMAIL_NOT_SENT_MESSAGE)
+            return self.render_to_response(self.get_context_data(form=form), status=503)
+        return redirect(self.success_url)
+
+
+class PasswordResetDoneView(auth_views.PasswordResetDoneView):
+    template_name = 'accounts/password_reset_done.html'
+
+
+class PasswordResetConfirmView(auth_views.PasswordResetConfirmView):
+    """Choose a new password from the emailed link. Django moves the token out of the URL before the form shows."""
+
+    template_name = 'accounts/password_reset_confirm.html'
+    success_url = reverse_lazy('password_reset_complete')
+
+    def form_valid(self, form):
+        user = cast(User, self.user)  # Django only shows the form, and so only calls this, for a valid link
+        was_confirmed = user.is_active
+        response = super().form_valid(form)
+        if not was_confirmed:
+            services.claim_unconfirmed_account(user)
+        return response
+
+
+class PasswordResetCompleteView(auth_views.PasswordResetCompleteView):
+    template_name = 'accounts/password_reset_complete.html'
+
+
+def _email_request_throttled(request, form, template_name):
+    """The per-IP limit on "forgot password" and "resend confirmation" (ADR-018), or None if the request may go on."""
+    retry_after = throttle.acquire_email_request(throttle.client_ip(request))
+    if not retry_after:
+        return None
+    form.cleaned_data = {}  # add_error() needs it on a form that was never validated
+    form.add_error(None, throttle.THROTTLED_MESSAGE)
+    response = render(request, template_name, {'form': form}, status=429)
+    response['Retry-After'] = str(retry_after)
+    return response
+
+
+def _user_from_uid(uidb64):
+    try:
+        return User.objects.filter(pk=force_str(urlsafe_base64_decode(uidb64))).first()
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _has_spotify(user) -> bool:
+    from spotify.models import SpotifyAccount  # spotify imports accounts, so import here, not at module level
+
+    return SpotifyAccount.objects.filter(user=user).exists()
 
 
 def after_login_url(user) -> str:

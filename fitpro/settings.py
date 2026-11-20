@@ -152,6 +152,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Authentication (user story D-1: user-auth)
 # Passwords are hashed with Django's default PBKDF2-SHA256 hasher (never stored in plain text).
 LOGIN_URL = 'login'
+# Email confirmation and password reset links (ADR-018) stop working after this many seconds. Both are also single use.
+# A sign-up that isn't confirmed in this time is deleted, so it doesn't hold its username or email.
+PASSWORD_RESET_TIMEOUT = 60 * 60 * 24
 LOGIN_REDIRECT_URL = 'dashboard'
 LOGOUT_REDIRECT_URL = 'home'
 
@@ -191,6 +194,7 @@ AUTH_THROTTLE = {
     'ai_trainer': (10, 60 * 60),  # AI trainer calls per user per hour; each one costs money (ADR-014)
     'meal_plan': (10, 60 * 60),  # new meal plans per user per hour; each one runs the CPU-heavy planner (ADR-016)
     'email_recipient': (5, 60 * 60),  # account emails per address per hour; the free plan sends 100 a day (ADR-017)
+    'email_request': (20, 60 * 60),  # "forgot password" and "resend confirmation" requests per IP per hour (ADR-018)
 }
 
 

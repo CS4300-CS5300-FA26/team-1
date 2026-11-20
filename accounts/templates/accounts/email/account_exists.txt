@@ -1,0 +1,11 @@
+{% autoescape off %}You already have a FitPro account
+
+Someone tried to sign up for FitPro with this email address, but it already has an account.
+
+Log in: {{ login_link }}
+Forgot your password? Reset it: {{ reset_link }}
+
+If this wasn't you, you can ignore this email. Nothing has changed on your account.
+
+FitPro
+{% endautoescape %}

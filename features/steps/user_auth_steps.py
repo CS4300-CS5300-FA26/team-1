@@ -4,9 +4,15 @@ behave-django gives every scenario a fresh database and exposes `context.test`, 
 TestCase instance. We use its test client (`context.test.client`) and its assertions.
 """
 
+from unittest import mock
+
 from behave import given, then, when
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.urls import reverse
+
+from accounts.emails import ACCOUNT_EXISTS_SUBJECT
+from accounts.testing import link_in
 
 User = get_user_model()
 
@@ -14,6 +20,8 @@ User = get_user_model()
 VALID_PASSWORD = 'Tr4ining-Plan-2026!'
 WRONG_PASSWORD = 'definitely-the-wrong-one'
 EXISTING_EMAIL = 'member@example.com'
+NEW_EMAIL = 'newuser@example.com'
+NEW_PASSWORD = 'Squat-Bench-Dead-2027?'
 
 
 def create_account(email, username):
@@ -44,7 +52,20 @@ def step_on_signup_page(context):
 
 @when('I submit a valid email and a password that meets the requirements')
 def step_submit_valid_registration(context):
-    post_registration(context, 'newuser@example.com', 'newuser')
+    post_registration(context, NEW_EMAIL, 'newuser')
+
+
+@then('I am asked to confirm my email')
+def step_asked_to_confirm(context):
+    # The same page whether or not the address already had an account (ADR-018).
+    context.test.assertRedirects(context.response, reverse('verify_email_sent'))
+
+
+@when('I open the confirmation link from the email and confirm')
+def step_open_confirmation_link(context):
+    link = link_in(mail.outbox[-1])
+    context.test.assertContains(context.test.client.get(link), 'Confirm my email')
+    context.response = context.test.client.post(link)
 
 
 @then('I am logged in and taken to the onboarding questionnaire')
@@ -66,16 +87,14 @@ def step_try_to_register(context, email):
     post_registration(context, email, username='someone-new')
 
 
-@then('I see a message that the email is already registered')
-def step_already_registered_message(context):
-    # The accounts app words this "An account with this email already exists."
-    context.test.assertContains(context.response, 'already exists')
+@then('the owner of "{email}" is emailed that they already have an account')
+def step_owner_emailed(context, email):
+    context.test.assertEqual([(m.to, m.subject) for m in mail.outbox], [([email], ACCOUNT_EXISTS_SUBJECT)])
 
 
-@then('I remain on the sign-up page')
-def step_remain_on_signup(context):
-    context.test.assertEqual(context.response.status_code, 200)
-    context.test.assertTemplateUsed(context.response, 'accounts/register.html')
+@then('no second account is created')
+def step_no_second_account(context):
+    context.test.assertEqual(User.objects.count(), 1)
 
 
 # --- Scenario: Wrong password ----------------------------------------------------------
@@ -105,3 +124,60 @@ def step_see_message(context, message):
 @then('I remain logged out')
 def step_remain_logged_out(context):
     context.test.assertNotIn('_auth_user_id', context.test.client.session)
+
+
+# --- Scenario: An unconfirmed account can't log in -------------------------------------
+
+
+@given("I signed up but haven't confirmed my email")
+def step_signed_up_unconfirmed(context):
+    post_registration(context, NEW_EMAIL, 'newuser')
+    context.test.assertFalse(User.objects.get(username='newuser').is_active)
+
+
+@when('I log in with my email and password')
+def step_login_with_email(context):
+    context.response = context.test.client.post(reverse('login'), {'username': NEW_EMAIL, 'password': VALID_PASSWORD})
+
+
+# --- Scenario: Reset a forgotten password ----------------------------------------------
+
+
+@when('I ask to reset my password')
+def step_ask_reset(context):
+    response = context.test.client.post(reverse('password_reset'), {'email': EXISTING_EMAIL})
+    context.test.assertRedirects(response, reverse('password_reset_done'))
+
+
+@when('I open the reset link from the email and choose a new password')
+def step_open_reset_link(context):
+    form_url = context.test.client.get(link_in(mail.outbox[-1]))['Location']
+    response = context.test.client.post(form_url, {'new_password1': NEW_PASSWORD, 'new_password2': NEW_PASSWORD})
+    context.test.assertRedirects(response, reverse('password_reset_complete'))
+
+
+@then('I can log in with the new password')
+def step_login_new_password(context):
+    context.test.client.post(reverse('login'), {'username': EXISTING_EMAIL, 'password': NEW_PASSWORD})
+    context.test.assertIn('_auth_user_id', context.test.client.session)
+
+
+# --- Scenario: The email can't be sent -------------------------------------------------
+
+
+@given('the email service is unavailable')
+def step_email_unavailable(context):
+    patcher = mock.patch('accounts.emails.send_account_email', return_value=False)
+    patcher.start()
+    context.add_cleanup(patcher.stop)
+
+
+@then('I see a generic server error')
+def step_generic_server_error(context):
+    # The cause (quota, outage, the per-address limit) is logged, never shown (ADR-017, ADR-018).
+    context.test.assertContains(context.response, 'Something went wrong on our end', status_code=503)
+
+
+@then('no account is created')
+def step_no_account_created(context):
+    context.test.assertFalse(User.objects.exists())

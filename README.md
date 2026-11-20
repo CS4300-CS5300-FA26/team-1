@@ -117,14 +117,22 @@ If you change a colour token, recheck its contrast against the surfaces it is us
 ## Authentication
 User story **D-1 (user-auth)**: *as a new user, I want to create an account and log in, so that my plan and history are private to me.*
 Auth lives in the `accounts` app and uses Django's built-in `User` model, sessions, and password hashing
-(decisions recorded in [ADR-005](docs/adrs/adr-005.md) and [ADR-006](docs/adrs/adr-006.md)).
+(decisions recorded in [ADR-005](docs/adrs/adr-005.md) and [ADR-006](docs/adrs/adr-006.md)). Every account confirms
+its email before it can be used, and passwords can be reset by email ([ADR-018](docs/adrs/adr-018.md)).
 
 | Route | Name | Access | Purpose |
 | --- | --- | --- | --- |
-| `/accounts/register/` | `register` | Anonymous (logged-in users are redirected home) | Create an account; on success the user is logged in and sent to `/onboarding/` |
-| `/accounts/login/` | `login` | Anonymous | Log in with email (or username) and password |
+| `/accounts/register/` | `register` | Anonymous (logged-in users are redirected home); rate limited | Start a sign-up: creates an inactive account and emails a confirmation link, or, if the email already has an account, emails its owner instead. Either way it shows the same "Check your email" page and logs nobody in ([ADR-018](docs/adrs/adr-018.md)) |
+| `/accounts/verify/sent/` | `verify_email_sent` | Anyone | "Check your email", after a sign-up or a resend |
+| `/accounts/verify/<uid>/<token>/` | `verify_email` | Anyone with a valid link (24 hours, single use) | GET shows a "Confirm my email" button; the POST activates the account, logs in, and goes to `/onboarding/` (or `/accounts/password/set/` for a Spotify sign-up) |
+| `/accounts/verify/resend/` | `resend_verification` | Anyone; rate limited | Send a new confirmation link to an unconfirmed sign-up |
+| `/accounts/password/reset/` | `password_reset` | Anyone; rate limited | Email a password reset link if the address has an account; the same page either way |
+| `/accounts/password/reset/sent/` | `password_reset_done` | Anyone | "Check your email" after a reset request |
+| `/accounts/password/reset/<uid>/<token>/` | `password_reset_confirm` | Anyone with a valid link (24 hours, single use) | Choose a new password (Django's view). Signs out the account's other sessions; on an unconfirmed account it also confirms the email and removes any Spotify link |
+| `/accounts/password/reset/done/` | `password_reset_complete` | Anyone | "Your password is changed" |
+| `/accounts/login/` | `login` | Anonymous | Log in with email (or username) and password; unconfirmed accounts can't log in. Links to "Forgot your password?" and to resend the confirmation link |
 | `/accounts/logout/` | `logout` | `POST` only | Log out (the Log out buttons submit a form) |
-| `/accounts/password/set/` | `set_password` | Login required, only for accounts with no password (others are sent on) | Set a first password for an account made with "Sign up with Spotify" ([ADR-010](docs/adrs/adr-010.md)). Shown right after a Spotify sign-up (then onboarding) and at every Spotify sign-in until a password is set; keeps the user logged in |
+| `/accounts/password/set/` | `set_password` | Login required, only for accounts with no password (others are sent on) | Set a first password for an account made with "Sign up with Spotify" ([ADR-010](docs/adrs/adr-010.md)). Shown right after a Spotify sign-up's email is confirmed (then onboarding) and at every Spotify sign-in until a password is set; keeps the user logged in |
 | `/onboarding/` | `onboarding` | Login required | Onboarding questionnaire (story D-2). Users who already finished it are sent to `/dashboard/` |
 | `/dashboard/` | `dashboard` | Login required | Profile summary. Users who haven't finished onboarding are sent to `/onboarding/` |
 | `/users/` | `user_profile` | Login required | The signed-in user's own profile only, with the Spotify section: "Link to Spotify", or "Spotify connected" with the Spotify name, a live connection status, and "Disconnect Spotify" |
@@ -142,8 +150,9 @@ Auth lives in the `accounts` app and uses Django's built-in `User` model, sessio
 | `/grocery-list/` | `grocery_list` | Login required (onboarded users) | This week's grocery list (story D-6, [ADR-009](docs/adrs/adr-009.md)): the meal plan's ingredients combined (rice on Monday and Wednesday is listed once, in cups), with the amount to buy, an estimated cost per item and for the week, an over-budget notice, a note on how the list was made, and the unmeasured pantry items. With no meal plan this week, it asks the user to create one first. It reads only the signed-in user's own plan and never creates one |
 
 ### Acceptance scenarios
-The Gherkin scenarios live in [`features/user_auth.feature`](features/user_auth.feature) (successful registration, email
-already registered, wrong password) and [`features/onboarding.feature`](features/onboarding.feature) (complete
+The Gherkin scenarios live in [`features/user_auth.feature`](features/user_auth.feature) (successful registration with email
+confirmation, email already registered, wrong password, an unconfirmed account can't log in, resetting a forgotten
+password, and the email can't be sent) and [`features/onboarding.feature`](features/onboarding.feature) (complete
 onboarding, missing required answer, returning user skips onboarding), and [`features/weekly_plan.feature`](features/weekly_plan.feature) (see my plan, see my macro targets, plan generator
 down, and the meal plan aiming at my macro targets), [`features/workout_variety.feature`](features/workout_variety.feature)
 (a new split each week, picking or switching a split, the weekly switch limit, and splits that fit my equipment), [`features/workout_variety_ai.feature`](features/workout_variety_ai.feature)
@@ -173,7 +182,7 @@ uv run python manage.py behave  # Gherkin scenarios
 | Password storage | Hashed with Django's default PBKDF2-SHA256 hasher; never stored or logged in plain text. Password fields are marked sensitive so they are scrubbed from error reports |
 | Password rules | Minimum 10 characters, not a commonly used password, not entirely numeric, not too similar to the username or email (`AUTH_PASSWORD_VALIDATORS`) |
 | Login errors | One generic message, "Invalid email or password", for an unknown user, a wrong password, and an inactive account, so the login form cannot be used to discover accounts |
-| Emails and usernames | Emails are trimmed, lowercased, and checked for duplicates case-insensitively (the form check is backed by a unique database index on `LOWER(email)`); usernames cannot contain `@`, so a username can never be mistaken for an email |
+| Emails and usernames | Emails are trimmed, lowercased, and unique case-insensitively (a unique database index on `LOWER(email)`); usernames cannot contain `@`, so a username can never be mistaken for an email. Every account's email is confirmed by an emailed link before it can be used, and sign-up never says an email is taken: the address's owner is emailed instead ([ADR-018](docs/adrs/adr-018.md)) |
 | Sessions | The session key is rotated on login and registration (prevents session fixation); cookies are `HttpOnly`, `SameSite=Lax`, and `Secure` behind the HTTPS proxy; sessions expire after 7 days |
 | CSRF | Every form posts a CSRF token; Django rejects POSTs without one |
 | Logout | `POST` only, so a third-party page cannot log a user out with a link or image |
@@ -183,16 +192,17 @@ uv run python manage.py behave  # Gherkin scenarios
 | Rate limits | Database-backed, shared across pods, HTTP 429 with `Retry-After` ([ADR-006](docs/adrs/adr-006.md), [ADR-016](docs/adrs/adr-016.md)): 5 failed logins per identifier and IP and 100 per IP per 15 minutes; 50 registration attempts per IP per hour; 10 new meal plans per user per hour; plus the Spotify and AI trainer limits below |
 | HTTPS headers | `Strict-Transport-Security: max-age=3600` on HTTPS responses for this host only (no `includeSubDomains` or `preload`, [ADR-016](docs/adrs/adr-016.md)); `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`, and `Cross-Origin-Opener-Policy: same-origin` pinned in `settings.py` |
 | Account email | Sent through Resend ([ADR-017](docs/adrs/adr-017.md)) with a sending-only key read on the server only; at most 5 emails per address per hour (stored as a hash); every failure shows one generic message, while the cause (for example an exhausted quota) is logged on `fitpro.email` without the address, subject, body, or key; production never falls back to printing email, so links can't reach the logs; header values with newlines are refused |
+| Confirmation and reset links | Signed with Django's token generator (separate salts), valid for 24 hours and single use; the confirmation link only acts on a POST, so mail scanners can't confirm accounts; a password reset signs out other sessions, and a reset that recovers an unconfirmed account removes any Spotify link so whoever created it can't log back in ([ADR-018](docs/adrs/adr-018.md)) |
 | AI trainer | The OpenAI key is read only on the server (`.env` locally, a mounted secret in production), sent only in the `Authorization` header, and never put in a page, log line, or error message; tests are given no key; each user is rate limited; nothing personal is sent, and the answer is validated against our own exercise library before it is saved ([ADR-014](docs/adrs/adr-014.md)) |
 
 ### Known gaps (planned follow-ups)
-* **Rate limiting is in place for login and registration** ([ADR-006](docs/adrs/adr-006.md), [ADR-016](docs/adrs/adr-016.md)), but the
-  registration form still says when a username or email is taken, which reveals that an account exists. Fixing it
-  needs email verification (below).
+* **Usernames can be discovered:** the sign-up form says when a username is taken. Emails can't be listed that way
+  ([ADR-018](docs/adrs/adr-018.md)), but when an email can't be sent, the generic error shows on the sign-up and reset
+  forms, which can reveal whether an address has an account (accepted, so people know to contact us).
 * **Security assessment follow-ups** ([ADR-016](docs/adrs/adr-016.md)): no Content-Security-Policy yet, signed-in pages
   don't send `Cache-Control: no-store`, and responses carry a `server: gunicorn` header. HSTS starts at one hour and
   should be raised to a year once production has run cleanly with it.
-* **Email format is validated, but ownership is not.** The Resend mailer is in place ([ADR-017](docs/adrs/adr-017.md)), but the verification and password reset flows aren't built yet (issue #62). Resend's free plan sends **100 emails a day** (resets at midnight UTC); after that, sends fail with the generic message until it resets.
+* **Account email** ([ADR-017](docs/adrs/adr-017.md), [ADR-018](docs/adrs/adr-018.md)): Resend's free plan sends **100 emails a day** (resets at midnight UTC); after that, sign-ups and resets fail with the generic error until it resets. Emails are plain text, and there's no way to change an account's email yet.
 * **No admin site.** It was removed ([ADR-007](docs/adrs/adr-007.md)); manage data with `manage.py shell` or a one-off Job. Re-adding it needs network-level restriction first.
 * **Meal plan (D-5)** ([ADR-008](docs/adrs/adr-008.md)): meals aim at the weekly plan's macro targets (D-4, [ADR-012](docs/adrs/adr-012.md)), the same target every day of the week. Until the week's plan exists (the first visit to This Week or Nutrition creates it), meals use the FDA Daily Values (2,000 kcal) and the page says so. D-6's price source is connected but prices only 54 of the 55 ingredients. When meal suggestions are unavailable, the notice links to This Week. The catalog has 25 recipes with no dietary filters yet, nutrients come from USDA SR Legacy (2018), and pantry staples aren't counted. "Today" and the week boundary use the server's time zone (UTC).
 * **Grocery list (D-6)** ([ADR-009](docs/adrs/adr-009.md)): prices come from `grocery/data/price_quotes.json`, which has real, cited U.S. average prices for 54 of the 55 ingredients, so the list shows those costs. BLS quotes 9 and Walmart quotes the rest. Green-onions is the one thats not priced and is unpriced because it is sold by the bunch with no weight. Amounts are rounded for shopping, pantry staples aren't measured or priced, and there are no "got it" checkboxes yet. Baked potato chili recipe isn't fully priced because it uses green onions.
@@ -351,3 +361,4 @@ in Cloudflare.
 | Claude | Nathan Galay | Claude (chat) implemented week-to-week workout variety (split styles, weekly rotation, switching, ADR-013) and the AI trainer that chooses exercises through OpenAI (`plans.ai_trainer`, the throttle scope and settings, tests, Gherkin scenarios, and ADR-014) |
 | Claude | Caleb Harris | Claude Code compared the 2026-11-19 security assessment against the repo and implemented F-1 (per-user limit on new meal plans), F-2 (higher shared-IP login and registration limits) and HSTS from F-4, with regression tests, ADR-016, the ADR-006 update note, and these README updates |
 | Claude | Caleb Harris | Claude Code implemented Resend email (ADR-017): the `core.mail.ResendEmailBackend` over Resend's HTTP API with quota, rate-limit, and failure logging, `accounts.emails.send_account_email` with the per-recipient limit and generic message, the settings, Terraform secret, secret mount, CI `check --deploy` mail check, mocked tests, and these README updates |
+| Claude | Caleb Harris | Claude Code implemented email confirmation for every sign-up (password and Spotify) and password reset (ADR-018): the `accounts` views, token generator, services, emails, and templates, the Spotify sign-up and login changes, the reset recovery that removes a claimer's Spotify link, unit/Gherkin/Playwright test updates, and these README updates |

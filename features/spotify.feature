@@ -22,9 +22,11 @@ Feature: D-7 Spotify integration
     When I log in with Spotify and approve access
     Then I am logged in and taken to my dashboard
 
-  Scenario: Sign up with Spotify, then set a password before onboarding
+  Scenario: Sign up with Spotify, confirm my email, then set a password before onboarding
     Given I don't have a FitPro account
     When I sign up with Spotify and approve access
+    Then I am asked to confirm my email
+    When I open the confirmation link from the email and confirm
     Then I am asked to set a password
     When I set a password
     Then I am taken to the onboarding questionnaire

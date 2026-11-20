@@ -10,9 +10,6 @@ User = get_user_model()
 INVALID_LOGIN_MESSAGE = 'Invalid email or password'
 
 
-EMAIL_TAKEN_MESSAGE = 'An account with this email already exists.'
-
-
 def no_at_sign(value):
     """Usernames may not contain "@" so a username can never be mistaken for an email."""
     if '@' in value:
@@ -20,7 +17,11 @@ def no_at_sign(value):
 
 
 class RegisterForm(UserCreationForm):
-    """Sign-up form: Django's UserCreationForm plus a required, unique email."""
+    """Sign-up form: Django's UserCreationForm plus a required email.
+
+    The form never says an email is taken: the register view handles that by emailing the address's owner (ADR-018).
+    Usernames are public and still checked here.
+    """
 
     email = forms.EmailField(required=True)
 
@@ -33,10 +34,7 @@ class RegisterForm(UserCreationForm):
         self.fields['username'].validators.append(no_at_sign)
 
     def clean_email(self):
-        email = self.cleaned_data['email'].strip().lower()
-        if User.objects.filter(email__iexact=email).exists():
-            raise forms.ValidationError(EMAIL_TAKEN_MESSAGE)
-        return email
+        return self.cleaned_data['email'].strip().lower()
 
 
 class LoginForm(AuthenticationForm):
@@ -73,3 +71,12 @@ class LoginForm(AuthenticationForm):
             if len(matches) == 1:
                 return matches[0].get_username()
         return value
+
+
+class EmailRequestForm(forms.Form):
+    """One email address, for "forgot password" and "send the confirmation link again"."""
+
+    email = forms.EmailField(widget=forms.EmailInput(attrs={'autocomplete': 'email', 'autofocus': True}))
+
+    def clean_email(self):
+        return self.cleaned_data['email'].strip().lower()

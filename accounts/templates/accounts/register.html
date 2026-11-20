@@ -3,7 +3,7 @@
 {% block title %}Sign up | FitPro{% endblock %}
 {% block content %}
   <h1 class="card__title">Create your account</h1>
-  <p class="card__subtitle">It takes a minute, then we'll tailor a plan to you.</p>
+  <p class="card__subtitle">It takes a minute: we'll email you a link to confirm your address, then tailor a plan to you.</p>
   <form method="post" class="form" novalidate>
     {% csrf_token %}
     {% include "core/_form_fields.html" %}
