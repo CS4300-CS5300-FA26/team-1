@@ -83,6 +83,25 @@ resource "google_secret_manager_secret" "spotify_client_secret" {
   depends_on = [google_project_service.enabled]
 }
 
+# Resend API key for account email (ADR-017). Issued by Resend, so, like the Spotify client secret, Terraform creates
+# only the empty secret and its access grant, and the value is added outside Terraform:
+#   gcloud secrets versions add fitpro-resend-api-key --data-file=-   (paste it, then Ctrl-D / Ctrl-Z Enter)
+# Use a "Sending access" key restricted to the FitPro domain. To rotate it, create a new key in Resend, add it as a new
+# version, restart the pods, then delete the old key in Resend.
+resource "google_secret_manager_secret" "resend_api_key" {
+  secret_id = "fitpro-resend-api-key"
+  replication {
+    auto {}
+  }
+  depends_on = [google_project_service.enabled]
+}
+
+resource "google_secret_manager_secret_iam_member" "app_resend_api_key" {
+  secret_id = google_secret_manager_secret.resend_api_key.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.app.email}"
+}
+
 resource "google_secret_manager_secret_iam_member" "app_spotify_token_encryption_key" {
   secret_id = google_secret_manager_secret.spotify_token_encryption_key.id
   role      = "roles/secretmanager.secretAccessor"

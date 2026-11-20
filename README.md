@@ -21,6 +21,7 @@ conscious students. The application offers personalized workout splits, meal-pre
 * **Production Host:** GKE Autopilot on Google Cloud, `us-central1` (see [ADR-003](docs/adrs/adr-003.md))
 * **Infrastructure as Code:** Terraform (`terraform_scripts/`), state in a versioned GCS bucket
 * **Docker Image:** multi-stage build on `python:3.12-slim` with uv, running Gunicorn as a non-root user (UID 10001) with a read-only code tree (see `Dockerfile`)
+* **Email:** Resend's HTTP API through a small Django email backend (`core/mail.py`), free plan (see [ADR-017](docs/adrs/adr-017.md))
 * **AI trainer:** OpenAI Chat Completions chooses the exercises in each weekly plan; optional, and off without an API key (see [ADR-014](docs/adrs/adr-014.md))
 * **Code quality:** ruff (lint and format), mypy with django-stubs (types), bandit and CodeQL (security scans), all enforced in CI
 
@@ -181,6 +182,7 @@ uv run python manage.py behave  # Gherkin scenarios
 | Spotify sign-in | OAuth 2.0 Authorization Code flow on the server ([ADR-010](docs/adrs/adr-010.md)): a random, single-use, 10-minute `state` in the session; flows start with a CSRF-protected `POST`; accounts are matched on the Spotify user id only, never on the (unverified) email, and a refused sign-up gets a generic message that doesn't confirm whether an email has an account; the production access log omits query strings, so OAuth codes aren't logged; tokens are encrypted at rest with Fernet, never logged, and never sent to the browser; log in / sign up with Spotify and the connection test are rate limited |
 | Rate limits | Database-backed, shared across pods, HTTP 429 with `Retry-After` ([ADR-006](docs/adrs/adr-006.md), [ADR-016](docs/adrs/adr-016.md)): 5 failed logins per identifier and IP and 100 per IP per 15 minutes; 50 registration attempts per IP per hour; 10 new meal plans per user per hour; plus the Spotify and AI trainer limits below |
 | HTTPS headers | `Strict-Transport-Security: max-age=3600` on HTTPS responses for this host only (no `includeSubDomains` or `preload`, [ADR-016](docs/adrs/adr-016.md)); `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`, and `Cross-Origin-Opener-Policy: same-origin` pinned in `settings.py` |
+| Account email | Sent through Resend ([ADR-017](docs/adrs/adr-017.md)) with a sending-only key read on the server only; at most 5 emails per address per hour (stored as a hash); every failure shows one generic message, while the cause (for example an exhausted quota) is logged on `fitpro.email` without the address, subject, body, or key; production never falls back to printing email, so links can't reach the logs; header values with newlines are refused |
 | AI trainer | The OpenAI key is read only on the server (`.env` locally, a mounted secret in production), sent only in the `Authorization` header, and never put in a page, log line, or error message; tests are given no key; each user is rate limited; nothing personal is sent, and the answer is validated against our own exercise library before it is saved ([ADR-014](docs/adrs/adr-014.md)) |
 
 ### Known gaps (planned follow-ups)
@@ -190,7 +192,7 @@ uv run python manage.py behave  # Gherkin scenarios
 * **Security assessment follow-ups** ([ADR-016](docs/adrs/adr-016.md)): no Content-Security-Policy yet, signed-in pages
   don't send `Cache-Control: no-store`, and responses carry a `server: gunicorn` header. HSTS starts at one hour and
   should be raised to a year once production has run cleanly with it.
-* **Email format is validated, but ownership is not.** Email verification and password reset need a production email backend (`MAILERS` still uses the console backend).
+* **Email format is validated, but ownership is not.** The Resend mailer is in place ([ADR-017](docs/adrs/adr-017.md)), but the verification and password reset flows aren't built yet (issue #62). Resend's free plan sends **100 emails a day** (resets at midnight UTC); after that, sends fail with the generic message until it resets.
 * **No admin site.** It was removed ([ADR-007](docs/adrs/adr-007.md)); manage data with `manage.py shell` or a one-off Job. Re-adding it needs network-level restriction first.
 * **Meal plan (D-5)** ([ADR-008](docs/adrs/adr-008.md)): meals aim at the weekly plan's macro targets (D-4, [ADR-012](docs/adrs/adr-012.md)), the same target every day of the week. Until the week's plan exists (the first visit to This Week or Nutrition creates it), meals use the FDA Daily Values (2,000 kcal) and the page says so. D-6's price source is connected but prices only 54 of the 55 ingredients. When meal suggestions are unavailable, the notice links to This Week. The catalog has 25 recipes with no dietary filters yet, nutrients come from USDA SR Legacy (2018), and pantry staples aren't counted. "Today" and the week boundary use the server's time zone (UTC).
 * **Grocery list (D-6)** ([ADR-009](docs/adrs/adr-009.md)): prices come from `grocery/data/price_quotes.json`, which has real, cited U.S. average prices for 54 of the 55 ingredients, so the list shows those costs. BLS quotes 9 and Walmart quotes the rest. Green-onions is the one thats not priced and is unpriced because it is sold by the bunch with no weight. Amounts are rounded for shopping, pantry staples aren't measured or priced, and there are no "got it" checkboxes yet. Baked potato chili recipe isn't fully priced because it uses green onions.
@@ -260,7 +262,7 @@ Alerting and response: monitoring and alerts are currently handled through Googl
 | Networking | Custom VPC `fitpro-vpc`, subnet `fitpro-gke` (10.10.0.0/20, pods 10.20.0.0/16, services 10.30.0.0/20), Private Google Access, private services peering for Cloud SQL |
 | Compute | GKE Autopilot cluster `fitpro` (REGULAR release channel, Gateway API enabled, Workload Identity, deletion protection) running as a dedicated least-privilege node service account |
 | Database | Cloud SQL `fitpro-pg` (PostgreSQL 16, `db-f1-micro`, zonal): private IP only, encrypted connections only, Cloud SQL Auth Proxy/connector required, daily backups (7 retained) + point-in-time recovery, Sunday 09:00 UTC maintenance window, deletion protection. Database `fitpro`, user `fitpro_app` |
-| Secrets | Secret Manager `fitpro-db-password`, `fitpro-django-secret-key`, and `fitpro-spotify-token-encryption-key` (randomly generated), and `fitpro-spotify-client-secret` (created empty; its value is added with `gcloud` so it never enters Terraform state, see below). Only the app service account can read them (per-secret binding), and secret reads are written to Data Access audit logs |
+| Secrets | Secret Manager `fitpro-db-password`, `fitpro-django-secret-key`, and `fitpro-spotify-token-encryption-key` (randomly generated), and `fitpro-spotify-client-secret` and `fitpro-resend-api-key` (created empty; their values are added with `gcloud` so they never enter Terraform state, see below). Only the app service account can read them (per-secret binding), and secret reads are written to Data Access audit logs |
 | Identity | Runtime service account `fitpro-app` (`cloudsql.client` + per-secret `secretAccessor`), bound by Workload Identity to Kubernetes service account `app/django-app`. No service account keys exist |
 | Images | Artifact Registry `fitpro` (Docker, `us-central1`) with immutable tags, keeping the 15 most recent images and deleting anything older than 30 days |
 | Ingress / TLS | Reserved global static IP `fitpro-lb-ip`, Google-managed certificate through Certificate Manager (DNS authorization) and certificate map `fitpro-certmap` for `fitpro-app.tech`, plus one for the old `fitpro.rockymountaintechlab.com`, which the Gateway only redirects to the new domain (DNS only in Cloudflare, see [ADR-004](docs/adrs/adr-004.md) and [ADR-011](docs/adrs/adr-011.md)), SSL policy `fitpro-ssl-policy` (TLS 1.2+, MODERN profile) |
@@ -296,13 +298,29 @@ client secret must have a version **before** those manifests are deployed. A mou
 (and the migrate Job) from starting, and the app refuses to start with only some Spotify settings. Register
 `https://fitpro-app.tech/auth-callback/spotify` in the Spotify dashboard too.
 
+### Resend API key in production
+`secrets.tf` also creates an **empty** `fitpro-resend-api-key` ([ADR-017](docs/adrs/adr-017.md)). In Resend, create an
+API key with **Sending access** restricted to the FitPro domain, then add it the same way:
+
+```shell
+gcloud secrets versions add fitpro-resend-api-key --data-file=-
+gcloud secrets versions list fitpro-resend-api-key   # one ENABLED version
+```
+
+`k8s/app/base/secretproviderclass.yaml` mounts it at `resend-api-key`, so it also needs a version **before** those
+manifests are deployed, or pods and the migrate Job won't start. The sender defaults to
+`FitPro <no-reply@fitpro-app.tech>`; set `DEFAULT_FROM_EMAIL` in the prod ConfigMap if the verified domain is
+different. The Resend account is a dedicated FitPro account, owned by Caleb Harris. Daily usage is on Resend's
+dashboard, and the `fitpro.email` logger reports an exhausted quota at ERROR.
+
 After the first apply, add the `dns_authorization_records` CNAME and an A record pointing at `lb_ip_address` in
 Cloudflare (DNS only / gray cloud). The Kubernetes Gateway uses `lb_ip_name` as its address, `certificate_map_name` in the
 `networking.gke.io/certmap` annotation, and `ssl_policy_name` in a `GCPGatewayPolicy`.
 
 ### Teardown (end of semester)
 Set `deletion_protection = false` on the cluster and the Cloud SQL instance (both settings), run `terraform apply`, then
-`terraform destroy`.
+`terraform destroy`. Then delete the Resend account (or its API key and domain) and the domain's Resend DNS records
+in Cloudflare.
 
 # AI Usage
 
@@ -332,3 +350,4 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 | Claude | Savannah Harmony Swan | Claude Code implemented the workout playlist story: Spotify playlist search and start playback in `spotify/client.py`, `start_workout_music` and its rate limit, the `/plans/workout/` screen and start button, `features/workout_music.feature`, unit tests, ADR-015, and these README updates |
 | Claude | Nathan Galay | Claude (chat) implemented week-to-week workout variety (split styles, weekly rotation, switching, ADR-013) and the AI trainer that chooses exercises through OpenAI (`plans.ai_trainer`, the throttle scope and settings, tests, Gherkin scenarios, and ADR-014) |
 | Claude | Caleb Harris | Claude Code compared the 2026-11-19 security assessment against the repo and implemented F-1 (per-user limit on new meal plans), F-2 (higher shared-IP login and registration limits) and HSTS from F-4, with regression tests, ADR-016, the ADR-006 update note, and these README updates |
+| Claude | Caleb Harris | Claude Code implemented Resend email (ADR-017): the `core.mail.ResendEmailBackend` over Resend's HTTP API with quota, rate-limit, and failure logging, `accounts.emails.send_account_email` with the per-recipient limit and generic message, the settings, Terraform secret, secret mount, CI `check --deploy` mail check, mocked tests, and these README updates |

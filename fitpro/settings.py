@@ -190,6 +190,7 @@ AUTH_THROTTLE = {
     'spotify_playback': (10, 5 * 60),  # workout playlists started per user; each one searches and plays on Spotify
     'ai_trainer': (10, 60 * 60),  # AI trainer calls per user per hour; each one costs money (ADR-014)
     'meal_plan': (10, 60 * 60),  # new meal plans per user per hour; each one runs the CPU-heavy planner (ADR-016)
+    'email_recipient': (5, 60 * 60),  # account emails per address per hour; the free plan sends 100 a day (ADR-017)
 }
 
 
@@ -307,11 +308,22 @@ LOGGING = {
 }
 
 
-# Email
-# https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
+# Email (ADR-017): account email goes out through Resend's HTTP API (core.mail.ResendEmailBackend).
+# https://docs.djangoproject.com/en/6.1/topics/email/
+# The key is a secret: .env locally, the mounted `resend-api-key` file in production. Tests never get one.
+RESEND_API_KEY = '' if TESTING else read_secret('resend-api-key', 'RESEND_API_KEY', default='')
+# Must be on the domain verified in Resend.
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='FitPro <no-reply@fitpro-app.tech>')
 
-MAILERS = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
-    },
-}
+_mail_backend: dict[str, object]
+if TESTING:
+    # Django's test runner swaps in this backend anyway; pinned so nothing under test can reach Resend.
+    _mail_backend = {'BACKEND': 'django.core.mail.backends.locmem.EmailBackend'}
+elif DEBUG and not RESEND_API_KEY:
+    # Local development without a key: print email to the terminal.
+    _mail_backend = {'BACKEND': 'django.core.mail.backends.console.EmailBackend'}
+else:
+    # Production always uses Resend, even if the key is missing, so verification and reset links are never printed
+    # to the logs. A missing key fails every send with a logged error instead.
+    _mail_backend = {'BACKEND': 'core.mail.ResendEmailBackend', 'OPTIONS': {'api_key': RESEND_API_KEY}}
+MAILERS = {'default': _mail_backend}
