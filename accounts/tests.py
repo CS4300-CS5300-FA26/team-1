@@ -21,7 +21,7 @@ from core.models import UserProfile
 
 from .forms import LoginForm, RegisterForm
 from .models import ThrottleCounter
-from .throttle import MEAL_PLAN_RUNNING_ALL, MEAL_PLAN_RUNNING_USER, acquire, meal_plan_slot
+from .throttle import MEAL_PLAN_RUNNING_ALL, MEAL_PLAN_RUNNING_USER, REGISTER_TAKEN_IP, acquire, meal_plan_slot
 
 User = get_user_model()
 PASSWORD = 'Tr4ining-Plan-2026!'
@@ -404,6 +404,56 @@ class RegisterThrottleTests(TestCase):
     def test_viewing_the_form_is_not_counted(self):
         for _ in range(15):
             self.assertEqual(self.client.get(reverse('register')).status_code, 200)
+
+    def sign_up(self, username, email, **extra):
+        return self.client.post(
+            reverse('register'),
+            {'username': username, 'email': email, 'password1': PASSWORD, 'password2': PASSWORD},
+            **extra,
+        )
+
+    def probes_counted(self):
+        row = ThrottleCounter.objects.filter(scope=REGISTER_TAKEN_IP).first()
+        return row.count if row else 0
+
+    def test_answers_that_reveal_an_account_keep_the_old_budget(self):
+        # Review of PR #61: the form says when an email or username is taken, so raising the registration limit to 50
+        # gave probing for accounts 5 times the budget. Those answers have their own limit, as before ADR-016.
+        User.objects.create_user('taken', 'taken@example.com', PASSWORD)
+        limit = settings.AUTH_THROTTLE['register_taken'][0]
+        self.assertLess(limit, settings.AUTH_THROTTLE['register'][0])
+        for n in range(limit):
+            response = self.sign_up(f'prober{n}', 'TAKEN@example.com')
+            self.assertContains(response, 'already exists')
+        response = self.sign_up('newcomer', 'newcomer@example.com')
+        self.assertEqual(response.status_code, 429)
+        self.assertIn('Retry-After', response)
+        self.assertNotContains(response, 'already exists', status_code=429)
+        self.assertFalse(User.objects.filter(username='newcomer').exists())
+        self.assertRedirects(
+            self.sign_up('newcomer', 'newcomer@example.com', REMOTE_ADDR='10.0.0.9'),
+            reverse('onboarding'),
+            fetch_redirect_response=False,
+        )
+
+    def test_a_taken_username_counts_as_a_probe(self):
+        User.objects.create_user('taken', 'taken@example.com', PASSWORD)
+        for n in range(settings.AUTH_THROTTLE['register_taken'][0]):
+            self.assertContains(self.sign_up('Taken', f'other{n}@example.com'), 'already exists')
+        self.assertEqual(self.sign_up('Taken', 'last@example.com').status_code, 429)
+
+    def test_answers_that_reveal_nothing_do_not_use_the_probe_budget(self):
+        for n in range(settings.AUTH_THROTTLE['register_taken'][0] + 5):
+            response = self.register(n)  # passwords too short: an error, but not about an existing account
+            self.assertEqual(response.status_code, 200)
+            self.assertNotContains(response, 'already exists')
+        self.assertEqual(self.probes_counted(), 0)
+
+    def test_a_taken_email_caught_by_the_database_counts_as_a_probe(self):
+        User.objects.create_user('taken', 'taken@example.com', PASSWORD)
+        with mock.patch.object(RegisterForm, 'clean_email', lambda self: self.cleaned_data['email'].lower()):
+            self.assertContains(self.sign_up('racer', 'TAKEN@example.com'), 'already exists')
+        self.assertEqual(self.probes_counted(), 1)
 
 
 @skipUnless(connection.vendor == 'postgresql', 'row locking needs PostgreSQL; SQLite serializes writes itself')

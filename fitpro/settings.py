@@ -185,6 +185,9 @@ AUTH_THROTTLE = {
     # carrier NAT), and when an IP counter trips it blocks everyone behind that IP (ADR-016).
     'login_ip': (100, 15 * 60),  # failed logins per IP, any identifier
     'register': (50, 60 * 60),  # registration attempts per IP, counted before validation
+    # Registration answers per IP that said a username or email is taken. Until email verification exists (F-3), this
+    # is the only cap on probing which accounts exist, so it stays at the registration limit before ADR-016.
+    'register_taken': (10, 60 * 60),
     'spotify_auth': (20, 15 * 60),  # "Log in / Sign up with Spotify" flows started per IP (ADR-010)
     'spotify_status': (30, 5 * 60),  # Spotify connection checks per user; each one calls Spotify's API
     'spotify_playback': (10, 5 * 60),  # workout playlists started per user; each one searches and plays on Spotify

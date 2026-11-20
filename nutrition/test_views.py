@@ -11,6 +11,7 @@ from django.contrib.auth import get_user_model
 from django.db import connection
 from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from core.models import UserProfile
 
@@ -18,6 +19,7 @@ from .models import WeeklyMealPlan
 from .planner import build_week_plan
 from .services import MealPlanResult, week_start
 from .templatetags.meal_plan import servings
+from .views import DAY_KEYS
 
 User = get_user_model()
 PASSWORD = 'Tr4ining-Plan-2026!'
@@ -237,6 +239,15 @@ class NewPlanThrottleTests(TestCase):
         with mock.patch('nutrition.views.new_meal_plan') as planner:
             self.assertEqual(self.client.post(reverse('meal_plan_new')).status_code, 429)
         planner.assert_not_called()
+
+    def test_a_blocked_request_keeps_the_day_the_user_was_looking_at(self):
+        # Review of PR #61: the refused page read the day from the query string, but the form posts it.
+        self.use_up_the_limit()
+        other_day = DAY_KEYS[(timezone.localdate().weekday() + 3) % 7]
+        response = self.client.post(reverse('meal_plan_new'), {'day': other_day})
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.context['selected_day_key'], other_day)
+        self.assertContains(response, f'data-day-link="{other_day}"', status_code=429)
 
     def test_a_blocked_request_shows_the_saved_plan_without_planning(self):
         self.use_up_the_limit()

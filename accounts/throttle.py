@@ -23,6 +23,7 @@ logger = logging.getLogger('accounts.security')
 LOGIN_ID = 'login-id'  # login attempts for one identifier from one IP
 LOGIN_IP = 'login-ip'  # login attempts from one IP, whatever the identifier
 REGISTER_IP = 'register-ip'  # registration attempts from one IP
+REGISTER_TAKEN_IP = 'register-taken-ip'  # registration answers to one IP that said an account exists (ADR-016)
 SPOTIFY_AUTH_IP = 'spotify-auth-ip'  # Spotify log-in or sign-up flows started from one IP
 SPOTIFY_STATUS_USER = 'spotify-status'  # Spotify connection checks by one user
 SPOTIFY_PLAYBACK_USER = 'spotify-playback'  # workout playlists started by one user
@@ -146,11 +147,22 @@ def release_login(identifier, ip):
 
 
 def acquire_register(ip):
-    """Count a registration attempt. Returns 0 or the seconds to wait."""
-    wait = acquire((REGISTER_IP, _digest(ip), 'register'))
+    """Count a registration attempt, and reserve a probe. Returns 0 or the seconds to wait.
+
+    The form says when a username or email is taken, so each answer can reveal that an account exists. Those answers
+    have their own, lower limit (ADR-016): every attempt reserves one up front, so parallel requests can't race past
+    it, and `release_register_probe` gives it back when the answer revealed nothing.
+    """
+    key = _digest(ip)
+    wait = acquire((REGISTER_IP, key, 'register'), (REGISTER_TAKEN_IP, key, 'register_taken'))
     if wait:
         logger.warning('Registration throttled for ip=%s', _safe_for_log(ip))
     return wait
+
+
+def release_register_probe(ip):
+    """The registration answer revealed no existing account: give back the probe `acquire_register` reserved."""
+    refund(REGISTER_TAKEN_IP, _digest(ip))
 
 
 def acquire_spotify_auth(ip):

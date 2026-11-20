@@ -77,14 +77,18 @@ def meal_plan(request):
 
 
 def _render_plan(request, result: MealPlanResult, status: int = 200):
-    """The Meal Plan page for `result`. Only renders: whether the planner runs is up to the caller."""
+    """The Meal Plan page for `result`. Only renders: whether the planner runs is up to the caller.
+
+    The day comes from ?day= on a view, or from the form's posted day when a "new meal plan" POST is refused, so the
+    user stays on the day they were looking at.
+    """
     context: dict[str, Any] = {'result': result, 'workouts_link': settings.NUTRITION_WORKOUTS_LINK}
     if result.plan is not None:
         plan = result.plan
         today = timezone.localdate()
         this_week = result.week_start <= today <= result.week_end
         today_index = (today - result.week_start).days if this_week else 0
-        day = _selected_day(request.GET, today_index)
+        day = _selected_day(request.POST if request.method == 'POST' else request.GET, today_index)
         coverage = len(plan.meal_keys) / len(MEALS)
         context.update(
             days=[

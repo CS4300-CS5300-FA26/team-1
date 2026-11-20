@@ -6,6 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import SetPasswordForm
 from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -14,7 +15,7 @@ from django.views.decorators.debug import sensitive_post_parameters
 from core.models import UserProfile
 
 from . import throttle
-from .forms import EMAIL_TAKEN_MESSAGE, LoginForm, RegisterForm
+from .forms import EMAIL_TAKEN_CODE, EMAIL_TAKEN_MESSAGE, LoginForm, RegisterForm
 
 # Created in migration accounts/0002_unique_email_index.
 EMAIL_UNIQUE_INDEX = 'auth_user_email_lower_uniq'
@@ -82,11 +83,13 @@ def register(request):
             # field collided, and let anything else surface instead of mislabelling it.
             # PostgreSQL and SQLite both put the violated constraint's name in the message.
             if EMAIL_UNIQUE_INDEX in str(exc):
-                form.add_error('email', EMAIL_TAKEN_MESSAGE)
+                form.add_error('email', ValidationError(EMAIL_TAKEN_MESSAGE, code=EMAIL_TAKEN_CODE))
             elif 'username' in str(exc):
-                form.add_error('username', USERNAME_TAKEN_MESSAGE)
+                form.add_error('username', ValidationError(USERNAME_TAKEN_MESSAGE, code='unique'))
             else:
                 raise
+    if request.method == 'POST' and not reveals_an_account(form):
+        throttle.release_register_probe(throttle.client_ip(request))
     if user:
         # Every user needs a profile so the onboarding and dashboard views can read it.
         UserProfile.objects.get_or_create(user=user)
@@ -94,6 +97,15 @@ def register(request):
         login(request, user)
         return redirect('onboarding')
     return render(request, 'accounts/register.html', {'form': form})
+
+
+def reveals_an_account(form) -> bool:
+    """Whether the form says a username or email is taken, which tells the caller that an account exists.
+
+    Django's UserCreationForm marks a taken username with the "unique" code; RegisterForm marks a taken email with
+    EMAIL_TAKEN_CODE. Only these answers count against the `register_taken` limit (ADR-016).
+    """
+    return form.has_error('username', 'unique') or form.has_error('email', EMAIL_TAKEN_CODE)
 
 
 def after_login_url(user) -> str:
