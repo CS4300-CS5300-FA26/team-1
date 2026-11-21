@@ -70,7 +70,9 @@ def register(request):
     """Start a sign-up: create an inactive account and email a confirmation link (ADR-018).
 
     The page never says whether an email already has an account. If it does, its owner gets an email saying so, and
-    the person sees the same "check your email" page either way. Nobody is logged in here; the confirmation link does
+    the person sees the same "check your email" page either way, even when the email couldn't be sent: an error then
+    would reveal accounts, because an address's email limit can be used up through "forgot password", which only sends
+    for addresses with an account. Failures are logged instead. Nobody is logged in here; the confirmation link does
     that, once it proves the person controls the address.
     """
     if request.user.is_authenticated:
@@ -114,14 +116,11 @@ def register(request):
         return render(request, 'accounts/register.html', {'form': form})
 
     if user is None:
-        sent = emails.send_account_exists_email(request, form.cleaned_data['email'])
-    else:
-        sent = emails.send_verification_email(request, user)
-        if not sent:
-            user.delete()  # nobody can confirm it, so don't let it hold the username and email
-    if not sent:
-        form.add_error(None, emails.EMAIL_NOT_SENT_MESSAGE)
-        return render(request, 'accounts/register.html', {'form': form}, status=503)
+        if not emails.send_account_exists_email(request, form.cleaned_data['email']):
+            logger.warning('"Account exists" email not sent; showing the usual page')
+    elif not emails.send_verification_email(request, user):
+        # Kept, so the person can use "send the link again" once email works; unconfirmed sign-ups expire anyway.
+        logger.warning('Confirmation link for new user %s not sent; showing the usual page', user.pk)
     return redirect('verify_email_sent')
 
 

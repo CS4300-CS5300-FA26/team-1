@@ -38,5 +38,7 @@ Feature: D-1 User authentication
   Scenario: The email can't be sent
     Given the email service is unavailable
     When I submit a valid email and a password that meets the requirements
-    Then I see a generic server error
-    And no account is created
+    Then I am asked to confirm my email
+    When the email service is back and I ask for the link again
+    And I open the confirmation link from the email and confirm
+    Then I am logged in and taken to the onboarding questionnaire

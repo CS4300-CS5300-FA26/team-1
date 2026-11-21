@@ -167,17 +167,16 @@ def step_login_new_password(context):
 
 @given('the email service is unavailable')
 def step_email_unavailable(context):
-    patcher = mock.patch('accounts.emails.send_account_email', return_value=False)
-    patcher.start()
-    context.add_cleanup(patcher.stop)
+    context.email_outage = mock.patch('accounts.emails.send_account_email', return_value=False)
+    context.email_outage.start()
+    context.add_cleanup(lambda: context.email_outage.stop() if context.email_outage else None)
 
 
-@then('I see a generic server error')
-def step_generic_server_error(context):
-    # The cause (quota, outage, the per-address limit) is logged, never shown (ADR-017, ADR-018).
-    context.test.assertContains(context.response, 'Something went wrong on our end', status_code=503)
-
-
-@then('no account is created')
-def step_no_account_created(context):
-    context.test.assertFalse(User.objects.exists())
+@when('the email service is back and I ask for the link again')
+def step_email_back_and_resend(context):
+    # The page looked the same as a sent email (ADR-018), so the person asks for the link again.
+    context.email_outage.stop()
+    context.email_outage = None
+    context.test.assertEqual(mail.outbox, [])
+    response = context.test.client.post(reverse('resend_verification'), {'email': NEW_EMAIL})
+    context.test.assertRedirects(response, reverse('verify_email_sent'))

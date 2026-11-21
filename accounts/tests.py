@@ -66,12 +66,30 @@ class RegisterTests(TestCase):
         self.register(email='  Sam@Example.COM ')
         self.assertEqual(User.objects.get(username='sam').email, 'sam@example.com')
 
-    def test_registration_fails_with_a_generic_error_if_the_link_cannot_be_sent(self):
-        with mock.patch('accounts.emails.send_account_email', return_value=False):
+    def test_a_link_that_cannot_be_sent_gets_the_usual_page_and_can_be_sent_again(self):
+        with (
+            mock.patch('accounts.emails.send_account_email', return_value=False),
+            self.assertLogs('accounts.security', 'WARNING') as logs,
+        ):
             response = self.register()
-        self.assertEqual(response.status_code, 503)
-        self.assertContains(response, 'Something went wrong on our end', status_code=503)
-        self.assertFalse(User.objects.exists())  # nobody could confirm it, so it isn't kept
+        self.assertRedirects(response, reverse('verify_email_sent'))
+        self.assertIn('not sent', logs.output[0])
+        self.assertNotIn('sam@example.com', logs.output[0])
+        self.assertFalse(User.objects.get(username='sam').is_active)  # kept, so the link can be sent again
+        self.client.post(reverse('resend_verification'), {'email': 'sam@example.com'})
+        self.assertEqual([m.subject for m in mail.outbox], [VERIFY_SUBJECT])
+
+    def test_a_used_up_recipient_limit_does_not_reveal_the_account(self):
+        # PR review: "forgot password" only sends (and counts toward the per-address limit) for an address with an
+        # account, so it could use up a registered address's limit. Sign-up then answered 503 for that address and the
+        # normal page for an unknown one. It now answers the same way, sent or not.
+        User.objects.create_user('first', 'taken@example.com', PASSWORD)
+        for _ in range(settings.AUTH_THROTTLE['email_recipient'][0]):
+            self.client.post(reverse('password_reset'), {'email': 'taken@example.com'})
+        registered = self.register(username='second', email='taken@example.com')
+        unknown = self.register(username='third', email='new@example.com')
+        self.assertEqual((registered.status_code, registered['Location']), (unknown.status_code, unknown['Location']))
+        self.assertEqual(self.client.get(registered['Location']).content, self.client.get(unknown['Location']).content)
 
     def test_logged_in_user_is_redirected_away(self):
         self.client.force_login(User.objects.create_user('ed', 'ed@example.com', PASSWORD))
