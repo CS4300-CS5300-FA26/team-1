@@ -1,4 +1,3 @@
-import logging
 from typing import cast
 
 from django.contrib import messages
@@ -6,6 +5,7 @@ from django.contrib.auth import login, update_session_auth_hash
 from django.contrib.auth import views as auth_views
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import SetPasswordForm
+from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView
 from django.core.exceptions import ValidationError
@@ -24,8 +24,6 @@ from core.models import UserProfile
 from . import emails, services, throttle
 from .forms import EmailRequestForm, LoginForm, RegisterForm
 from .tokens import email_verification_token
-
-logger = logging.getLogger('accounts.security')
 
 # Created in migration accounts/0002_unique_email_index.
 EMAIL_UNIQUE_INDEX = 'auth_user_email_lower_uniq'
@@ -70,10 +68,11 @@ def register(request):
     """Start a sign-up: create an inactive account and email a confirmation link (ADR-018).
 
     The page never says whether an email already has an account. If it does, its owner gets an email saying so, and
-    the person sees the same "check your email" page either way, even when the email couldn't be sent: an error then
-    would reveal accounts, because an address's email limit can be used up through "forgot password", which only sends
-    for addresses with an account. Failures are logged instead. Nobody is logged in here; the confirmation link does
-    that, once it proves the person controls the address.
+    the person sees the same "check your email" page either way, in about the same time, even when the email couldn't
+    be sent: an error then would reveal accounts, because an address's email limit can be used up through "forgot
+    password", which only sends for addresses with an account. Emails go out in the background and failures are
+    logged (accounts.emails). Nobody is logged in here; the confirmation link does that, once it proves the person
+    controls the address.
     """
     if request.user.is_authenticated:
         return redirect('home')
@@ -116,11 +115,13 @@ def register(request):
         return render(request, 'accounts/register.html', {'form': form})
 
     if user is None:
-        if not emails.send_account_exists_email(request, form.cleaned_data['email']):
-            logger.warning('"Account exists" email not sent; showing the usual page')
-    elif not emails.send_verification_email(request, user):
-        # Kept, so the person can use "send the link again" once email works; unconfirmed sign-ups expire anyway.
-        logger.warning('Confirmation link for new user %s not sent; showing the usual page', user.pk)
+        # A new sign-up hashes its password (PBKDF2, a noticeable delay); do the same work here, so the response time
+        # doesn't reveal that the address has an account. Django's login does the same for unknown users.
+        make_password(form.cleaned_data['password1'])
+        emails.send_account_exists_email(request, form.cleaned_data['email'])
+    else:
+        # Sent in the background; if it fails, the sign-up is kept so the person can use "send the link again".
+        emails.send_verification_email(request, user)
     return redirect('verify_email_sent')
 
 
@@ -166,8 +167,8 @@ def resend_verification(request):
     """Send the confirmation link again to an unconfirmed sign-up.
 
     Answers the same way whether or not the address has an unconfirmed sign-up, and whether or not the email went out:
-    a different answer only when we tried to send would reveal which addresses have accounts (ADR-018). Failures are
-    logged instead.
+    a different answer only when we tried to send would reveal which addresses have accounts (ADR-018). The email goes
+    out in the background, so the response time is the same too, and failures are logged.
     """
     form = EmailRequestForm(request.POST or None)
     if request.method == 'POST':
@@ -177,9 +178,8 @@ def resend_verification(request):
         if form.is_valid():
             services.prune_unconfirmed_accounts()
             user = User.objects.filter(email__iexact=form.cleaned_data['email'], is_active=False).first()
-            via_spotify = user is not None and _has_spotify(user)
-            if user is not None and not emails.send_verification_email(request, user, via_spotify=via_spotify):
-                logger.warning('Confirmation link for user %s not sent; showing the usual page', user.pk)
+            if user is not None:
+                emails.send_verification_email(request, user, via_spotify=_has_spotify(user))
             return redirect('verify_email_sent')
     return render(request, 'accounts/resend_verification.html', {'form': form})
 
@@ -193,8 +193,8 @@ class PasswordResetView(FormView):
     proving control of the inbox is what matters, and for an unconfirmed account it also confirms the email.
 
     Answers the same way whether or not the address has an account, and whether or not the email went out: a
-    different answer only when we tried to send would reveal which addresses have accounts (ADR-018). Failures are
-    logged instead.
+    different answer only when we tried to send would reveal which addresses have accounts (ADR-018). The email goes
+    out in the background, so the response time is the same too, and failures are logged.
     """
 
     form_class = EmailRequestForm
@@ -209,8 +209,8 @@ class PasswordResetView(FormView):
     def form_valid(self, form):
         services.prune_unconfirmed_accounts()
         user = User.objects.filter(email__iexact=form.cleaned_data['email']).first()
-        if user is not None and not emails.send_password_reset_email(self.request, user):
-            logger.warning('Password reset link for user %s not sent; showing the usual page', user.pk)
+        if user is not None:
+            emails.send_password_reset_email(self.request, user)
         return redirect(self.success_url)
 
 

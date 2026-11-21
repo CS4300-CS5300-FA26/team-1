@@ -4,15 +4,18 @@ from typing import cast
 from unittest import mock
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core import mail
 from django.core.mail import EmailMultiAlternatives
 from django.test import TestCase, override_settings
+from django.urls import reverse
 
 from core.mail import EmailNotSent, EmailQuotaExceeded
 
-from .emails import EMAIL_NOT_SENT_MESSAGE, send_account_email
+from .emails import _send_and_log, send_account_email
 from .models import ThrottleCounter
 
+User = get_user_model()
 ADDRESS = 'sam@example.com'
 
 
@@ -41,10 +44,6 @@ class SendAccountEmailTests(TestCase):
                 mock.patch('accounts.emails.EmailMultiAlternatives.send', side_effect=error),
             ):
                 self.assertFalse(send_account_email(ADDRESS, 'Hi', 'Hello'))
-
-    def test_the_user_facing_message_names_no_cause(self):
-        for word in ('quota', 'Resend', 'limit', 'account'):
-            self.assertNotIn(word.lower(), EMAIL_NOT_SENT_MESSAGE.lower())
 
 
 class RecipientLimitTests(TestCase):
@@ -88,3 +87,59 @@ class RecipientLimitTests(TestCase):
         with mock.patch('accounts.emails.EmailMultiAlternatives.send') as send:
             self.assertFalse(send_account_email(ADDRESS, 'Hi', 'Hello'))
         send.assert_not_called()
+
+
+@override_settings(ACCOUNT_EMAIL_IN_BACKGROUND=True)
+class BackgroundSendTests(TestCase):
+    """PR review: forgot password and resend confirmation waited for Resend (up to 10 s) only for addresses with an
+    account, so the response time revealed which addresses are registered. Requests now only queue the email."""
+
+    def assert_only_queued(self, method, path, data):
+        with (
+            mock.patch('accounts.emails._background.submit') as submit,
+            mock.patch('accounts.emails.send_account_email') as send,
+        ):
+            response = getattr(self.client, method)(path, data)
+        send.assert_not_called()
+        submit.assert_called_once()
+        self.assertIs(submit.call_args.args[0], _send_and_log)
+        self.assertEqual(submit.call_args.kwargs, {'close_db': True})
+        return response
+
+    def test_requests_never_send_during_the_response(self):
+        User.objects.create_user('sam', ADDRESS, 'Tr4ining-Plan-2026!')
+        User.objects.create_user('pending', 'pending@example.com', 'Tr4ining-Plan-2026!', is_active=False)
+        password = 'Tr4ining-Plan-2026!'
+        for name, (path, data) in {
+            'forgot password': (reverse('password_reset'), {'email': ADDRESS}),
+            'resend confirmation': (reverse('resend_verification'), {'email': 'pending@example.com'}),
+            'sign-up, new address': (
+                reverse('register'),
+                {'username': 'new', 'email': 'new@example.com', 'password1': password, 'password2': password},
+            ),
+            'sign-up, registered address': (
+                reverse('register'),
+                {'username': 'other', 'email': ADDRESS, 'password1': password, 'password2': password},
+            ),
+        }.items():
+            with self.subTest(name):
+                self.assertEqual(self.assert_only_queued('post', path, data).status_code, 302)
+
+    def test_a_background_send_logs_failures_and_closes_its_connections(self):
+        with (
+            mock.patch('accounts.emails.send_account_email', return_value=False),
+            mock.patch('accounts.emails.connections.close_all') as close_all,
+            self.assertLogs('accounts.security', 'WARNING') as logs,
+        ):
+            _send_and_log(ADDRESS, 'Hi', 'Hello', 'Test email', close_db=True)
+        close_all.assert_called_once()
+        self.assertEqual(logs.output, ['WARNING:accounts.security:Test email not sent'])
+
+    def test_an_unexpected_error_in_the_background_is_logged_not_raised(self):
+        with (
+            mock.patch('accounts.emails.send_account_email', side_effect=RuntimeError('boom')),
+            mock.patch('accounts.emails.connections.close_all'),
+            self.assertLogs('accounts.security', 'ERROR') as logs,
+        ):
+            _send_and_log(ADDRESS, 'Hi', 'Hello', 'Test email', close_db=True)
+        self.assertIn('Test email failed', logs.output[0])

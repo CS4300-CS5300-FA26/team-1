@@ -12,6 +12,7 @@ from unittest import mock, skipUnless
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.hashers import PBKDF2PasswordHasher
 from django.core import mail
 from django.db import IntegrityError, connection, transaction
 from django.test import Client, TestCase, TransactionTestCase, override_settings
@@ -78,6 +79,19 @@ class RegisterTests(TestCase):
         self.assertFalse(User.objects.get(username='sam').is_active)  # kept, so the link can be sent again
         self.client.post(reverse('resend_verification'), {'email': 'sam@example.com'})
         self.assertEqual([m.subject for m in mail.outbox], [VERIFY_SUBJECT])
+
+    def test_registered_and_new_addresses_hash_a_password_the_same_number_of_times(self):
+        # PR review (timing): a new sign-up hashes its password, which takes a noticeable time. A registered address
+        # now does the same work, so the response time doesn't reveal that it has an account.
+        User.objects.create_user('first', 'taken@example.com', PASSWORD)
+        encode = PBKDF2PasswordHasher.encode
+        counts = []
+        for name, email in (('newcomer', 'new@example.com'), ('second', 'taken@example.com')):
+            with mock.patch.object(PBKDF2PasswordHasher, 'encode', autospec=True, side_effect=encode) as spy:
+                self.register(username=name, email=email)
+            counts.append(spy.call_count)
+        self.assertEqual(counts[0], counts[1])
+        self.assertGreaterEqual(counts[0], 1)
 
     def test_a_used_up_recipient_limit_does_not_reveal_the_account(self):
         # PR review: "forgot password" only sends (and counts toward the per-address limit) for an address with an

@@ -335,6 +335,9 @@ LOGGING = {
 RESEND_API_KEY = '' if TESTING else read_secret('resend-api-key', 'RESEND_API_KEY', default='')
 # Must be on the domain verified in Resend.
 DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='FitPro <no-reply@fitpro-app.tech>')
+# Account emails are sent on a background thread so a response never takes longer when an email goes out, which would
+# reveal which addresses have accounts (ADR-018). Tests send inline, so they can check the outbox right away.
+ACCOUNT_EMAIL_IN_BACKGROUND = not TESTING
 
 _mail_backend: dict[str, object]
 if TESTING:

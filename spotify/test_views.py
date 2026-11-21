@@ -13,7 +13,7 @@ from django.core import mail
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from accounts.emails import EMAIL_NOT_SENT_MESSAGE, VERIFY_SUBJECT
+from accounts.emails import VERIFY_SUBJECT
 from accounts.models import ThrottleCounter
 from accounts.testing import confirm_email
 from core.models import UserProfile
@@ -323,13 +323,15 @@ class SignupTests(SpotifyViewTestCase):
         self.assert_message(response, services.CONFIRM_EMAIL_FIRST)
         self.assert_logged_out()
 
-    def test_if_the_link_cannot_be_sent_nothing_is_kept(self):
-        with mock.patch('accounts.emails.send_account_email', return_value=False):
+    def test_if_the_link_cannot_be_sent_the_sign_up_is_kept_to_send_again(self):
+        with (
+            mock.patch('accounts.emails.send_account_email', return_value=False),
+            self.assertLogs('accounts.security', 'WARNING') as logs,
+        ):
             response = approve(self.client, 'signup')
-        self.assertRedirects(response, reverse('register'), fetch_redirect_response=False)
-        self.assert_message(response, EMAIL_NOT_SENT_MESSAGE)
-        self.assertFalse(User.objects.exists())
-        self.assertFalse(SpotifyAccount.objects.exists())
+        self.assertRedirects(response, reverse('verify_email_sent'), fetch_redirect_response=False)
+        self.assertIn('not sent', logs.output[0])
+        self.assertFalse(SpotifyAccount.objects.get().user.is_active)
 
     def test_sign_up_sets_a_password_then_goes_to_onboarding(self):
         self.sign_up_and_confirm()

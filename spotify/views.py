@@ -108,11 +108,9 @@ def callback(request):
         return redirect(back)
 
     if flow.mode == 'signup':
-        # Spotify doesn't verify emails, so the new account stays inactive until the link is opened (ADR-018).
-        if not emails.send_verification_email(request, user, via_spotify=True):
-            user.delete()  # nobody can confirm it, so don't let it hold the Spotify account, username, and email
-            messages.error(request, emails.EMAIL_NOT_SENT_MESSAGE)
-            return redirect(back)
+        # Spotify doesn't verify emails, so the new account stays inactive until the link is opened (ADR-018). Sent in
+        # the background; if it fails, the sign-up is kept so the person can use "send the link again".
+        emails.send_verification_email(request, user, via_spotify=True)
         return redirect('verify_email_sent')
 
     # login() rotates the session key, which prevents session fixation.
