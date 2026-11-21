@@ -319,8 +319,14 @@ SILENCED_SYSTEM_CHECKS = ['security.W005', 'security.W008', 'security.W021']
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    'filters': {
+        # Email confirmation and reset links carry a one-time token in the path, and Django logs request paths for
+        # error responses; keep the tokens out of Cloud Logging (ADR-018). Gunicorn's access log is redacted too
+        # (fitpro/gunicorn_logging.py).
+        'redact_account_tokens': {'()': 'fitpro.log_redaction.RedactAccountTokens'},
+    },
     'handlers': {
-        'console': {'class': 'logging.StreamHandler'},
+        'console': {'class': 'logging.StreamHandler', 'filters': ['redact_account_tokens']},
     },
     'root': {
         'handlers': ['console'],
