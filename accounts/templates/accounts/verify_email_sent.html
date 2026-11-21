@@ -1,0 +1,14 @@
+{% extends "accounts/base_auth.html" %}
+{% block title %}Check your email | FitPro{% endblock %}
+{% block content %}
+  <h1 class="card__title">Check your email</h1>
+  <p class="card__subtitle">We sent a link to the address you entered. Open it to confirm your email and finish setting up your account.</p>
+  <div class="stack--sm">
+    <p>The link works for 24 hours. If you don't see it in a few minutes, check your spam folder. Still nothing after a while? Try again later, and let us know if it keeps happening.</p>
+    <p>Already have an account with that address? We emailed you instead, so you can log in or reset your password.</p>
+  </div>
+  <div class="card__footer">
+    <p>No email? <a href="{% url 'resend_verification' %}">Send the link again</a></p>
+    <p><a href="{% url 'login' %}">Back to log in</a></p>
+  </div>
+{% endblock %}

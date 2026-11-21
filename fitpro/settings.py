@@ -152,6 +152,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Authentication (user story D-1: user-auth)
 # Passwords are hashed with Django's default PBKDF2-SHA256 hasher (never stored in plain text).
 LOGIN_URL = 'login'
+# Email confirmation and password reset links (ADR-018) stop working after this many seconds. Both are also single use.
+# A sign-up that isn't confirmed in this time is deleted, so it doesn't hold its username or email.
+PASSWORD_RESET_TIMEOUT = 60 * 60 * 24
 LOGIN_REDIRECT_URL = 'dashboard'
 LOGOUT_REDIRECT_URL = 'home'
 
@@ -185,8 +188,8 @@ AUTH_THROTTLE = {
     # carrier NAT), and when an IP counter trips it blocks everyone behind that IP (ADR-016).
     'login_ip': (100, 15 * 60),  # failed logins per IP, any identifier
     'register': (50, 60 * 60),  # registration attempts per IP, counted before validation
-    # Registration answers per IP that said a username or email is taken. Until email verification exists (F-3), this
-    # is the only cap on probing which accounts exist, so it stays at the registration limit before ADR-016.
+    # Registration answers per IP that said a username is taken, which reveals that an account exists. Emails are never
+    # revealed (ADR-018), but usernames still are, so this keeps the registration limit from before ADR-016.
     'register_taken': (10, 60 * 60),
     'spotify_auth': (20, 15 * 60),  # "Log in / Sign up with Spotify" flows started per IP (ADR-010)
     'spotify_status': (30, 5 * 60),  # Spotify connection checks per user; each one calls Spotify's API
@@ -195,6 +198,8 @@ AUTH_THROTTLE = {
     # Meal plans made per user per hour, by "Generate a new meal plan" or by a page view with no saved plan to show;
     # each one runs the CPU-heavy planner (ADR-016).
     'meal_plan': (10, 60 * 60),
+    'email_recipient': (5, 60 * 60),  # account emails per address per hour; the free plan sends 100 a day (ADR-017)
+    'email_request': (20, 60 * 60),  # "forgot password" and "resend confirmation" requests per IP per hour (ADR-018)
 }
 
 # Meal planner runs allowed at the same time (ADR-016), shared by every pod through the database. The hourly limit
@@ -314,8 +319,14 @@ SILENCED_SYSTEM_CHECKS = ['security.W005', 'security.W008', 'security.W021']
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    'filters': {
+        # Email confirmation and reset links carry a one-time token in the path, and Django logs request paths for
+        # error responses; keep the tokens out of Cloud Logging (ADR-018). Gunicorn's access log is redacted too
+        # (fitpro/gunicorn_logging.py).
+        'redact_account_tokens': {'()': 'fitpro.log_redaction.RedactAccountTokens'},
+    },
     'handlers': {
-        'console': {'class': 'logging.StreamHandler'},
+        'console': {'class': 'logging.StreamHandler', 'filters': ['redact_account_tokens']},
     },
     'root': {
         'handlers': ['console'],
@@ -324,11 +335,25 @@ LOGGING = {
 }
 
 
-# Email
-# https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
+# Email (ADR-017): account email goes out through Resend's HTTP API (core.mail.ResendEmailBackend).
+# https://docs.djangoproject.com/en/6.1/topics/email/
+# The key is a secret: .env locally, the mounted `resend-api-key` file in production. Tests never get one.
+RESEND_API_KEY = '' if TESTING else read_secret('resend-api-key', 'RESEND_API_KEY', default='')
+# Must be on the domain verified in Resend.
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='FitPro <no-reply@fitpro-app.tech>')
+# Account emails are sent on a background thread so a response never takes longer when an email goes out, which would
+# reveal which addresses have accounts (ADR-018). Tests send inline, so they can check the outbox right away.
+ACCOUNT_EMAIL_IN_BACKGROUND = not TESTING
 
-MAILERS = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
-    },
-}
+_mail_backend: dict[str, object]
+if TESTING:
+    # Django's test runner swaps in this backend anyway; pinned so nothing under test can reach Resend.
+    _mail_backend = {'BACKEND': 'django.core.mail.backends.locmem.EmailBackend'}
+elif DEBUG and not RESEND_API_KEY:
+    # Local development without a key: print email to the terminal.
+    _mail_backend = {'BACKEND': 'django.core.mail.backends.console.EmailBackend'}
+else:
+    # Production always uses Resend, even if the key is missing, so verification and reset links are never printed
+    # to the logs. A missing key fails every send with a logged error instead.
+    _mail_backend = {'BACKEND': 'core.mail.ResendEmailBackend', 'OPTIONS': {'api_key': RESEND_API_KEY}}
+MAILERS = {'default': _mail_backend}

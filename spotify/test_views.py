@@ -4,14 +4,18 @@ The Gherkin scenarios are in features/spotify.feature. Spotify's HTTP endpoints 
 """
 
 import time
+from unittest import mock
 from urllib.parse import parse_qs, urlsplit
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
+from accounts.emails import VERIFY_SUBJECT
 from accounts.models import ThrottleCounter
+from accounts.testing import confirm_email
 from core.models import UserProfile
 
 from . import oauth, services, views
@@ -47,6 +51,11 @@ class SpotifyViewTestCase(TestCase):
 
     def assert_logged_out(self):
         self.assertNotIn('_auth_user_id', self.client.session)
+
+    def sign_up_and_confirm(self):
+        """Sign up with Spotify, then open the confirmation link sent to the Spotify email (ADR-018)."""
+        approve(self.client, 'signup')
+        return confirm_email(self.client, 'dj@example.com')
 
 
 class StartTests(SpotifyViewTestCase):
@@ -285,19 +294,47 @@ class LoginTests(SpotifyViewTestCase):
 
 
 class SignupTests(SpotifyViewTestCase):
-    def test_sign_up_creates_a_passwordless_user_and_links_spotify(self):
+    def test_sign_up_creates_an_unconfirmed_passwordless_user_and_emails_a_link(self):
         response = approve(self.client, 'signup')
 
-        self.assertRedirects(response, reverse('set_password'))
+        self.assertRedirects(response, reverse('verify_email_sent'))
         account = SpotifyAccount.objects.get(spotify_id='spotify-user-1')
         user = account.user
         self.assertEqual((user.username, user.email), ('dj-lifts', 'dj@example.com'))
         self.assertFalse(user.has_usable_password())
+        self.assertFalse(user.is_active)  # Spotify doesn't verify emails, so the address must be confirmed first
         self.assertTrue(UserProfile.objects.filter(user=user).exists())
+        self.assert_logged_out()
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual((mail.outbox[0].to, mail.outbox[0].subject), (['dj@example.com'], VERIFY_SUBJECT))
+        self.assertIn('Spotify account', mail.outbox[0].body)
+
+    def test_confirming_the_email_logs_in_and_asks_for_a_password(self):
+        response = self.sign_up_and_confirm()
+        self.assertRedirects(response, reverse('set_password'), fetch_redirect_response=False)
+        user = SpotifyAccount.objects.get().user
+        self.assertTrue(user.is_active)
         self.assertEqual(int(self.client.session['_auth_user_id']), user.pk)
 
-    def test_sign_up_sets_a_password_then_goes_to_onboarding(self):
+    def test_an_unconfirmed_spotify_sign_up_cannot_log_in(self):
         approve(self.client, 'signup')
+        self.client.logout()
+        response = approve(self.client, 'login')
+        self.assert_message(response, services.CONFIRM_EMAIL_FIRST)
+        self.assert_logged_out()
+
+    def test_if_the_link_cannot_be_sent_the_sign_up_is_kept_to_send_again(self):
+        with (
+            mock.patch('accounts.emails.send_account_email', return_value=False),
+            self.assertLogs('accounts.security', 'WARNING') as logs,
+        ):
+            response = approve(self.client, 'signup')
+        self.assertRedirects(response, reverse('verify_email_sent'), fetch_redirect_response=False)
+        self.assertIn('not sent', logs.output[0])
+        self.assertFalse(SpotifyAccount.objects.get().user.is_active)
+
+    def test_sign_up_sets_a_password_then_goes_to_onboarding(self):
+        self.sign_up_and_confirm()
         response = self.client.post(reverse('set_password'), {'new_password1': PASSWORD, 'new_password2': PASSWORD})
 
         self.assertRedirects(response, reverse('onboarding'))
@@ -309,7 +346,7 @@ class SignupTests(SpotifyViewTestCase):
         self.assertRedirects(response, reverse('onboarding'))  # the real login form, which accepts an email
 
     def test_once_a_password_is_set_spotify_can_be_disconnected(self):
-        approve(self.client, 'signup')
+        self.sign_up_and_confirm()
         self.client.post(reverse('set_password'), {'new_password1': PASSWORD, 'new_password2': PASSWORD})
         self.client.post(reverse('spotify_unlink'))
         self.assertFalse(SpotifyAccount.objects.exists())
@@ -338,11 +375,18 @@ class SignupTests(SpotifyViewTestCase):
         approve(self.client, 'signup')
         self.assertEqual(SpotifyAccount.objects.get().user.username, 'dj-lifts-2')
 
-    def test_sign_up_without_an_email_or_display_name(self):
-        self.spotify.email, self.spotify.display_name = '', ''
+    def test_sign_up_without_a_display_name_uses_the_spotify_id(self):
+        self.spotify.display_name = ''
         approve(self.client, 'signup')
-        user = SpotifyAccount.objects.get().user
-        self.assertEqual((user.username, user.email), ('spotify-user-1', ''))
+        self.assertEqual(SpotifyAccount.objects.get().user.username, 'spotify-user-1')
+
+    def test_sign_up_without_an_email_is_refused(self):
+        # Every account confirms its email (ADR-018), so there must be one to confirm.
+        self.spotify.email = ''
+        response = approve(self.client, 'signup')
+        self.assert_message(response, services.NO_EMAIL_FOR_SIGNUP)
+        self.assertFalse(User.objects.exists())
+        self.assertEqual(mail.outbox, [])
 
 
 class UnlinkTests(SpotifyViewTestCase):
@@ -355,7 +399,7 @@ class UnlinkTests(SpotifyViewTestCase):
         self.assertContains(response, 'Link to Spotify')
 
     def test_unlink_is_blocked_when_spotify_is_the_only_way_to_log_in(self):
-        approve(self.client, 'signup')
+        self.sign_up_and_confirm()
         response = self.client.post(reverse('spotify_unlink'), follow=True)
         self.assertTrue(SpotifyAccount.objects.exists())
         self.assertContains(response, 'can&#x27;t be disconnected until your account has a password')

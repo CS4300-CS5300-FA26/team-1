@@ -12,6 +12,8 @@ from unittest import mock, skipUnless
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.hashers import PBKDF2PasswordHasher
+from django.core import mail
 from django.db import IntegrityError, connection, transaction
 from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
@@ -19,6 +21,7 @@ from django.utils import timezone
 
 from core.models import UserProfile
 
+from .emails import ACCOUNT_EXISTS_SUBJECT, VERIFY_SUBJECT
 from .forms import LoginForm, RegisterForm
 from .models import ThrottleCounter
 from .throttle import MEAL_PLAN_RUNNING_ALL, MEAL_PLAN_RUNNING_USER, REGISTER_TAKEN_IP, acquire, meal_plan_slot
@@ -45,11 +48,14 @@ class RegisterTests(TestCase):
         self.assertContains(response, 'Create your account')
 
     # Scenario: Successful registration
-    def test_registration_logs_in_and_goes_to_onboarding(self):
+    def test_registration_creates_an_unconfirmed_account_and_emails_a_link(self):
         response = self.register()
-        self.assertRedirects(response, reverse('onboarding'))
+        self.assertRedirects(response, reverse('verify_email_sent'))
         user = User.objects.get(username='sam')
-        self.assertEqual(int(self.client.session['_auth_user_id']), user.pk)
+        self.assertFalse(user.is_active)  # nobody logs in until the email is confirmed (ADR-018)
+        self.assertNotIn('_auth_user_id', self.client.session)
+        self.assertEqual([(m.to, m.subject) for m in mail.outbox], [(['sam@example.com'], VERIFY_SUBJECT)])
+        self.assertIn('/accounts/verify/', mail.outbox[0].body)
 
     def test_password_is_hashed_not_stored_in_plain_text(self):
         self.register()
@@ -61,35 +67,75 @@ class RegisterTests(TestCase):
         self.register(email='  Sam@Example.COM ')
         self.assertEqual(User.objects.get(username='sam').email, 'sam@example.com')
 
-    def test_session_key_changes_on_registration(self):
-        self.client.get(reverse('register'))
-        key_before = self.client.session.session_key
-        self.register()
-        self.assertNotEqual(self.client.session.session_key, key_before)
+    def test_a_link_that_cannot_be_sent_gets_the_usual_page_and_can_be_sent_again(self):
+        with (
+            mock.patch('accounts.emails.send_account_email', return_value=False),
+            self.assertLogs('accounts.security', 'WARNING') as logs,
+        ):
+            response = self.register()
+        self.assertRedirects(response, reverse('verify_email_sent'))
+        self.assertIn('not sent', logs.output[0])
+        self.assertNotIn('sam@example.com', logs.output[0])
+        self.assertFalse(User.objects.get(username='sam').is_active)  # kept, so the link can be sent again
+        self.client.post(reverse('resend_verification'), {'email': 'sam@example.com'})
+        self.assertEqual([m.subject for m in mail.outbox], [VERIFY_SUBJECT])
+
+    def test_registered_and_new_addresses_hash_a_password_the_same_number_of_times(self):
+        # PR review (timing): a new sign-up hashes its password, which takes a noticeable time. A registered address
+        # now does the same work, so the response time doesn't reveal that it has an account.
+        User.objects.create_user('first', 'taken@example.com', PASSWORD)
+        encode = PBKDF2PasswordHasher.encode
+        counts = []
+        for name, email in (('newcomer', 'new@example.com'), ('second', 'taken@example.com')):
+            with mock.patch.object(PBKDF2PasswordHasher, 'encode', autospec=True, side_effect=encode) as spy:
+                self.register(username=name, email=email)
+            counts.append(spy.call_count)
+        self.assertEqual(counts[0], counts[1])
+        self.assertGreaterEqual(counts[0], 1)
+
+    def test_a_used_up_recipient_limit_does_not_reveal_the_account(self):
+        # PR review: "forgot password" only sends (and counts toward the per-address limit) for an address with an
+        # account, so it could use up a registered address's limit. Sign-up then answered 503 for that address and the
+        # normal page for an unknown one. It now answers the same way, sent or not.
+        User.objects.create_user('first', 'taken@example.com', PASSWORD)
+        for _ in range(settings.AUTH_THROTTLE['email_recipient'][0]):
+            self.client.post(reverse('password_reset'), {'email': 'taken@example.com'})
+        registered = self.register(username='second', email='taken@example.com')
+        unknown = self.register(username='third', email='new@example.com')
+        self.assertEqual((registered.status_code, registered['Location']), (unknown.status_code, unknown['Location']))
+        self.assertEqual(self.client.get(registered['Location']).content, self.client.get(unknown['Location']).content)
 
     def test_logged_in_user_is_redirected_away(self):
         self.client.force_login(User.objects.create_user('ed', 'ed@example.com', PASSWORD))
         self.assertRedirects(self.client.get(reverse('register')), reverse('home'))
 
     # Scenario: Email already registered
-    def test_duplicate_email_rejected_case_insensitively(self):
+    def test_a_registered_email_gets_the_same_page_and_its_owner_is_emailed(self):
+        # The page must not reveal that the address has an account (security assessment F-3, ADR-018).
         User.objects.create_user('first', 'sam@example.com', PASSWORD)
         response = self.register(username='second', email='SAM@example.com')
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, 'accounts/register.html')
-        self.assertContains(response, 'already exists')
+        self.assertRedirects(response, reverse('verify_email_sent'))
         self.assertFalse(User.objects.filter(username='second').exists())
         self.assertNotIn('_auth_user_id', self.client.session)
+        self.assertEqual([(m.to, m.subject) for m in mail.outbox], [(['sam@example.com'], ACCOUNT_EXISTS_SUBJECT)])
+        self.assertIn(reverse('password_reset'), mail.outbox[0].body)
 
-    def test_database_rejects_duplicate_email_if_form_check_is_bypassed(self):
-        # Two sign-ups racing past clean_email(): the unique index must stop the second one.
+    def test_new_and_registered_emails_get_identical_pages(self):
+        User.objects.create_user('first', 'taken@example.com', PASSWORD)
+        pages = []
+        for name, email in (('newcomer', 'new@example.com'), ('second', 'taken@example.com')):
+            pages.append(self.client.get(self.register(username=name, email=email)['Location']).content)
+        self.assertEqual(pages[0], pages[1])
+
+    def test_database_rejects_duplicate_email_if_the_check_is_raced(self):
+        # Two sign-ups racing past the "is this email in use" check: the unique index stops the second one, which is
+        # then handled like any registered email.
         User.objects.create_user('first', 'sam@example.com', PASSWORD)
-        with mock.patch.object(RegisterForm, 'clean_email', lambda self: self.cleaned_data['email'].lower()):
+        with mock.patch('django.db.models.query.QuerySet.exists', return_value=False):
             response = self.register(username='second', email='SAM@example.com')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'already exists')
+        self.assertRedirects(response, reverse('verify_email_sent'), fetch_redirect_response=False)
         self.assertFalse(User.objects.filter(username='second').exists())
-        self.assertNotIn('_auth_user_id', self.client.session)
+        self.assertEqual([m.subject for m in mail.outbox], [ACCOUNT_EXISTS_SUBJECT])
 
     def test_username_race_is_reported_as_a_username_conflict_not_an_email_one(self):
         # Same username, different email, racing past the form's uniqueness check.
@@ -399,7 +445,7 @@ class RegisterThrottleTests(TestCase):
                     'password2': PASSWORD,
                 },
             )
-            self.assertRedirects(response, reverse('onboarding'), fetch_redirect_response=False)
+            self.assertRedirects(response, reverse('verify_email_sent'), fetch_redirect_response=False)
 
     def test_viewing_the_form_is_not_counted(self):
         for _ in range(15):
@@ -417,44 +463,47 @@ class RegisterThrottleTests(TestCase):
         return row.count if row else 0
 
     def use_up_the_probe_budget(self):
+        # Only taken usernames reveal an account: the page never says an email is taken (ADR-018).
         User.objects.create_user('taken', 'taken@example.com', PASSWORD)
         for n in range(settings.AUTH_THROTTLE['register_taken'][0]):
-            self.assertContains(self.sign_up(f'prober{n}', 'TAKEN@example.com'), 'already exists')
+            self.assertContains(self.sign_up('taken', f'prober{n}@example.com'), 'already exists')
 
     def test_answers_that_reveal_an_account_keep_the_old_budget(self):
-        # Review of PR #61: the form says when an email or username is taken, so raising the registration limit to 50
-        # gave probing for accounts 5 times the budget. Those answers have their own limit, as before ADR-016.
+        # Review of PR #61: the form says when a username is taken, so raising the registration limit to 50 gave
+        # probing for accounts 5 times the budget. Those answers have their own limit, as before ADR-016.
         self.assertLess(settings.AUTH_THROTTLE['register_taken'][0], settings.AUTH_THROTTLE['register'][0])
         self.use_up_the_probe_budget()
-        response = self.sign_up('another-prober', 'taken@example.com')
+        response = self.sign_up('taken', 'another-prober@example.com')
         self.assertEqual(response.status_code, 429)
         self.assertIn('Retry-After', response)
         self.assertNotContains(response, 'already exists', status_code=429)
-        self.assertContains(self.sign_up('prober', 'taken@example.com', REMOTE_ADDR='10.0.0.9'), 'already exists')
+        self.assertContains(self.sign_up('taken', 'prober@example.com', REMOTE_ADDR='10.0.0.9'), 'already exists')
 
     def test_new_accounts_can_still_sign_up_once_the_probe_budget_is_used_up(self):
         # Review of PR #61: reserving a probe on every POST refused valid new accounts once 10 answers had said
         # "taken". Only answers that would reveal an account are counted now.
         self.use_up_the_probe_budget()
         self.assertRedirects(
-            self.sign_up('newcomer', 'newcomer@example.com'), reverse('onboarding'), fetch_redirect_response=False
+            self.sign_up('newcomer', 'newcomer@example.com'),
+            reverse('verify_email_sent'),
+            fetch_redirect_response=False,
         )
 
     def test_once_the_probe_budget_is_used_up_a_bad_password_gets_the_same_page_either_way(self):
-        # A plain 429 here would be a yes/no answer: a taken email with a bad password would get 429, a free one 200.
+        # A plain 429 here would be a yes/no answer: a taken username with a bad password would get 429, a free one 200.
         self.use_up_the_probe_budget()
 
-        def errors_for(email):
+        def errors_for(username):
             response = self.client.post(
                 reverse('register'),
-                {'username': 'probe', 'email': email, 'password1': PASSWORD, 'password2': 'different'},
+                {'username': username, 'email': 'probe@example.com', 'password1': PASSWORD, 'password2': 'different'},
             )
             self.assertEqual(response.status_code, 200)
             self.assertNotContains(response, 'already exists')
             return response.context['form'].errors
 
-        self.assertEqual(errors_for('taken@example.com'), errors_for('free@example.com'))
-        self.assertIn('password2', errors_for('taken@example.com'))
+        self.assertEqual(errors_for('taken'), errors_for('free'))
+        self.assertIn('password2', errors_for('taken'))
         self.assertNotContains(self.client.post(reverse('register'), {'username': 'taken'}), 'already exists')
 
     def test_a_taken_username_counts_as_a_probe(self):
@@ -470,10 +519,19 @@ class RegisterThrottleTests(TestCase):
             self.assertNotContains(response, 'already exists')
         self.assertEqual(self.probes_counted(), 0)
 
-    def test_a_taken_email_caught_by_the_database_counts_as_a_probe(self):
+    @override_settings(AUTH_THROTTLE={**settings.AUTH_THROTTLE, 'email_recipient': (100, 60 * 60)})
+    def test_a_taken_email_is_never_a_probe(self):
+        # The owner is emailed and the page is the same as for a new address (ADR-018), so nothing is revealed.
         User.objects.create_user('taken', 'taken@example.com', PASSWORD)
-        with mock.patch.object(RegisterForm, 'clean_email', lambda self: self.cleaned_data['email'].lower()):
-            self.assertContains(self.sign_up('racer', 'TAKEN@example.com'), 'already exists')
+        for n in range(settings.AUTH_THROTTLE['register_taken'][0] + 1):
+            response = self.sign_up(f'newcomer{n}', 'TAKEN@example.com')
+            self.assertRedirects(response, reverse('verify_email_sent'), fetch_redirect_response=False)
+        self.assertEqual(self.probes_counted(), 0)
+
+    def test_a_taken_username_caught_by_the_database_counts_as_a_probe(self):
+        User.objects.create_user('taken', 'taken@example.com', PASSWORD)
+        with mock.patch.object(RegisterForm, 'validate_unique', lambda self: None):
+            self.assertContains(self.sign_up('taken', 'racer@example.com'), 'already exists')
         self.assertEqual(self.probes_counted(), 1)
 
 

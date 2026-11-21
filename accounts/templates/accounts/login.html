@@ -12,6 +12,8 @@
   </form>
   {% spotify_sign_in_button "login" %}
   <div class="card__footer">
+    <p><a href="{% url 'password_reset' %}">Forgot your password?</a></p>
+    <p>Just signed up? Confirm your email before logging in. <a href="{% url 'resend_verification' %}">Send the link again</a></p>
     <p>New to FitPro? <a href="{% url 'register' %}">Create an account</a></p>
   </div>
 {% endblock %}

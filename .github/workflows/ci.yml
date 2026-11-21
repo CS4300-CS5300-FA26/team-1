@@ -137,13 +137,9 @@ jobs:
           # A strong throwaway key so security.W009 is evaluated as in production.
           SECRET_KEY="$(uv run python -c 'import secrets; print(secrets.token_urlsafe(50))')"
           export SECRET_KEY
-          # Every check tag except "mail" fails the job on warnings. "mail" is excluded
-          # until a production email backend exists: MAILERS still uses the console
-          # backend (mail.E001). Remove the exclusion once email is configured.
-          mapfile -t tags < <(uv run python manage.py check --deploy --list-tags | grep -vx mail)
-          args=()
-          for tag in "${tags[@]}"; do args+=(--tag "$tag"); done
-          uv run python manage.py check --deploy --fail-level WARNING "${args[@]}"
+          # Every check tag, including "mail": production always uses the Resend backend (ADR-017),
+          # so a development-only mailer in production fails the job (mail.E001).
+          uv run python manage.py check --deploy --fail-level WARNING
 
   e2e:
     name: Browser tests (Playwright)

@@ -9,6 +9,7 @@ from django.contrib.auth import get_user_model
 from django.test import override_settings
 from django.urls import reverse
 
+from accounts.testing import confirm_email
 from core.models import UserProfile
 from spotify import services
 from spotify.models import SpotifyAccount
@@ -186,4 +187,5 @@ def step_signed_up_and_skipped(context):
     use_fake_spotify(context)
     approve(context.test.client, 'signup')
     context.user = SpotifyAccount.objects.get(spotify_id=context.spotify.user_id).user
+    confirm_email(context.test.client, context.spotify.email)
     context.test.client.logout()

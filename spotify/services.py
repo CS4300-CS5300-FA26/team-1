@@ -38,6 +38,15 @@ SIGNUP_REFUSED = (
     'your email and password, then link Spotify from your profile. Otherwise, please try again.'
 )
 ALREADY_LINKED_FOR_SIGNUP = 'That Spotify account already has a FitPro account. Use "Log in with Spotify" instead.'
+# Every account confirms its email before it can be used (ADR-018), so a Spotify sign-up needs an email to confirm.
+NO_EMAIL_FOR_SIGNUP = (
+    "Your Spotify account didn't share an email address, and FitPro needs one to confirm. Sign up with your email "
+    'instead, then link Spotify from your profile.'
+)
+# Safe to say: only the owner of this Spotify account can get here, and it's their own sign-up.
+CONFIRM_EMAIL_FIRST = (
+    'Confirm your email first: open the link we sent when you signed up, or ask for a new one from the log in page.'
+)
 UNLINK_BLOCKED = (
     "You signed up with Spotify, so it is your only way to log in. Spotify can't be disconnected until your "
     'account has a password.'
@@ -171,13 +180,18 @@ def link(user, profile: client.Profile, tokens: client.Tokens) -> SpotifyAccount
 
 
 def user_for_login(profile: client.Profile, tokens: client.Tokens) -> User:
-    """The active user linked to this Spotify id, with fresh tokens stored. Never falls back to email."""
+    """The active user linked to this Spotify id, with fresh tokens stored. Never falls back to email.
+
+    An account whose email isn't confirmed yet is inactive (ADR-018) and can't log in.
+    """
     with transaction.atomic():
         account = (
             SpotifyAccount.objects.select_for_update().select_related('user').filter(spotify_id=profile.id).first()
         )
-        if account is None or not account.user.is_active:
+        if account is None:
             raise SpotifyAccountError(NOT_LINKED_FOR_LOGIN)
+        if not account.user.is_active:
+            raise SpotifyAccountError(CONFIRM_EMAIL_FIRST)
         if profile.display_name:
             account.display_name = profile.display_name
         _store_tokens(account, tokens)
@@ -186,14 +200,20 @@ def user_for_login(profile: client.Profile, tokens: client.Tokens) -> User:
 
 
 def sign_up(profile: client.Profile, tokens: client.Tokens) -> User:
-    """Create a FitPro user with no password, linked to this Spotify account."""
+    """Create an unconfirmed FitPro user with no password, linked to this Spotify account.
+
+    The user stays inactive until they open the confirmation link sent to the Spotify email (ADR-018), because Spotify
+    doesn't verify that email.
+    """
     if SpotifyAccount.objects.filter(spotify_id=profile.id).exists():
         raise SpotifyAccountError(ALREADY_LINKED_FOR_SIGNUP)
+    if not profile.email:
+        raise SpotifyAccountError(NO_EMAIL_FOR_SIGNUP)
     if profile.email and User.objects.filter(email__iexact=profile.email).exists():
         raise SpotifyAccountError(SIGNUP_REFUSED)
     try:
         with transaction.atomic():
-            user = User(username=_unique_username(profile), email=profile.email)
+            user = User(username=_unique_username(profile), email=profile.email, is_active=False)
             user.set_unusable_password()
             user.save()
             UserProfile.objects.create(user=user)

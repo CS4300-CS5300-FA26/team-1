@@ -1,8 +1,8 @@
-"""Database-backed rate limiting for login, registration, Spotify, the AI trainer, and new meal plans.
+"""Database-backed rate limiting for login, registration, Spotify, the AI trainer, new meal plans, and account email.
 
 Meal plans also have an in-flight limit (`meal_plan_slot`): how many can be made at once.
 
-See ADR-006, ADR-010, ADR-014, and ADR-016.
+See ADR-006, ADR-010, ADR-014, ADR-016, ADR-017, and ADR-018.
 """
 
 import hashlib
@@ -31,6 +31,8 @@ AI_TRAINER_USER = 'ai-trainer'  # AI trainer (OpenAI) calls by one user (ADR-014
 MEAL_PLAN_USER = 'meal-plan'  # meal plans made for one user (ADR-016)
 MEAL_PLAN_RUNNING_USER = 'meal-plan-running'  # meal plans being made right now for one user (ADR-016)
 MEAL_PLAN_RUNNING_ALL = 'meal-plan-running-all'  # meal plans being made right now for everyone (ADR-016)
+EMAIL_RECIPIENT = 'email-recipient'  # account emails sent to one address (ADR-017)
+EMAIL_REQUEST_IP = 'email-request-ip'  # "forgot password" and "resend confirmation" requests from one IP (ADR-018)
 
 THROTTLED_MESSAGE = 'Too many attempts. Please wait a while and try again.'
 
@@ -155,7 +157,9 @@ def acquire_register(ip):
 
 
 def acquire_register_probe(ip):
-    """Count a registration answer about to say a username or email is taken. Returns 0 or the seconds to wait.
+    """Count a registration answer about to say a username is taken. Returns 0 or the seconds to wait.
+
+    The sign-up page never says an email is taken (ADR-018); usernames still are, because they're public handles.
 
     Each such answer tells the caller an account exists, so they have their own, lower limit (ADR-016). Only answers
     that would reveal one are counted, so sign-ups that reveal nothing are never refused by it. Counting before the
@@ -204,6 +208,30 @@ def acquire_meal_plan(user_id):
     wait = acquire((MEAL_PLAN_USER, _digest(str(user_id)), 'meal_plan'))
     if wait:
         logger.warning('New meal plan throttled for user=%s', _safe_for_log(user_id))
+    return wait
+
+
+def acquire_email_recipient(address):
+    """Count an account email to `address` (any letter case). Returns 0 or the seconds to wait.
+
+    The address is stored only as a hash and never logged.
+    """
+    wait = acquire((EMAIL_RECIPIENT, _digest(address.strip().lower()), 'email_recipient'))
+    if wait:
+        logger.warning('Account email throttled for one recipient')
+    return wait
+
+
+def release_email_recipient(address):
+    """Give back the attempt for an email that wasn't sent, so failures don't use up the address's limit."""
+    refund(EMAIL_RECIPIENT, _digest(address.strip().lower()))
+
+
+def acquire_email_request(ip):
+    """Count a "forgot password" or "resend confirmation" request. Returns 0 or the seconds to wait."""
+    wait = acquire((EMAIL_REQUEST_IP, _digest(ip), 'email_request'))
+    if wait:
+        logger.warning('Account email request throttled for ip=%s', _safe_for_log(ip))
     return wait
 
 

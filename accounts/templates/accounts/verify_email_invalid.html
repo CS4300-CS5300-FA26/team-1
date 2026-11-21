@@ -1,0 +1,10 @@
+{% extends "accounts/base_auth.html" %}
+{% block title %}Link not valid | FitPro{% endblock %}
+{% block content %}
+  <h1 class="card__title">This link doesn't work</h1>
+  <p class="card__subtitle">It may have expired (links work for 24 hours), or it was already used.</p>
+  <div class="card__footer">
+    <p>Already confirmed? <a href="{% url 'login' %}">Log in</a></p>
+    <p>Still need to confirm? <a href="{% url 'resend_verification' %}">Send a new link</a></p>
+  </div>
+{% endblock %}

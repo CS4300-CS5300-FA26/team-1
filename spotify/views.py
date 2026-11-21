@@ -16,7 +16,8 @@ from django.shortcuts import redirect
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
-from accounts import throttle
+from accounts import emails, throttle
+from accounts import services as account_services
 from accounts.views import after_login_url
 
 from . import client, oauth, services
@@ -97,11 +98,20 @@ def callback(request):
             account = services.link(request.user, profile, tokens)
             messages.success(request, f'Spotify connected as {account.name}.')
             return redirect('user_profile')
-        finish = services.user_for_login if flow.mode == 'login' else services.sign_up
-        user = finish(profile, tokens)
+        if flow.mode == 'signup':
+            account_services.prune_unconfirmed_accounts()
+            user = services.sign_up(profile, tokens)
+        else:
+            user = services.user_for_login(profile, tokens)
     except services.SpotifyAccountError as exc:
         messages.error(request, str(exc))
         return redirect(back)
+
+    if flow.mode == 'signup':
+        # Spotify doesn't verify emails, so the new account stays inactive until the link is opened (ADR-018). Sent in
+        # the background; if it fails, the sign-up is kept so the person can use "send the link again".
+        emails.send_verification_email(request, user, via_spotify=True)
+        return redirect('verify_email_sent')
 
     # login() rotates the session key, which prevents session fixation.
     login(request, user, backend='django.contrib.auth.backends.ModelBackend')

@@ -30,6 +30,7 @@ skipping validation, disabling a CI gate, or loosening a security header. Don't 
 | Hosting | GKE Autopilot (`us-central1`), Gateway API, 2 replicas, migrate Job per deploy | ADR-003, `k8s/` |
 | TLS / DNS | Google-managed certificate (Certificate Manager), Cloudflare DNS-only | ADR-004 |
 | Secrets | Google Secret Manager mounted at `/var/secrets/<name>`; `.env` locally | `read_secret()` in `fitpro/settings.py` |
+| Email | Resend HTTP API via `core.mail.ResendEmailBackend`; send account email with `accounts.emails.send_account_email()` | ADR-017 |
 | Infrastructure | Terraform (`terraform_scripts/`), state in a versioned GCS bucket | Owner: Caleb Harris |
 | CI/CD | GitHub Actions: `ci.yml` (quality gates, tests, coverage, container smoke test), `deploy.yml` (Workload Identity Federation, no keys), `codeql.yml`, `pr-review.yml` (Codex AI review) | |
 | Quality gates | ruff (lint + format), mypy + django-stubs, bandit, CodeQL, Dependabot | Settings in `pyproject.toml` |

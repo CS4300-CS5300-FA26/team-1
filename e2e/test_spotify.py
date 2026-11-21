@@ -14,10 +14,12 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
+from django.core import mail
 from django.test import override_settings, tag
 from django.utils import timezone
 from playwright.sync_api import Browser, Playwright, Route, expect, sync_playwright
 
+from accounts.testing import link_in
 from core.models import UserProfile
 from spotify.models import SpotifyAccount
 from spotify.testing import TEST_SETTINGS, FakeSpotify
@@ -179,6 +181,10 @@ class SpotifyBrowserTests(StaticLiveServerTestCase):
         self.spotify_answers(code='approved')
         self.page.goto(f'{self.live_server_url}/accounts/register/')
         self.page.get_by_role('button', name='Sign up with Spotify').click()
+        # Spotify doesn't verify emails, so the account waits for the emailed confirmation link (ADR-018).
+        self.page.wait_for_url('**/accounts/verify/sent/')
+        self.page.goto(f'{self.live_server_url}{link_in(mail.outbox[-1])}')
+        self.page.get_by_role('button', name='Confirm my email').click()
         self.page.wait_for_url('**/accounts/password/set/')
         self.assertFalse(SpotifyAccount.objects.get(spotify_id=self.spotify.user_id).user.has_usable_password())
 

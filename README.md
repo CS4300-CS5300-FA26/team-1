@@ -21,6 +21,7 @@ conscious students. The application offers personalized workout splits, meal-pre
 * **Production Host:** GKE Autopilot on Google Cloud, `us-central1` (see [ADR-003](docs/adrs/adr-003.md))
 * **Infrastructure as Code:** Terraform (`terraform_scripts/`), state in a versioned GCS bucket
 * **Docker Image:** multi-stage build on `python:3.12-slim` with uv, running Gunicorn as a non-root user (UID 10001) with a read-only code tree (see `Dockerfile`)
+* **Email:** Resend's HTTP API through a small Django email backend (`core/mail.py`), free plan (see [ADR-017](docs/adrs/adr-017.md))
 * **AI trainer:** OpenAI Chat Completions chooses the exercises in each weekly plan; optional, and off without an API key (see [ADR-014](docs/adrs/adr-014.md))
 * **Code quality:** ruff (lint and format), mypy with django-stubs (types), bandit and CodeQL (security scans), all enforced in CI
 
@@ -116,14 +117,22 @@ If you change a colour token, recheck its contrast against the surfaces it is us
 ## Authentication
 User story **D-1 (user-auth)**: *as a new user, I want to create an account and log in, so that my plan and history are private to me.*
 Auth lives in the `accounts` app and uses Django's built-in `User` model, sessions, and password hashing
-(decisions recorded in [ADR-005](docs/adrs/adr-005.md) and [ADR-006](docs/adrs/adr-006.md)).
+(decisions recorded in [ADR-005](docs/adrs/adr-005.md) and [ADR-006](docs/adrs/adr-006.md)). Every account confirms
+its email before it can be used, and passwords can be reset by email ([ADR-018](docs/adrs/adr-018.md)).
 
 | Route | Name | Access | Purpose |
 | --- | --- | --- | --- |
-| `/accounts/register/` | `register` | Anonymous (logged-in users are redirected home) | Create an account; on success the user is logged in and sent to `/onboarding/` |
-| `/accounts/login/` | `login` | Anonymous | Log in with email (or username) and password |
+| `/accounts/register/` | `register` | Anonymous (logged-in users are redirected home); rate limited | Start a sign-up: creates an inactive account and emails a confirmation link, or, if the email already has an account, emails its owner instead. Either way it shows the same "Check your email" page and logs nobody in ([ADR-018](docs/adrs/adr-018.md)) |
+| `/accounts/verify/sent/` | `verify_email_sent` | Anyone | "Check your email", after a sign-up or a resend |
+| `/accounts/verify/<uid>/<token>/` | `verify_email` | Anyone with a valid link (24 hours, single use) | GET shows a "Confirm my email" button; the POST activates the account, logs in, and goes to `/onboarding/` (or `/accounts/password/set/` for a Spotify sign-up) |
+| `/accounts/verify/resend/` | `resend_verification` | Anyone; rate limited | Send a new confirmation link to an unconfirmed sign-up |
+| `/accounts/password/reset/` | `password_reset` | Anyone; rate limited | Email a password reset link if the address has an account; the same page either way |
+| `/accounts/password/reset/sent/` | `password_reset_done` | Anyone | "Check your email" after a reset request |
+| `/accounts/password/reset/<uid>/<token>/` | `password_reset_confirm` | Anyone with a valid link (24 hours, single use) | Choose a new password (Django's view). Signs out the account's other sessions; on an unconfirmed account it also confirms the email and removes any Spotify link |
+| `/accounts/password/reset/done/` | `password_reset_complete` | Anyone | "Your password is changed" |
+| `/accounts/login/` | `login` | Anonymous | Log in with email (or username) and password; unconfirmed accounts can't log in. Links to "Forgot your password?" and to resend the confirmation link |
 | `/accounts/logout/` | `logout` | `POST` only | Log out (the Log out buttons submit a form) |
-| `/accounts/password/set/` | `set_password` | Login required, only for accounts with no password (others are sent on) | Set a first password for an account made with "Sign up with Spotify" ([ADR-010](docs/adrs/adr-010.md)). Shown right after a Spotify sign-up (then onboarding) and at every Spotify sign-in until a password is set; keeps the user logged in |
+| `/accounts/password/set/` | `set_password` | Login required, only for accounts with no password (others are sent on) | Set a first password for an account made with "Sign up with Spotify" ([ADR-010](docs/adrs/adr-010.md)). Shown right after a Spotify sign-up's email is confirmed (then onboarding) and at every Spotify sign-in until a password is set; keeps the user logged in |
 | `/onboarding/` | `onboarding` | Login required | Onboarding questionnaire (story D-2). Users who already finished it are sent to `/dashboard/` |
 | `/dashboard/` | `dashboard` | Login required | Profile summary. Users who haven't finished onboarding are sent to `/onboarding/` |
 | `/users/` | `user_profile` | Login required | The signed-in user's own profile only, with the Spotify section: "Link to Spotify", or "Spotify connected" with the Spotify name, a live connection status, and "Disconnect Spotify" |
@@ -141,8 +150,9 @@ Auth lives in the `accounts` app and uses Django's built-in `User` model, sessio
 | `/grocery-list/` | `grocery_list` | Login required (onboarded users) | This week's grocery list (story D-6, [ADR-009](docs/adrs/adr-009.md)): the meal plan's ingredients combined (rice on Monday and Wednesday is listed once, in cups), with the amount to buy, an estimated cost per item and for the week, an over-budget notice, a note on how the list was made, and the unmeasured pantry items. With no meal plan this week, it asks the user to create one first. It reads only the signed-in user's own plan and never creates one |
 
 ### Acceptance scenarios
-The Gherkin scenarios live in [`features/user_auth.feature`](features/user_auth.feature) (successful registration, email
-already registered, wrong password) and [`features/onboarding.feature`](features/onboarding.feature) (complete
+The Gherkin scenarios live in [`features/user_auth.feature`](features/user_auth.feature) (successful registration with email
+confirmation, email already registered, wrong password, an unconfirmed account can't log in, resetting a forgotten
+password, and an email that can't be sent, then sent again) and [`features/onboarding.feature`](features/onboarding.feature) (complete
 onboarding, missing required answer, returning user skips onboarding), and [`features/weekly_plan.feature`](features/weekly_plan.feature) (see my plan, see my macro targets, plan generator
 down, and the meal plan aiming at my macro targets), [`features/workout_variety.feature`](features/workout_variety.feature)
 (a new split each week, picking or switching a split, the weekly switch limit, and splits that fit my equipment), [`features/workout_variety_ai.feature`](features/workout_variety_ai.feature)
@@ -172,25 +182,30 @@ uv run python manage.py behave  # Gherkin scenarios
 | Password storage | Hashed with Django's default PBKDF2-SHA256 hasher; never stored or logged in plain text. Password fields are marked sensitive so they are scrubbed from error reports |
 | Password rules | Minimum 10 characters, not a commonly used password, not entirely numeric, not too similar to the username or email (`AUTH_PASSWORD_VALIDATORS`) |
 | Login errors | One generic message, "Invalid email or password", for an unknown user, a wrong password, and an inactive account, so the login form cannot be used to discover accounts |
-| Emails and usernames | Emails are trimmed, lowercased, and checked for duplicates case-insensitively (the form check is backed by a unique database index on `LOWER(email)`); usernames cannot contain `@`, so a username can never be mistaken for an email |
+| Emails and usernames | Emails are trimmed, lowercased, and unique case-insensitively (a unique database index on `LOWER(email)`); usernames cannot contain `@`, so a username can never be mistaken for an email. Every account's email is confirmed by an emailed link before it can be used, and sign-up never says an email is taken: the address's owner is emailed instead ([ADR-018](docs/adrs/adr-018.md)); answers that a username is taken are capped per IP ([ADR-016](docs/adrs/adr-016.md)) |
 | Sessions | The session key is rotated on login and registration (prevents session fixation); cookies are `HttpOnly`, `SameSite=Lax`, and `Secure` behind the HTTPS proxy; sessions expire after 7 days |
 | CSRF | Every form posts a CSRF token; Django rejects POSTs without one |
 | Logout | `POST` only, so a third-party page cannot log a user out with a link or image |
 | Redirects | The `next` parameter is only followed if it points at this site (no open redirects) |
 | Access control | `/onboarding/`, `/dashboard/`, `/users/`, and the plan, meal plan, and grocery pages require login and read only the signed-in user's own data; `/users/` previously listed every user's profile and now shows only the signed-in user's own |
 | Spotify sign-in | OAuth 2.0 Authorization Code flow on the server ([ADR-010](docs/adrs/adr-010.md)): a random, single-use, 10-minute `state` in the session; flows start with a CSRF-protected `POST`; accounts are matched on the Spotify user id only, never on the (unverified) email, and a refused sign-up gets a generic message that doesn't confirm whether an email has an account; the production access log omits query strings, so OAuth codes aren't logged; tokens are encrypted at rest with Fernet, never logged, and never sent to the browser; log in / sign up with Spotify and the connection test are rate limited |
-| Rate limits | Database-backed, shared across pods, HTTP 429 with `Retry-After` ([ADR-006](docs/adrs/adr-006.md), [ADR-016](docs/adrs/adr-016.md)): 5 failed logins per identifier and IP and 100 per IP per 15 minutes; 50 registration attempts per IP per hour, of which at most 10 may be told a username or email is taken; meal plans (a new plan, or the page making one) limited to 1 run per user and 2 in total at a time, and 10 per user per hour; plus the Spotify and AI trainer limits below |
+| Rate limits | Database-backed, shared across pods, HTTP 429 with `Retry-After` ([ADR-006](docs/adrs/adr-006.md), [ADR-016](docs/adrs/adr-016.md)): 5 failed logins per identifier and IP and 100 per IP per 15 minutes; 50 registration attempts per IP per hour, of which at most 10 may be told a username is taken; meal plans (a new plan, or the page making one) limited to 1 run per user and 2 in total at a time, and 10 per user per hour; plus the Spotify and AI trainer limits below |
 | HTTPS headers | `Strict-Transport-Security: max-age=3600` on HTTPS responses for this host only (no `includeSubDomains` or `preload`, [ADR-016](docs/adrs/adr-016.md)); `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`, and `Cross-Origin-Opener-Policy: same-origin` pinned in `settings.py` |
+| Account email | Sent through Resend ([ADR-017](docs/adrs/adr-017.md)) with a sending-only key read on the server only; at most 5 emails per address per hour (stored as a hash; failed sends don't count); emails are sent on a background thread and a failed one still shows the usual "check your email" page, so neither the page nor its timing reveals which addresses have accounts, while the cause (for example an exhausted quota) is logged on `fitpro.email` without the address, subject, body, or key; production never falls back to printing email, so links can't reach the logs; header values with newlines are refused |
+| Confirmation and reset links | Signed with Django's token generator (separate salts), valid for 24 hours and single use; the confirmation link only acts on a POST, so mail scanners can't confirm accounts; a password reset signs out other sessions, and a reset that recovers an unconfirmed account removes any Spotify link so whoever created it can't log back in; the tokens are redacted from the access log and Django's error logs ([ADR-018](docs/adrs/adr-018.md)) |
 | AI trainer | The OpenAI key is read only on the server (`.env` locally, a mounted secret in production), sent only in the `Authorization` header, and never put in a page, log line, or error message; tests are given no key; each user is rate limited; nothing personal is sent, and the answer is validated against our own exercise library before it is saved ([ADR-014](docs/adrs/adr-014.md)) |
 
 ### Known gaps (planned follow-ups)
-* **Rate limiting is in place for login and registration** ([ADR-006](docs/adrs/adr-006.md), [ADR-016](docs/adrs/adr-016.md)), but the
-  registration form still says when a username or email is taken, which reveals that an account exists. Those answers
-  are capped at 10 per IP per hour; fixing it properly needs email verification (below).
+* **Usernames can be discovered:** the sign-up form says when a username is taken, capped at 10 such answers per IP per
+  hour ([ADR-016](docs/adrs/adr-016.md)). Emails can't be listed that way ([ADR-018](docs/adrs/adr-018.md)).
+* **A failed account email looks like a sent one:** sign-up, "forgot password", and "resend confirmation" always show
+  "check your email", in the same time, so they can't reveal which addresses have accounts; the failure is only
+  logged, and the page says to try again or contact us. Emails are sent on a background thread, so a worker that's
+  killed outright can lose one ([ADR-018](docs/adrs/adr-018.md)).
 * **Security assessment follow-ups** ([ADR-016](docs/adrs/adr-016.md)): no Content-Security-Policy yet, signed-in pages
   don't send `Cache-Control: no-store`, and responses carry a `server: gunicorn` header. HSTS starts at one hour and
   should be raised to a year once production has run cleanly with it.
-* **Email format is validated, but ownership is not.** Email verification and password reset need a production email backend (`MAILERS` still uses the console backend).
+* **Account email** ([ADR-017](docs/adrs/adr-017.md), [ADR-018](docs/adrs/adr-018.md)): Resend's free plan sends **100 emails a day** (resets at midnight UTC); after that, no account email goes out until it resets (people still see "check your email"; the `fitpro.email` log says the quota is used up). Emails are plain text, and there's no way to change an account's email yet.
 * **No admin site.** It was removed ([ADR-007](docs/adrs/adr-007.md)); manage data with `manage.py shell` or a one-off Job. Re-adding it needs network-level restriction first.
 * **Meal plan (D-5)** ([ADR-008](docs/adrs/adr-008.md)): meals aim at the weekly plan's macro targets (D-4, [ADR-012](docs/adrs/adr-012.md)), the same target every day of the week. Until the week's plan exists (the first visit to This Week or Nutrition creates it), meals use the FDA Daily Values (2,000 kcal) and the page says so. D-6's price source is connected but prices only 54 of the 55 ingredients. When meal suggestions are unavailable, the notice links to This Week. The catalog has 25 recipes with no dietary filters yet, nutrients come from USDA SR Legacy (2018), and pantry staples aren't counted. "Today" and the week boundary use the server's time zone (UTC).
 * **Grocery list (D-6)** ([ADR-009](docs/adrs/adr-009.md)): prices come from `grocery/data/price_quotes.json`, which has real, cited U.S. average prices for 54 of the 55 ingredients, so the list shows those costs. BLS quotes 9 and Walmart quotes the rest. Green-onions is the one thats not priced and is unpriced because it is sold by the bunch with no weight. Amounts are rounded for shopping, pantry staples aren't measured or priced, and there are no "got it" checkboxes yet. Baked potato chili recipe isn't fully priced because it uses green onions.
@@ -249,7 +264,7 @@ Settings read secrets from `/var/secrets/<name>` in Kubernetes and fall back to 
 ### Monitoring and incident response
 What exists today:
 * `/livez/` returns 200 while the process is serving requests (no database access). `/healthz/` returns 200 only if the database answers, otherwise 503. The Kubernetes probes and the load balancer health check use them.
-* Application logs, including tracebacks and `accounts.security` throttling warnings, go to stdout and are collected by Cloud Logging. Gunicorn's access log (`gunicorn.conf.py`) records paths without query strings or referrers, so one-time values such as Spotify's OAuth `code` never reach the logs.
+* Application logs, including tracebacks and `accounts.security` throttling warnings, go to stdout and are collected by Cloud Logging. Gunicorn's access log (`gunicorn.conf.py`) records paths without query strings or referrers, and with the tokens in email confirmation and reset links replaced by `[redacted]`, so one-time values such as Spotify's OAuth `code` or a reset token never reach the logs.
 * Deploys are gated by CI, a container smoke test, and a migration Job; `scripts/rollback.sh` reverts a bad release.
 
 Alerting and response: monitoring and alerts are currently handled through Google Cloud Monitoring and the Google Cloud mobile app. Caleb Harris owns the infrastructure and is the responsible party for responding to and fixing incidents.
@@ -260,7 +275,7 @@ Alerting and response: monitoring and alerts are currently handled through Googl
 | Networking | Custom VPC `fitpro-vpc`, subnet `fitpro-gke` (10.10.0.0/20, pods 10.20.0.0/16, services 10.30.0.0/20), Private Google Access, private services peering for Cloud SQL |
 | Compute | GKE Autopilot cluster `fitpro` (REGULAR release channel, Gateway API enabled, Workload Identity, deletion protection) running as a dedicated least-privilege node service account |
 | Database | Cloud SQL `fitpro-pg` (PostgreSQL 16, `db-f1-micro`, zonal): private IP only, encrypted connections only, Cloud SQL Auth Proxy/connector required, daily backups (7 retained) + point-in-time recovery, Sunday 09:00 UTC maintenance window, deletion protection. Database `fitpro`, user `fitpro_app` |
-| Secrets | Secret Manager `fitpro-db-password`, `fitpro-django-secret-key`, and `fitpro-spotify-token-encryption-key` (randomly generated), and `fitpro-spotify-client-secret` (created empty; its value is added with `gcloud` so it never enters Terraform state, see below). Only the app service account can read them (per-secret binding), and secret reads are written to Data Access audit logs |
+| Secrets | Secret Manager `fitpro-db-password`, `fitpro-django-secret-key`, and `fitpro-spotify-token-encryption-key` (randomly generated), and `fitpro-spotify-client-secret` and `fitpro-resend-api-key` (created empty; their values are added with `gcloud` so they never enter Terraform state, see below). Only the app service account can read them (per-secret binding), and secret reads are written to Data Access audit logs |
 | Identity | Runtime service account `fitpro-app` (`cloudsql.client` + per-secret `secretAccessor`), bound by Workload Identity to Kubernetes service account `app/django-app`. No service account keys exist |
 | Images | Artifact Registry `fitpro` (Docker, `us-central1`) with immutable tags, keeping the 15 most recent images and deleting anything older than 30 days |
 | Ingress / TLS | Reserved global static IP `fitpro-lb-ip`, Google-managed certificate through Certificate Manager (DNS authorization) and certificate map `fitpro-certmap` for `fitpro-app.tech`, plus one for the old `fitpro.rockymountaintechlab.com`, which the Gateway only redirects to the new domain (DNS only in Cloudflare, see [ADR-004](docs/adrs/adr-004.md) and [ADR-011](docs/adrs/adr-011.md)), SSL policy `fitpro-ssl-policy` (TLS 1.2+, MODERN profile) |
@@ -296,13 +311,29 @@ client secret must have a version **before** those manifests are deployed. A mou
 (and the migrate Job) from starting, and the app refuses to start with only some Spotify settings. Register
 `https://fitpro-app.tech/auth-callback/spotify` in the Spotify dashboard too.
 
+### Resend API key in production
+`secrets.tf` also creates an **empty** `fitpro-resend-api-key` ([ADR-017](docs/adrs/adr-017.md)). In Resend, create an
+API key with **Sending access** restricted to the FitPro domain, then add it the same way:
+
+```shell
+gcloud secrets versions add fitpro-resend-api-key --data-file=-
+gcloud secrets versions list fitpro-resend-api-key   # one ENABLED version
+```
+
+`k8s/app/base/secretproviderclass.yaml` mounts it at `resend-api-key`, so it also needs a version **before** those
+manifests are deployed, or pods and the migrate Job won't start. The sender defaults to
+`FitPro <no-reply@fitpro-app.tech>`; set `DEFAULT_FROM_EMAIL` in the prod ConfigMap if the verified domain is
+different. The Resend account is a dedicated FitPro account, owned by Caleb Harris. Daily usage is on Resend's
+dashboard, and the `fitpro.email` logger reports an exhausted quota at ERROR.
+
 After the first apply, add the `dns_authorization_records` CNAME and an A record pointing at `lb_ip_address` in
 Cloudflare (DNS only / gray cloud). The Kubernetes Gateway uses `lb_ip_name` as its address, `certificate_map_name` in the
 `networking.gke.io/certmap` annotation, and `ssl_policy_name` in a `GCPGatewayPolicy`.
 
 ### Teardown (end of semester)
 Set `deletion_protection = false` on the cluster and the Cloud SQL instance (both settings), run `terraform apply`, then
-`terraform destroy`.
+`terraform destroy`. Then delete the Resend account (or its API key and domain) and the domain's Resend DNS records
+in Cloudflare.
 
 # AI Usage
 
@@ -333,3 +364,5 @@ Set `deletion_protection = false` on the cluster and the Cloud SQL instance (bot
 | Claude | Nathan Galay | Claude (chat) implemented week-to-week workout variety (split styles, weekly rotation, switching, ADR-013) and the AI trainer that chooses exercises through OpenAI (`plans.ai_trainer`, the throttle scope and settings, tests, Gherkin scenarios, and ADR-014) |
 | Claude | Caleb Harris | Claude Code compared the 2026-11-19 security assessment against the repo and implemented F-1 (per-user limit on new meal plans), F-2 (higher shared-IP login and registration limits) and HSTS from F-4, with regression tests, ADR-016, the ADR-006 update note, and these README updates |
 | Claude | Caleb Harris | Claude Code applied the PR #61 review: an in-flight limit on new meal plans shared across pods (`accounts.throttle.meal_plan_slot`, `MEAL_PLAN_CONCURRENCY`), refused requests rendered from the saved plan without running the planner (`nutrition.services.saved_meal_plan`), the same limits on plans the Meal Plan page makes itself (`nutrition.views._run_planner`), a separate cap on registration answers that reveal an account (`register_taken`), keeping the selected day on a refused new plan, regression tests including parallel requests on PostgreSQL, and the ADR-016, ADR-006, ADR-008 and README updates |
+| Claude | Caleb Harris | Claude Code implemented Resend email (ADR-017): the `core.mail.ResendEmailBackend` over Resend's HTTP API with quota, rate-limit, and failure logging, `accounts.emails.send_account_email` with the per-recipient limit and generic message, the settings, Terraform secret, secret mount, CI `check --deploy` mail check, mocked tests, and these README updates |
+| Claude | Caleb Harris | Claude Code implemented email confirmation for every sign-up (password and Spotify) and password reset (ADR-018): the `accounts` views, token generator, services, emails, and templates, the Spotify sign-up and login changes, the reset recovery that removes a claimer's Spotify link, unit/Gherkin/Playwright test updates, and these README updates |
